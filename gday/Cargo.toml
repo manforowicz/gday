@@ -1,0 +1,25 @@
+[package]
+name = "gday"
+version = "0.1.0"
+edition = "2021"
+authors = ["Marcin Anforowicz"]
+description = "Command line tool to easily send files directly and securely to peers, without port forwarding or relays."
+license = "MIT"
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+chacha20poly1305 = "0.10.1"
+clap = { version = "4.4.13", features = ["derive"] }
+env_logger = "0.11.3"
+gday_encryption = { version = "0.1.0", path = "../gday_encryption" }
+gday_hole_punch = { version = "0.1.0", path = "../gday_hole_punch" }
+indicatif = "0.17.7"
+log = "0.4.21"
+owo-colors = "4.0.0"
+pin-project = "1.1.5"
+rand = "0.8.5"
+rustls = "0.22.2"
+serde = { version = "1.0.195", features = ["serde_derive"] }
+thiserror = "1.0.56"
+tokio = { version = "1.36.0", features = ["fs"] }
+webpki-roots = "0.26.1"

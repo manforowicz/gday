@@ -1,0 +1,12 @@
+[workspace]
+edition = "2021"
+resolver = "2"
+
+members = [
+    "gday",
+    "gday_server",
+    "gday_hole_punch",
+    "gday_encryption",
+    "gday_encryption_async",
+    "gday_contact_exchange_protocol",
+]
