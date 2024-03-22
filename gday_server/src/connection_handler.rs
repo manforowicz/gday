@@ -2,7 +2,7 @@ use crate::state::{self, State};
 use gday_contact_exchange_protocol::{
     deserialize_from_async, serialize_into_async, ClientMsg, ServerMsg,
 };
-use log::info;
+use log::{info, warn};
 use tokio::net::TcpStream;
 use tokio_rustls::{server::TlsStream, TlsAcceptor};
 
@@ -14,7 +14,7 @@ pub async fn handle_connection(tcp_stream: TcpStream, tls_acceptor: TlsAcceptor,
     let mut tls_stream = match tls_acceptor.accept(tcp_stream).await {
         Ok(tls_stream) => tls_stream,
         Err(err) => {
-            info!("Error establishing TLS connection: {err}");
+            warn!("Error establishing TLS connection: {err}");
             return;
         }
     };

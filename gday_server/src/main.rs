@@ -9,7 +9,7 @@ mod tests;
 
 use clap::Parser;
 use connection_handler::handle_connection;
-use log::{error, info};
+use log::{error, warn};
 use socket2::{SockRef, TcpKeepalive};
 use state::State;
 use std::{
@@ -75,7 +75,7 @@ async fn main() {
         let (stream, _addr) = match tcp_listener.accept().await {
             Ok(ok) => ok,
             Err(err) => {
-                info!("Error accepting connection: {err}");
+                warn!("Error accepting connection: {err}");
                 continue;
             }
         };
@@ -129,7 +129,10 @@ fn get_tls_acceptor(key_path: &Path, cert_path: &Path) -> TlsAcceptor {
             error!("Couldn't parse key file '{key_path:?}': {err}");
             exit(1)
         })
-        .unwrap();
+        .unwrap_or_else(|| {
+            error!("Couldn't parse key file '{key_path:?}'");
+            exit(1)
+        });
 
     // try reading the certificate file
     let mut cert = BufReader::new(std::fs::File::open(cert_path).unwrap_or_else(|err| {
