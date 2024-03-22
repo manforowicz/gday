@@ -11,9 +11,10 @@ use std::{
     time::Duration,
 };
 
+
 /// The default list of public Gday servers.
 pub const DEFAULT_SERVERS: &[ServerInfo] = &[ServerInfo {
-    domain_name: "gday.manforowicz.com:8080",
+    domain_name: "gday.manforowicz.com",
     id: 1,
     prefer: true,
 }];
@@ -59,16 +60,16 @@ impl ServerConnection {
 
         if let Some(stream) = &self.v4 {
             let addr = stream.get_ref().local_addr()?;
-            if !matches!(addr, V6(_)) {
-                return Err(Error::ExpectedIPv6);
+            if !matches!(addr, V4(_)) {
+                return Err(Error::ExpectedIPv4);
             };
             Self::configure_stream(stream);
         }
 
         if let Some(stream) = &self.v6 {
             let addr = stream.get_ref().local_addr()?;
-            if !matches!(addr, V4(_)) {
-                return Err(Error::ExpectedIPv4);
+            if !matches!(addr, V6(_)) {
+                return Err(Error::ExpectedIPv6);
             };
             Self::configure_stream(stream);
         }
@@ -105,7 +106,7 @@ impl ServerConnection {
 /// - The [`ServerConnection`] to the server.
 /// - The `id` of the server that [`ServerConnection`] connected to.
 /// )
-/// 
+///
 /// Returns an error if connecting fails.
 pub fn connect_to_random_server(servers: &[ServerInfo]) -> Result<(ServerConnection, u64), Error> {
     let preferred: Vec<&ServerInfo> = servers.iter().filter(|s| s.prefer).collect();
@@ -115,10 +116,13 @@ pub fn connect_to_random_server(servers: &[ServerInfo]) -> Result<(ServerConnect
 }
 
 /// Try connecting to the server with this `server_id` and returning a [`ServerConnection`].
-/// 
+///
 /// Returns an error if `servers` contains no server with id `server_id` or connecting
-/// to the server fails. 
-pub fn connect_to_server_id(servers: &[ServerInfo], server_id: u64) -> Result<ServerConnection, Error> {
+/// to the server fails.
+pub fn connect_to_server_id(
+    servers: &[ServerInfo],
+    server_id: u64,
+) -> Result<ServerConnection, Error> {
     let Some(server) = servers.iter().find(|server| server.id == server_id) else {
         return Err(Error::ServerIDNotFound(server_id));
     };
@@ -131,7 +135,7 @@ pub fn connect_to_server_id(servers: &[ServerInfo], server_id: u64) -> Result<Se
 /// - The [`ServerConnection`] to the server.
 /// - The index of the address in `addresses` that the [`ServerConnection`] connected to.
 /// )
-/// 
+///
 /// Returns an error if connecting fails.
 pub fn connect_to_random_address(
     domain_names: &[&str],
@@ -155,8 +159,9 @@ pub fn connect_to_random_address(
 
 /// Try connecting to this `domain_name` and returning a [`ServerConnection`]
 pub fn connect_to_domain_name(domain_name: &str) -> Result<ServerConnection, Error> {
-    debug!("Connecting to '{domain_name}`");
-    let addrs: Vec<SocketAddr> = domain_name.to_socket_addrs()?.collect();
+    let address = format!("{domain_name}:8080");
+    debug!("Connecting to '{address}`");
+    let addrs: Vec<SocketAddr> = address.to_socket_addrs()?.collect();
 
     // try establishing a TCP connection on IPv4
     let tcp_v4 = addrs.iter().find_map(|addr| {
@@ -188,10 +193,7 @@ pub fn connect_to_domain_name(domain_name: &str) -> Result<ServerConnection, Err
     }
 
     // wrap the DNS name of the server
-    let name: rustls::pki_types::ServerName = domain_name
-        .to_string()
-        .try_into()
-        .expect("Invalid DNS name.");
+    let name = rustls::pki_types::ServerName::try_from(domain_name.to_string())?;
 
     // get the TLS config
     let tls_config = get_tls_config();
@@ -211,8 +213,6 @@ pub fn connect_to_domain_name(domain_name: &str) -> Result<ServerConnection, Err
 
     Ok(server_connection)
 }
-
-
 
 /// Get default TLS config
 fn get_tls_config() -> rustls::ClientConfig {

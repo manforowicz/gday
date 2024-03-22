@@ -61,4 +61,7 @@ pub enum Error {
 
     #[error("Couldn't connect to any of these servers.")]
     CouldntConnectToServers,
+
+    #[error("Invalid DNS name: {0}")]
+    InvalidDNSName(#[from] rustls::pki_types::InvalidDnsNameError),
 }
