@@ -36,7 +36,7 @@ struct Args {
     certificate: PathBuf,
 
     /// The socket address from which to listen
-    #[arg(short, long, default_value = "::8080")]
+    #[arg(short, long, default_value = ":8080")]
     address: String,
 
     /// Number of seconds before a new room is deleted.
