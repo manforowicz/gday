@@ -10,9 +10,9 @@ license = "MIT"
 
 [dependencies]
 postcard = { version = "1.0.8", features = ["experimental-derive", "use-std"] }
-serde = { version = "1.0.193", features = ["derive"] }
-thiserror = "1.0.50"
-tokio = { version = "1.34.0", features = ["io-util"] }
+serde = { version = "1.0.197", features = ["derive"] }
+thiserror = "1.0.58"
+tokio = { version = "1.36.0", features = ["io-util"] }
 
 [dev-dependencies]
-tokio = { version = "1.34.0", features = ["test-util", "macros"] }
+tokio = { version = "1.36.0", features = ["test-util", "macros"] }

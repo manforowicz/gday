@@ -120,7 +120,7 @@ fn get_tls_acceptor(key: &Path, certificate: &Path) -> TlsAcceptor {
         error!("Couldn't open key '{}': {}", key.display(), err);
         exit(1)
     });
-    let key = rustls::PrivateKey(key);
+    let key = tokio_rustls::rustls::PrivateKey(key);
 
     // try reading the certificate file
     let cert = fs::read(certificate).unwrap_or_else(|err| {

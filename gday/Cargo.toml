@@ -9,18 +9,18 @@ license = "MIT"
 
 [dependencies]
 chacha20poly1305 = "0.10.1"
-clap = { version = "4.4.13", features = ["derive"] }
+clap = { version = "4.5.3", features = ["derive"] }
 env_logger = "0.11.3"
 gday_encryption = { version = "0.1.0", path = "../gday_encryption" }
 gday_hole_punch = { version = "0.1.0", path = "../gday_hole_punch" }
-indicatif = "0.17.7"
+indicatif = "0.17.8"
 log = "0.4.21"
 owo-colors = "4.0.0"
 pin-project = "1.1.5"
 postcard = "1.0.8"
 rand = "0.8.5"
 rustls = "0.22.2"
-serde = { version = "1.0.195", features = ["serde_derive"] }
-thiserror = "1.0.56"
+serde = { version = "1.0.197", features = ["serde_derive"] }
+thiserror = "1.0.58"
 tokio = { version = "1.36.0", features = ["fs"] }
 webpki-roots = "0.26.1"
