@@ -60,5 +60,5 @@ pub enum Error {
     ServerIDNotFound(u64),
 
     #[error("Couldn't connect to any of these servers.")]
-    CouldntConnectToServer,
+    CouldntConnectToServers,
 }

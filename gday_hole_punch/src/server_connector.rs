@@ -144,13 +144,13 @@ pub fn connect_to_random_address(
         let streams = match connect_to_domain_name(server) {
             Ok(streams) => streams,
             Err(err) => {
-                error!("Couldn't connect to \"{}\": {}.", server, err);
+                error!("Couldn't connect to \"{}\": {}", server, err);
                 continue;
             }
         };
         return Ok((streams, i));
     }
-    Err(Error::CouldntConnectToServer)
+    Err(Error::CouldntConnectToServers)
 }
 
 /// Try connecting to this `domain_name` and returning a [`ServerConnection`]

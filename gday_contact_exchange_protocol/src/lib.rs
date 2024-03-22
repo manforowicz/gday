@@ -150,12 +150,12 @@ pub struct FullContact {
 // 5 + 10 + 1 + 29 = 55 bytes
 // The max size of a `ServerMsg` is
 // 5 + 116 = 121 bytes
-pub const MAX_CLIENT_MSG: usize = 55;
-pub const MAX_SERVER_MSG: usize = 121;
+//
+// This means the length can be represented with a single u8.
 pub const MAX_MSG_SIZE: usize = 121;
 
 pub fn serialize_into(msg: impl Serialize, writer: &mut impl Write) -> Result<(), Error> {
-    let mut buf = [0_u8; MAX_MSG_SIZE];
+    let mut buf = [0_u8; 255];
     let len = to_slice(&msg, &mut buf[1..])?.len();
     let len_byte = u8::try_from(len).expect("Unreachable: Message always shorter than u8::MAX");
     buf[0] = len_byte;
@@ -163,7 +163,10 @@ pub fn serialize_into(msg: impl Serialize, writer: &mut impl Write) -> Result<()
     Ok(())
 }
 
-pub fn deserialize_from<'a, T: Deserialize<'a>>(reader: &mut impl Read, buf: &'a mut [u8]) -> Result<T, Error> {
+pub fn deserialize_from<'a, T: Deserialize<'a>>(
+    reader: &mut impl Read,
+    buf: &'a mut [u8],
+) -> Result<T, Error> {
     let mut len = [0_u8; 1];
     reader.read_exact(&mut len)?;
     let len = len[0] as usize;
@@ -171,8 +174,10 @@ pub fn deserialize_from<'a, T: Deserialize<'a>>(reader: &mut impl Read, buf: &'a
     Ok(from_bytes(&buf[0..len])?)
 }
 
-
-pub async fn serialize_into_async(msg: impl Serialize, writer: &mut (impl AsyncWrite + Unpin)) -> Result<(), Error> {
+pub async fn serialize_into_async(
+    msg: impl Serialize,
+    writer: &mut (impl AsyncWrite + Unpin),
+) -> Result<(), Error> {
     let mut buf = [0_u8; MAX_MSG_SIZE];
     let len = to_slice(&msg, &mut buf[1..])?.len();
     let len_byte = u8::try_from(len).expect("Unreachable: Message always shorter than u8::MAX");
@@ -181,129 +186,16 @@ pub async fn serialize_into_async(msg: impl Serialize, writer: &mut (impl AsyncW
     Ok(())
 }
 
-pub async fn deserialize_from_async<'a, T: Deserialize<'a>>(reader: &mut (impl AsyncRead + Unpin), buf: &'a mut [u8]) -> Result<T, Error> {
+pub async fn deserialize_from_async<'a, T: Deserialize<'a>>(
+    reader: &mut (impl AsyncRead + Unpin),
+    buf: &'a mut [u8],
+) -> Result<T, Error> {
     let mut len = [0_u8; 1];
     reader.read_exact(&mut len).await?;
     let len = len[0] as usize;
     reader.read_exact(&mut buf[0..len]).await?;
     Ok(from_bytes(&buf[0..len])?)
 }
-
-
-
-/*
-
-/// A wrapper around a generic IO stream.
-/// Allows sending and receiving [`ServerMsg`] and [`ClientMsg`]
-/// using a standard format:
-/// [`postcard`] serialized messages, prefixed with their length
-/// as a big-endian `u16`.
-#[derive(Debug)]
-pub struct Messenger<T: Read + Write> {
-    pub stream: T,
-    buf: Vec<u8>,
-}
-
-impl<T: Read + Write> Messenger<T> {
-    /// Create a [`Messenger`] that wraps `stream`.
-    pub fn new(stream: T) -> Self {
-        Self {
-            stream,
-            buf: Vec::new(),
-        }
-    }
-
-    /// Read the next message from the inner IO stream.
-    /// Each message must be prefixed by 2 bytes (big-endian)
-    /// specifying the length of the following content.
-    ///
-    /// # Errors
-    /// Returns an error if the message couldn't be received or deserialized.
-    pub fn receive<'b, U: Deserialize<'b>>(&'b mut self) -> Result<U, Error> {
-        let mut len = [0; 2];
-        self.stream.read_exact(&mut len)?;
-        let len = u16::from_be_bytes(len) as usize;
-        self.buf.resize(len, 0);
-
-        self.stream.read_exact(&mut self.buf)?;
-        Ok(from_bytes(&self.buf)?)
-    }
-
-    /// Write `msg` to the inner IO stream.
-    /// Prefixes it by 2 bytes (big-endian) representing the following message's length.
-    /// # Errors
-    /// Returns an error if the message couldn't be serialized or sent.
-    pub fn send(&mut self, msg: impl Serialize) -> Result<(), Error> {
-        self.buf.clear();
-        to_io(&msg, &mut self.buf)?;
-        let len =
-            u16::try_from(self.buf.len()).expect("Unreachable: message can't be longer than u16.");
-        let len = len.to_be_bytes();
-        self.stream.write_all(&len)?;
-        self.stream.write_all(&self.buf)?;
-        self.stream.flush()?;
-        Ok(())
-    }
-}
-
-/// A wrapper around a generic async IO stream.
-/// Allows sending and receiving [`ServerMsg`] and [`ClientMsg`]
-/// using a standard format:
-/// [`postcard`] serialized messages, prefixed with their length
-/// as a big-endian `u16`.
-#[derive(Debug)]
-pub struct AsyncMessenger<T: AsyncRead + AsyncWrite + Unpin> {
-    /// A stream from which to read and write messages.
-    pub stream: T,
-    /// Buffer to store read messages, and messages to write.
-    buf: Vec<u8>,
-}
-
-impl<T: AsyncRead + AsyncWrite + Unpin> AsyncMessenger<T> {
-    /// Create a [`Messenger`] that wraps `stream`.
-    pub fn new(stream: T) -> Self {
-        Self {
-            stream,
-            buf: Vec::new(),
-        }
-    }
-
-    /// Read the next message from the inner IO stream.
-    /// Each message must be prefixed by 2 bytes (big-endian)
-    /// specifying the length of the following content.
-    ///
-    /// # Errors
-    /// Returns an error if the message couldn't be received or deserialized.
-    pub async fn receive<'b, U: Deserialize<'b>>(&'b mut self) -> Result<U, Error> {
-        let mut len = [0; 2];
-        self.stream.read_exact(&mut len).await?;
-        let len = u16::from_be_bytes(len) as usize;
-        self.buf.resize(len, 0);
-
-        self.stream.read_exact(&mut self.buf).await?;
-        Ok(from_bytes(&self.buf)?)
-    }
-
-    /// Write `msg` to the inner IO stream.
-    /// Prefixes it by 2 bytes (big-endian) representing the following message's length.
-    /// # Errors
-    /// Returns an error if the message couldn't be serialized or sent.
-    pub async fn send(&mut self, msg: impl Serialize) -> Result<(), Error> {
-        self.buf.clear();
-        to_io(&msg, &mut self.buf)?;
-        let len =
-            u16::try_from(self.buf.len()).expect("Unreachable: message can't be longer than u16.");
-        let len = len.to_be_bytes();
-        self.stream.write_all(&len).await?;
-        self.stream.write_all(&self.buf).await?;
-        self.stream.flush().await?;
-        Ok(())
-    }
-}
-
-*/
-
-
 
 /// Error from [`Messenger`].
 #[derive(Error, Debug)]

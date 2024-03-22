@@ -68,7 +68,7 @@ async fn handle_message(
     let origin = tls.get_ref().0.peer_addr()?;
 
     // make a buffer to deserialize into
-    let buf = &mut [0; gday_contact_exchange_protocol::MAX_CLIENT_MSG];
+    let buf = &mut [0; gday_contact_exchange_protocol::MAX_MSG_SIZE];
 
     // try to deserialize the message
     let msg = deserialize_from_async(tls, buf).await?;

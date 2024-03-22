@@ -1,6 +1,6 @@
 use crate::{server_connector::ServerConnection, Error};
 use gday_contact_exchange_protocol::{
-    deserialize_from, serialize_into, ClientMsg, FullContact, ServerMsg, MAX_SERVER_MSG,
+    deserialize_from, serialize_into, ClientMsg, FullContact, ServerMsg, MAX_MSG_SIZE,
 };
 
 /// Used to exchange contact information with a peer via the `gday_server`.
@@ -28,7 +28,7 @@ impl ContactSharer {
 
         let messenger = &mut server_connection.streams()[0];
 
-        let buf = &mut [0; MAX_SERVER_MSG];
+        let buf = &mut [0; MAX_MSG_SIZE];
 
         serialize_into(ClientMsg::CreateRoom { room_code }, messenger)?;
         let response = deserialize_from(messenger, buf)?;
@@ -80,7 +80,7 @@ impl ContactSharer {
     /// returns it's response.
     fn share_contact(&mut self) -> Result<FullContact, Error> {
         let mut streams = self.connection.streams();
-        let buf = &mut [0; MAX_SERVER_MSG];
+        let buf = &mut [0; MAX_MSG_SIZE];
 
         for stream in &mut streams {
             let private_addr = Some(stream.get_ref().local_addr()?);
@@ -117,7 +117,7 @@ impl ContactSharer {
     /// Then returns a [`HolePuncher`] which can be used to try establishing
     /// an authenticated TCP connection with that peer.
     pub fn get_peer_contact(mut self) -> Result<FullContact, Error> {
-        let buf = &mut [0; MAX_SERVER_MSG];
+        let buf = &mut [0; MAX_MSG_SIZE];
         let stream = &mut self.connection.streams()[0];
         let reply = deserialize_from(stream, buf)?;
         let ServerMsg::PeerContact(peer) = reply else {
