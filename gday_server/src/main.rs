@@ -20,7 +20,7 @@ use std::{
 };
 use tokio::net::{TcpListener, ToSocketAddrs};
 use tokio_rustls::{
-    rustls::{self},
+    rustls::{self, pki_types::CertificateDer},
     TlsAcceptor,
 };
 
@@ -124,16 +124,17 @@ async fn get_tcp_listener(
 fn get_tls_acceptor(key: &Path, cert: &Path) -> Result<TlsAcceptor, Box<dyn std::error::Error>> {
     // try reading the key file
     let mut key = BufReader::new(std::fs::File::open(key)?);
-    let key = rustls_pemfile::private_key(&mut key).unwrap().unwrap();
+    let key = rustls_pemfile::private_key(&mut key)?.unwrap();
 
     // try reading the certificate file
     let mut cert = BufReader::new(std::fs::File::open(cert)?);
-    let cert = rustls_pemfile::certs(&mut cert).next().unwrap()?;
+    let certs: Result<Vec<CertificateDer<'static>>, _> = rustls_pemfile::certs(&mut cert).collect();
+    let certs = certs?;
 
     // try creating tls config
     let tls_config = rustls::ServerConfig::builder()
         .with_no_client_auth()
-        .with_single_cert(vec![cert], key)?;
+        .with_single_cert(certs, key)?;
 
     // create a tls acceptor
     Ok(tokio_rustls::TlsAcceptor::from(Arc::new(tls_config)))
