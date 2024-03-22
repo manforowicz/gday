@@ -13,8 +13,10 @@ use log::{error, info};
 use socket2::{SockRef, TcpKeepalive};
 use state::State;
 use std::{
+    fmt::Display,
     io::BufReader,
     path::{Path, PathBuf},
+    process::exit,
     sync::Arc,
     time::Duration,
 };
@@ -36,7 +38,7 @@ struct Args {
     certificate: PathBuf,
 
     /// The socket address from which to listen
-    #[arg(short, long, default_value = ":8080")]
+    #[arg(short, long, default_value = "[::]:8080")]
     address: String,
 
     /// Number of seconds before a new room is deleted.
@@ -61,15 +63,9 @@ async fn main() {
     // set the log level according to the command line argument
     env_logger::builder().filter_level(args.verbosity).init();
 
-    if let Err(err) = run(args).await {
-        error!("Exiting because: {err}")
-    }
-}
-
-async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
     // get tcp listener and acceptor
-    let tcp_listener = get_tcp_listener(args.address).await?;
-    let tls_acceptor = get_tls_acceptor(&args.key, &args.certificate)?;
+    let tcp_listener = get_tcp_listener(args.address).await;
+    let tls_acceptor = get_tls_acceptor(&args.key, &args.certificate);
 
     // create the shared global state object
     let state = State::new(args.request_limit, args.timeout);
@@ -99,11 +95,12 @@ async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
 /// connections close after 10 minutes to save resources.
 ///
 /// Exits with an error message if couldn't bind to `addr`.
-async fn get_tcp_listener(
-    addr: impl ToSocketAddrs,
-) -> Result<TcpListener, Box<dyn std::error::Error>> {
+async fn get_tcp_listener(addr: impl ToSocketAddrs + Display) -> TcpListener {
     // binds to the socket address
-    let listener = TcpListener::bind(addr).await?;
+    let listener = TcpListener::bind(&addr).await.unwrap_or_else(|err| {
+        error!("Can't listen on '{addr}': {err}");
+        exit(1)
+    });
 
     // sets the keepalive to 10 minutes
     let socket = SockRef::from(&listener);
@@ -113,7 +110,7 @@ async fn get_tcp_listener(
         .with_retries(10);
     let _ = socket.set_tcp_keepalive(&tcp_keepalive);
 
-    Ok(listener)
+    listener
 }
 
 /// Takes paths to a PEM-encoded private key and signed certificate.
@@ -121,21 +118,40 @@ async fn get_tcp_listener(
 ///
 /// Exits with an error message if the paths didn't lead to
 /// valid files, or there was an error creating the tls config
-fn get_tls_acceptor(key: &Path, cert: &Path) -> Result<TlsAcceptor, Box<dyn std::error::Error>> {
+fn get_tls_acceptor(key_path: &Path, cert_path: &Path) -> TlsAcceptor {
     // try reading the key file
-    let mut key = BufReader::new(std::fs::File::open(key)?);
-    let key = rustls_pemfile::private_key(&mut key)?.unwrap();
+    let mut key = BufReader::new(std::fs::File::open(key_path).unwrap_or_else(|err| {
+        error!("Couldn't open key file '{key_path:?}': {err}");
+        exit(1)
+    }));
+    let key = rustls_pemfile::private_key(&mut key)
+        .unwrap_or_else(|err| {
+            error!("Couldn't parse key file '{key_path:?}': {err}");
+            exit(1)
+        })
+        .unwrap();
 
     // try reading the certificate file
-    let mut cert = BufReader::new(std::fs::File::open(cert)?);
+    let mut cert = BufReader::new(std::fs::File::open(cert_path).unwrap_or_else(|err| {
+        error!("Couldn't open certificate file '{cert_path:?}': {err}");
+        exit(1)
+    }));
+
     let certs: Result<Vec<CertificateDer<'static>>, _> = rustls_pemfile::certs(&mut cert).collect();
-    let certs = certs?;
+    let certs = certs.unwrap_or_else(|err| {
+        error!("Couldn't parse certificate file '{cert_path:?}': {err}");
+        exit(1)
+    });
 
     // try creating tls config
     let tls_config = rustls::ServerConfig::builder()
         .with_no_client_auth()
-        .with_single_cert(certs, key)?;
+        .with_single_cert(certs, key)
+        .unwrap_or_else(|err| {
+            error!("Couldn't configure TLS: {err}");
+            exit(1)
+        });
 
     // create a tls acceptor
-    Ok(tokio_rustls::TlsAcceptor::from(Arc::new(tls_config)))
+    tokio_rustls::TlsAcceptor::from(Arc::new(tls_config))
 }
