@@ -1,4 +1,3 @@
-#![warn(clippy::all)]
 //! Functions for connecting to a Gday server.
 
 use crate::Error;

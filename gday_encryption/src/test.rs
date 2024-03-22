@@ -1,7 +1,3 @@
-#![warn(clippy::all)]
-
-// todo: test helper buf
-
 use std::{
     collections::VecDeque,
     io::{Read, Write},

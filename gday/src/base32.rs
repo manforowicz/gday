@@ -1,4 +1,3 @@
-#![warn(clippy::all)]
 use thiserror::Error;
 
 /// The Crockford base-32 alphabet

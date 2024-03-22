@@ -1,4 +1,3 @@
-#![warn(clippy::all)]
 use crate::{server_connector::ServerConnection, Error};
 use gday_contact_exchange_protocol::{
     deserialize_from, serialize_into, ClientMsg, FullContact, ServerMsg, MAX_SERVER_MSG,

@@ -1,4 +1,3 @@
-#![warn(clippy::all)]
 use crate::protocol::{FileMeta, FileMetaLocal};
 use indicatif::HumanBytes;
 use std::{

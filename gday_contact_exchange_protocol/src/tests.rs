@@ -1,8 +1,9 @@
-
-
 #![cfg(test)]
-use super::*;
 
+
+
+// TODO: REWRITE
+/*
 #[tokio::test]
 async fn messenger_send_1() {
     let (mut stream_a, mut stream_b) = tokio::io::duplex(1000);
@@ -53,3 +54,4 @@ async fn messenger_invalid_data() {
 
     assert!(result.is_err());
 }
+*/

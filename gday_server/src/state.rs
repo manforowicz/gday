@@ -1,4 +1,3 @@
-#![warn(clippy::all)]
 use gday_contact_exchange_protocol::FullContact;
 use std::{
     collections::HashMap,

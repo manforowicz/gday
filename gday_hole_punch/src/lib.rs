@@ -1,4 +1,3 @@
-#![warn(clippy::all)]
 //! Lets peers behind [NAT (network address translation)](https://en.wikipedia.org/wiki/Network_address_translation)
 //! try to establish a direct authenticated TCP connection.
 //!
@@ -12,7 +11,8 @@
 //! 4. Both peers call [`ContactSharer::get_peer_contact()`] to get their peer's contact.
 //! 5. Both peers pass this contact and a shared secret to [`try_connect_to_peer()`],
 //!    which returns a TCP stream, and an authenticated shared key.
-//!     
+#![forbid(unsafe_code)]
+#![warn(clippy::all)]   
 
 mod contact_sharer;
 mod hole_puncher;

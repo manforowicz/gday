@@ -1,4 +1,3 @@
-#![warn(clippy::all)]
 use crate::state::{self, State};
 use gday_contact_exchange_protocol::{
     deserialize_from_async, serialize_into_async, ClientMsg, ServerMsg,

@@ -1,6 +1,7 @@
-#![warn(clippy::all)]
 //! Runs a server for the `gday_contact_exchange_protocol`.
 //! Lets two users exchange their public and (optionally) private socket addresses.
+#![forbid(unsafe_code)]
+#![warn(clippy::all)]
 
 mod connection_handler;
 mod state;
@@ -61,7 +62,6 @@ async fn main() {
     // get tcp listener and acceptor
     let tcp_listener = get_tcp_listener(args.address).await;
     let tls_acceptor = get_tls_acceptor(&args.key, &args.certificate);
-
 
     // create the shared global state object
     let state = State::new(args.request_limit, args.timeout);

@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 #![warn(clippy::all)]
 //! `gday` is a command line line tool for direct file transfer between peers.
 //! TODO

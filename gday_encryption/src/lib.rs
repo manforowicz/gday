@@ -1,3 +1,5 @@
+//! TODO: ADD DOC
+#![forbid(unsafe_code)]
 #![warn(clippy::all)]
 mod helper_buf;
 #[cfg(test)]

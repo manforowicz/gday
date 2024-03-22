@@ -1,4 +1,3 @@
-#![warn(clippy::all)]
 use crate::Error;
 use gday_contact_exchange_protocol::{Contact, FullContact};
 use socket2::{SockRef, TcpKeepalive};

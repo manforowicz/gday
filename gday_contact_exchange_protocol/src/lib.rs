@@ -1,4 +1,3 @@
-#![warn(clippy::all)]
 //! This protocol lets two users exchange their public and (optionally) private socket addresses via a server.
 //! On it's own, this crate doesn't do anything other than define a shared protocol.
 //! This is done with the following process:
@@ -23,8 +22,10 @@
 //!
 //! 8. On their own, the peers use this info to connect directly to each other by using
 //!     [hole punching](https://en.wikipedia.org/wiki/Hole_punching_(networking)).
+#![forbid(unsafe_code)]
+#![warn(clippy::all)]
 
-// mod tests;
+mod tests;
 
 use postcard::{from_bytes, to_slice};
 use serde::{Deserialize, Serialize};

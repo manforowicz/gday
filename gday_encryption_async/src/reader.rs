@@ -1,4 +1,3 @@
-#![warn(clippy::all)]
 use crate::helper_buf::HelperBuf;
 use chacha20poly1305::aead::stream::DecryptorBE32;
 use chacha20poly1305::aead::Buffer;

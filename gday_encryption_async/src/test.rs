@@ -1,4 +1,3 @@
-#![warn(clippy::all)]
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 // todo: test helper buf

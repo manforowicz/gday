@@ -1,4 +1,3 @@
-#![warn(clippy::all)]
 use crate::protocol::{FileMeta, FileMetaLocal};
 use gday_encryption::EncryptedStream;
 use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
@@ -7,7 +6,8 @@ use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::path::Path;
 
-/// Wrap a [`TcpStream`] in an [`EncryptedStream`].
+
+/// Wrap a [`TcpStream`] in a [`gday_encryption::EncryptedStream`].
 fn encrypt_connection(
     mut tcp_stream: TcpStream,
     shared_key: &[u8; 32],
@@ -47,7 +47,7 @@ pub fn send_files(writer: &mut impl Write, files: &[FileMetaLocal]) -> std::io::
     Ok(())
 }
 
-/// Sequentially save the given `files`` from this `reader`.
+/// Sequentially save the given `files` from this `reader`.
 pub fn receive_files(reader: &mut impl Read, files: &[FileMeta]) -> std::io::Result<()> {
     // create a progress bar object
     let total_len: u64 = files.iter().map(|meta| meta.len).sum();
@@ -89,6 +89,7 @@ pub fn receive_files(reader: &mut impl Read, files: &[FileMeta]) -> std::io::Res
     Ok(())
 }
 
+/// Create a stylded [`ProgressBar`].
 fn create_progress_bar(bytes: u64) -> ProgressBar {
     let style = ProgressStyle::with_template(
         "{msg} [{wide_bar}] {bytes}/{total_bytes} | {bytes_per_sec} | eta: {eta}",

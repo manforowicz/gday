@@ -1,4 +1,3 @@
-#![warn(clippy::all)]
 use crate::helper_buf::HelperBuf;
 use chacha20poly1305::aead::generic_array::typenum::Unsigned;
 use chacha20poly1305::aead::stream::EncryptorBE32;

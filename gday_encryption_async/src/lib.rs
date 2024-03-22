@@ -1,4 +1,8 @@
+#![forbid(unsafe_code)]
 #![warn(clippy::all)]
+//! TODO: Add DOC
+
+
 mod helper_buf;
 mod reader;
 mod writer;
