@@ -19,7 +19,7 @@ owo-colors = "4.0.0"
 pin-project = "1.1.5"
 postcard = "1.0.8"
 rand = "0.8.5"
-rustls = "0.22.2"
+rustls = "0.23.3"
 serde = { version = "1.0.197", features = ["serde_derive"] }
 thiserror = "1.0.58"
 tokio = { version = "1.36.0", features = ["fs"] }

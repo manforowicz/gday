@@ -12,7 +12,7 @@ license = "MIT"
 clap = { version = "4.5.3", features = ["derive"] }
 socket2 = "0.5.6"
 tokio = { version = "1.36.0", features = ["rt-multi-thread", "macros", "net", "time", "sync"] }
-tokio-rustls = "0.24.1"
+tokio-rustls = "0.26.0"
 gday_contact_exchange_protocol = { path = "../gday_contact_exchange_protocol" }
 thiserror = "1.0.58"
 log = "0.4.21"
