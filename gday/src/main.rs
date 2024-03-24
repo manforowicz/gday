@@ -124,6 +124,7 @@ fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
             // get peer's contact
             let peer_contact = contact_sharer.get_peer_contact()?;
             info!("Your mate's contact is:\n{peer_contact}");
+            info!("Trying TCP hole punching.");
 
             // connect to the peer
             let (stream, shared_key) = gday_hole_punch::try_connect_to_peer(
@@ -145,8 +146,12 @@ fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
             // offer these files to the peer
             serialize_into(FileOfferMsg { files }, &mut stream)?;
 
+            info!("Waiting for peer to respond to file offer.");
+
             // receive file offer from peer
             let response: FileResponseMsg = deserialize_from(&mut stream, &mut Vec::new())?;
+
+            info!("Starting file send.");
 
             transfer::send_files(&mut stream, &local_files, &response.accepted)?;
         }
@@ -162,6 +167,7 @@ fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
             let peer_contact = contact_sharer.get_peer_contact()?;
 
             info!("Your mate's contact is:\n{peer_contact}");
+            info!("Trying TCP hole punching.");
 
             let (stream, shared_key) = gday_hole_punch::try_connect_to_peer(
                 my_contact.private,
@@ -187,11 +193,13 @@ fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
                 &mut stream,
             )?;
 
+            info!("Starting file download.");
+
             transfer::receive_files(&mut stream, &offer.files, &accepted)?;
         }
     }
 
-    println!("{}", "Success!".bold().green());
+    println!("{}", "Done!".bold().green());
 
     Ok(())
 }

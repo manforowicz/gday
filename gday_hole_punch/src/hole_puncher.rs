@@ -10,9 +10,10 @@ use tokio::{
 
 type PeerConnection = (std::net::TcpStream, [u8; 32]);
 
+const RETRY_INTERVAL: Duration = Duration::from_millis(100);
+
 /// Tries to establish a TCP connection with the other peer by using
 /// [TCP hole punching](https://en.wikipedia.org/wiki/TCP_hole_punching).
-
 pub fn try_connect_to_peer(
     local_contact: Contact,
     peer_contact: FullContact,
@@ -61,6 +62,7 @@ async fn try_connect<T: Into<SocketAddr>>(
     let local = local.into();
     let peer = peer.into();
     loop {
+        tokio::time::sleep(RETRY_INTERVAL).await;
         let local_socket = get_local_socket(local)?;
         let Ok(stream) = local_socket.connect(peer).await else {
             continue;
@@ -79,6 +81,7 @@ async fn try_accept(
     let local_socket = get_local_socket(local.into())?;
     let listener = local_socket.listen(1024)?;
     loop {
+        tokio::time::sleep(RETRY_INTERVAL).await;
         let Ok((stream, _addr)) = listener.accept().await else {
             continue;
         };

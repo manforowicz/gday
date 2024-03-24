@@ -123,15 +123,15 @@ async fn handle_message(
 #[derive(thiserror::Error, Debug)]
 #[non_exhaustive]
 enum HandleMessageError {
-    #[error("Protocol error")]
+    #[error("Protocol error: {0}")]
     Protocol(#[from] gday_contact_exchange_protocol::Error),
 
-    #[error("Server state error")]
+    #[error("Server state error: {0}")]
     State(#[from] state::Error),
 
-    #[error("Peer contact receiver error.")]
+    #[error("Peer timed out waiting for other peer.")]
     Receiver(#[from] tokio::sync::oneshot::error::RecvError),
 
-    #[error("IO Error")]
+    #[error("IO Error: {0}")]
     IO(#[from] std::io::Error),
 }

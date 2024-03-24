@@ -4,7 +4,7 @@ use std::{
 };
 
 #[test]
-fn test_all() {
+fn test_small_messages() {
     let nonce = [5; 7];
     let key = [5; 32];
 

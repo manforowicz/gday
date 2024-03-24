@@ -20,7 +20,12 @@ pub fn confirm_receive(files: &[FileMeta]) -> std::io::Result<Vec<Option<u64>>> 
     let mut new_size = 0;
     let mut total_size = 0;
 
-    println!("Your mate wants to send you {} files:", files.len().bold());
+    println!(
+        "{} {} {}",
+        "Your mate wants to send you".bold(),
+        files.len().bold(),
+        "files:".bold()
+    );
     for file in files {
         // print file metadata
         print!("{} ({})", file.short_path.display(), HumanBytes(file.len));
@@ -32,8 +37,15 @@ pub fn confirm_receive(files: &[FileMeta]) -> std::io::Result<Vec<Option<u64>>> 
 
         // an interrupted download exists
         } else if let Some(local_len) = interrupted_exists(file)? {
-            print!(" {}", "INTERRUPTED".bold());
-            new_size += file.len - local_len;
+            let remaining_len = file.len - local_len;
+
+            print!(
+                " {} {} {}",
+                "PARTIALLY DOWNLOADED.".bold(),
+                HumanBytes(remaining_len).bold(),
+                "REMAINING".bold()
+            );
+            new_size += remaining_len;
             new_files.push(Some(local_len));
 
         // this file does not exist
@@ -59,6 +71,7 @@ pub fn confirm_receive(files: &[FileMeta]) -> std::io::Result<Vec<Option<u64>>> 
     println!("1. Download all files.");
     println!("2. Download only files with new path or size. Resume any interrupted downloads.");
     println!("3. Cancel.");
+    println!("Note: Gday will create new files, instead of overwriting existing files.");
     print!("{} ", "Choose an option (1, 2, or 3):".bold());
     std::io::stdout().flush()?;
 

@@ -1,55 +1,108 @@
 #![cfg(test)]
+use crate::{ClientMsg, Contact, FullContact, ServerMsg};
 
-// TODO: REWRITE
-/*
-#[tokio::test]
-async fn messenger_send_1() {
-    let (mut stream_a, mut stream_b) = tokio::io::duplex(1000);
-    let mut messenger_a = AsyncMessenger::new(&mut stream_a);
-    let mut messenger_b = AsyncMessenger::new(&mut stream_b);
+/// Test serializing and deserializing messages.
+#[test]
+fn sending_messages() {
+    let mut bytes = std::collections::VecDeque::new();
 
-    let sent = ServerMsg::ErrorNoSuchRoomID;
+    for msg in get_client_msg_examples() {
+        crate::serialize_into(msg, &mut bytes).unwrap();
+    }
 
-    messenger_a.send(&sent).await.unwrap();
+    for msg in get_client_msg_examples() {
+        let mut buf = [0; crate::MAX_MSG_SIZE];
+        let deserialized_msg: ClientMsg = crate::deserialize_from(&mut bytes, &mut buf).unwrap();
+        assert_eq!(msg, deserialized_msg);
+    }
 
-    let received: ServerMsg = messenger_b.receive().await.unwrap();
+    for msg in get_server_msg_examples() {
+        crate::serialize_into(msg, &mut bytes).unwrap();
+    }
 
-    assert_eq!(sent, received);
+    for msg in get_server_msg_examples() {
+        let mut buf = [0; crate::MAX_MSG_SIZE];
+        let deserialized_msg: ServerMsg = crate::deserialize_from(&mut bytes, &mut buf).unwrap();
+        assert_eq!(msg, deserialized_msg);
+    }
 }
 
+/// Test serializing and deserializing messages asynchronously.
 #[tokio::test]
-async fn messenger_send_2() {
-    let (mut stream_a, mut stream_b) = tokio::io::duplex(1000);
-    let mut messenger_a = AsyncMessenger::new(&mut stream_a);
-    let mut messenger_b = AsyncMessenger::new(&mut stream_b);
+async fn sending_messages_async() {
+    let (mut writer, mut reader) = tokio::io::duplex(1000);
 
-    let socket = SocketAddr::V6(SocketAddrV6::new(578674694309532.into(), 1456, 0, 0));
+    for msg in get_client_msg_examples() {
+        crate::serialize_into_async(msg, &mut writer).await.unwrap();
+    }
 
-    let sent = ClientMsg::SendAddr {
-        room_code: 65721,
-        is_creator: false,
-        private_addr: Some(socket),
-    };
+    for msg in get_client_msg_examples() {
+        let mut buf = [0; crate::MAX_MSG_SIZE];
+        let deserialized_msg: ClientMsg = crate::deserialize_from_async(&mut reader, &mut buf)
+            .await
+            .unwrap();
+        assert_eq!(msg, deserialized_msg);
+    }
 
-    messenger_a.send(&sent).await.unwrap();
+    for msg in get_server_msg_examples() {
+        crate::serialize_into_async(msg, &mut writer).await.unwrap();
+    }
 
-    let received: ClientMsg = messenger_b.receive().await.unwrap();
-
-    assert_eq!(sent, received);
+    for msg in get_server_msg_examples() {
+        let mut buf = [0; crate::MAX_MSG_SIZE];
+        let deserialized_msg: ServerMsg = crate::deserialize_from_async(&mut reader, &mut buf)
+            .await
+            .unwrap();
+        assert_eq!(msg, deserialized_msg);
+    }
 }
 
-#[tokio::test]
-async fn messenger_invalid_data() {
-    let (mut stream_a, mut stream_b) = tokio::io::duplex(1000);
-
-    // gibberish data
-    stream_a
-        .write_all(&[0, 12, 53, 24, 85, 52, 24, 123, 32, 52, 52, 52, 13, 35])
-        .await
-        .unwrap();
-    let mut messenger_b = AsyncMessenger::new(&mut stream_b);
-    let result: Result<ServerMsg, Error> = messenger_b.receive().await;
-
-    assert!(result.is_err());
+/// Get a [`Vec`] of example [`ClientMsg`]s.
+fn get_client_msg_examples() -> Vec<ClientMsg> {
+    vec![
+        ClientMsg::CreateRoom { room_code: 452932 },
+        ClientMsg::SendAddr {
+            room_code: 2345,
+            is_creator: true,
+            private_addr: Some("31.31.65.31:324".parse().unwrap()),
+        },
+        ClientMsg::DoneSending {
+            room_code: 24325423,
+            is_creator: false,
+        },
+    ]
 }
-*/
+
+/// Get a [`Vec`] of example [`ServerMsg`]s.
+fn get_server_msg_examples() -> Vec<ServerMsg> {
+    vec![
+        ServerMsg::RoomCreated,
+        ServerMsg::ReceivedAddr,
+        ServerMsg::ClientContact(FullContact {
+            private: Contact {
+                v4: Some("31.31.65.31:324".parse().unwrap()),
+                v6: Some("[2001:db8::1]:8080".parse().unwrap()),
+            },
+            public: Contact {
+                v4: Some("31.31.65.31:324".parse().unwrap()),
+                v6: Some("[2001:db8::1]:8080".parse().unwrap()),
+            },
+        }),
+        ServerMsg::PeerContact(FullContact {
+            private: Contact {
+                v4: Some("31.31.65.31:324".parse().unwrap()),
+                v6: Some("[2001:db8::1]:8080".parse().unwrap()),
+            },
+            public: Contact {
+                v4: Some("31.31.65.31:324".parse().unwrap()),
+                v6: Some("[2001:db8::1]:8080".parse().unwrap()),
+            },
+        }),
+        ServerMsg::ErrorRoomTaken,
+        ServerMsg::ErrorPeerTimedOut,
+        ServerMsg::ErrorNoSuchRoomID,
+        ServerMsg::ErrorTooManyRequests,
+        ServerMsg::SyntaxError,
+        ServerMsg::ConnectionError,
+    ]
+}

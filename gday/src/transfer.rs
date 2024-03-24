@@ -1,10 +1,11 @@
-use gday_file_offer_protocol::{FileMeta, FileMetaLocal};
+use crate::TMP_DOWNLOAD_PREFIX;
 use gday_encryption::EncryptedStream;
+use gday_file_offer_protocol::{FileMeta, FileMetaLocal};
 use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
 use std::fs::{File, OpenOptions};
-use std::io::{Read, Seek, SeekFrom, Write};
+use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 
-use crate::TMP_DOWNLOAD_PREFIX;
+const FILE_BUFFER_SIZE: usize = 1_000_000;
 
 /// Wrap a [`TcpStream`] in a [`gday_encryption::EncryptedStream`].
 pub fn encrypt_connection<T: Read + Write>(
@@ -58,7 +59,8 @@ pub fn send_files(
             progress.set_message(format!("sending {msg}"));
 
             // copy the file into the writer
-            let mut file = File::open(&meta.local_path)?;
+            let mut file =
+                BufReader::with_capacity(FILE_BUFFER_SIZE, File::open(&meta.local_path)?);
             // TODO: maybe check if file length is correct?
 
             file.seek(SeekFrom::Start(start))?;
@@ -118,7 +120,7 @@ pub fn receive_files(
             let tmp_path = meta.get_prefixed_save_path(TMP_DOWNLOAD_PREFIX.into())?;
 
             // create the temporary download file
-            let mut file = File::create(&tmp_path)?;
+            let mut file = BufWriter::with_capacity(FILE_BUFFER_SIZE, File::create(&tmp_path)?);
 
             // only take the length of the file from the reader
             let mut reader = reader.take(meta.len);
@@ -145,7 +147,8 @@ pub fn receive_files(
 
             // open the partially downloaded file in append mode
             let tmp_path = meta.get_prefixed_save_path(TMP_DOWNLOAD_PREFIX.into())?;
-            let mut file = OpenOptions::new().append(true).open(&tmp_path).unwrap();
+            let file = OpenOptions::new().append(true).open(&tmp_path)?;
+            let mut file = BufWriter::with_capacity(FILE_BUFFER_SIZE, file);
 
             // only take the length of the remaining part of the file from the reader
             let mut reader = reader.take(meta.len - start);
