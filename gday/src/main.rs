@@ -2,30 +2,29 @@
 //! TODO
 #![forbid(unsafe_code)]
 #![warn(clippy::all)]
-#![allow(dead_code)]
 
 mod base32;
 mod dialog;
-mod protocol;
 mod transfer;
 
 use base32::PeerCode;
 use clap::{Parser, Subcommand};
 use dialog::confirm_receive;
+use gday_file_offer_protocol::{deserialize_from, FileResponseMsg};
 use gday_hole_punch::{
     server_connector::{self, DEFAULT_SERVERS},
     ContactSharer,
 };
 use log::{error, info};
 use owo_colors::OwoColorize;
-use protocol::{deserialize_from, FileResponseMsg};
 use rand::Rng;
 use std::path::PathBuf;
 
-use crate::{
-    protocol::{serialize_into, FileMeta, FileOfferMsg},
-    transfer::encrypt_connection,
-};
+use crate::transfer::encrypt_connection;
+
+use gday_file_offer_protocol::{serialize_into, FileMeta, FileOfferMsg};
+
+const TMP_DOWNLOAD_PREFIX: &str = "GDAY_PARTIAL_DOWNLOAD_";
 
 /// Send files directly to peers
 #[derive(Parser, Debug)]

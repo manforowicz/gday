@@ -12,7 +12,7 @@
 //! 5. Both peers pass this contact and a shared secret to [`try_connect_to_peer()`],
 //!    which returns a TCP stream, and an authenticated shared key.
 #![forbid(unsafe_code)]
-#![warn(clippy::all)]   
+#![warn(clippy::all)]
 
 mod contact_sharer;
 mod hole_puncher;

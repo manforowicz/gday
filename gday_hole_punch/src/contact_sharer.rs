@@ -23,7 +23,6 @@ impl ContactSharer {
         room_code: u64,
         mut server_connection: ServerConnection,
     ) -> Result<(Self, FullContact), Error> {
-
         server_connection.configure()?;
 
         let messenger = &mut server_connection.streams()[0];

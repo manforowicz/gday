@@ -1,5 +1,5 @@
-use std::ops::{Deref, DerefMut};
 use chacha20poly1305::aead;
+use std::ops::{Deref, DerefMut};
 
 /// Buffer for storing bytes.
 pub struct HelperBuf {

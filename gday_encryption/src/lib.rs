@@ -16,7 +16,7 @@ const TAG_SIZE: usize = 16;
 
 /// An encrypted wrapper around an IO stream.
 /// Uses a ChaCha20Poly12305 BE32 stream.
-pub struct EncryptedStream<T: Read + Write> {
+pub struct EncryptedStream<T> {
     /// The IO stream to be wrapped in encryption
     inner: T,
 
@@ -42,7 +42,7 @@ pub struct EncryptedStream<T: Read + Write> {
     is_flushing: bool,
 }
 
-impl<T: Read + Write> EncryptedStream<T> {
+impl<T> EncryptedStream<T> {
     /// Wraps `inner` in an `EncryptedStream`.
     /// Both sides must have the same `key` and `nonce`.
     /// The `key` must be a secure random secret.
@@ -58,7 +58,9 @@ impl<T: Read + Write> EncryptedStream<T> {
             is_flushing: true,
         }
     }
+}
 
+impl<T: Read> EncryptedStream<T> {
     /// Reads at least 1 new chunk into `self.plaintext`.
     /// Otherwise returns `Poll::pending`
     fn inner_read(&mut self) -> std::io::Result<()> {
@@ -122,7 +124,9 @@ impl<T: Read + Write> EncryptedStream<T> {
 
         Ok(())
     }
+}
 
+impl<T: Write> EncryptedStream<T> {
     fn flush_write_buf(&mut self) -> std::io::Result<()> {
         // no need to flush if there's no data.
         if self.to_send.len() == 2 {
@@ -169,7 +173,7 @@ fn peek_cipher_chunk(data: &[u8]) -> Option<&[u8]> {
     data.get(2..2 + len)
 }
 
-impl<T: Read + Write> Read for EncryptedStream<T> {
+impl<T: Read> Read for EncryptedStream<T> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         // if we're out of decrypted data, read more
         if self.decrypted.is_empty() {
@@ -183,7 +187,7 @@ impl<T: Read + Write> Read for EncryptedStream<T> {
     }
 }
 
-impl<T: Read + Write> BufRead for EncryptedStream<T> {
+impl<T: Read> BufRead for EncryptedStream<T> {
     fn fill_buf(&mut self) -> std::io::Result<&[u8]> {
         // if we're out of plaintext, read more
         if self.decrypted.is_empty() {
@@ -198,7 +202,7 @@ impl<T: Read + Write> BufRead for EncryptedStream<T> {
     }
 }
 
-impl<T: Read + Write> Write for EncryptedStream<T> {
+impl<T: Write> Write for EncryptedStream<T> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         if self.is_flushing {
             self.flush_write_buf()?;

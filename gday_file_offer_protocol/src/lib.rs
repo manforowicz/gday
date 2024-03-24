@@ -1,3 +1,7 @@
+//! TODO
+#![forbid(unsafe_code)]
+#![warn(clippy::all)]
+
 use os_str_bytes::OsStrBytesExt;
 use postcard::{from_bytes, to_extend};
 use serde::{Deserialize, Serialize};
@@ -53,13 +57,13 @@ impl FileMeta {
     }
 
     /// Returns [`Self::get_save_path()`] with its file name
-    /// prefixed by `"PARTIAL_GDAY_DOWNLOAD_"`.
-    pub fn get_tmp_download_path(&self) -> std::io::Result<PathBuf> {
+    /// prefixed by `prefix`.
+    pub fn get_prefixed_save_path(&self, prefix: OsString) -> std::io::Result<PathBuf> {
         // get this file's save path
         let mut save_path = self.get_save_path()?;
 
         // add a prefix to its filename
-        add_prefix_to_file_name(&mut save_path, OsString::from("PARTIAL_GDAY_DOWNLOAD_"))?;
+        add_prefix_to_file_name(&mut save_path, prefix)?;
 
         Ok(save_path)
     }

@@ -1,0 +1,12 @@
+[package]
+name = "gday_file_offer_protocol"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+os_str_bytes = "7.0.0"
+postcard = "1.0.8"
+serde = "1.0.197"
+thiserror = "1.0.58"

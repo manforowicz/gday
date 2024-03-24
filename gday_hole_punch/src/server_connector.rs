@@ -11,7 +11,6 @@ use std::{
     time::Duration,
 };
 
-
 /// The default list of public Gday servers.
 pub const DEFAULT_SERVERS: &[ServerInfo] = &[ServerInfo {
     domain_name: "gday.manforowicz.com",
@@ -216,11 +215,8 @@ pub fn connect_to_domain_name(domain_name: &str) -> Result<ServerConnection, Err
 
 /// Get default TLS config
 fn get_tls_config() -> rustls::ClientConfig {
-    let root_store = rustls::RootCertStore::from_iter(
-        webpki_roots::TLS_SERVER_ROOTS
-            .iter()
-            .cloned(),
-    );
+    let root_store =
+        rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
 
     rustls::ClientConfig::builder()
         .with_root_certificates(root_store)

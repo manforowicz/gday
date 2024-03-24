@@ -1,8 +1,10 @@
-use crate::protocol::{FileMeta, FileMetaLocal};
+use gday_file_offer_protocol::{FileMeta, FileMetaLocal};
 use gday_encryption::EncryptedStream;
 use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
+
+use crate::TMP_DOWNLOAD_PREFIX;
 
 /// Wrap a [`TcpStream`] in a [`gday_encryption::EncryptedStream`].
 pub fn encrypt_connection<T: Read + Write>(
@@ -81,7 +83,7 @@ pub fn receive_files(
     reader: &mut impl Read,
     offered: &[FileMeta],
     accepted: &[Option<u64>],
-) -> Result<(), crate::protocol::Error> {
+) -> Result<(), gday_file_offer_protocol::Error> {
     // sum up total transfer size
     let size: u64 = offered
         .iter()
@@ -113,7 +115,7 @@ pub fn receive_files(
                 std::fs::create_dir_all(parent)?;
             }
 
-            let tmp_path = meta.get_tmp_download_path()?;
+            let tmp_path = meta.get_prefixed_save_path(TMP_DOWNLOAD_PREFIX.into())?;
 
             // create the temporary download file
             let mut file = File::create(&tmp_path)?;
@@ -142,7 +144,7 @@ pub fn receive_files(
             // TODO: ENSURE THE SAVED FILE IS ACTUALLY 'start' BYTES LONG
 
             // open the partially downloaded file in append mode
-            let tmp_path = meta.get_tmp_download_path()?;
+            let tmp_path = meta.get_prefixed_save_path(TMP_DOWNLOAD_PREFIX.into())?;
             let mut file = OpenOptions::new().append(true).open(&tmp_path).unwrap();
 
             // only take the length of the remaining part of the file from the reader

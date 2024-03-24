@@ -1,4 +1,4 @@
-use crate::protocol::{FileMeta, FileMetaLocal};
+use gday_file_offer_protocol::{FileMeta, FileMetaLocal};
 use indicatif::HumanBytes;
 use owo_colors::OwoColorize;
 use std::{
@@ -7,6 +7,8 @@ use std::{
     io::Write,
     path::{Path, PathBuf},
 };
+
+use crate::TMP_DOWNLOAD_PREFIX;
 
 /// Asks the user which of these files to accept.
 /// Every accepted file in `files` will be represented by a
@@ -129,7 +131,7 @@ fn file_exists(meta: &FileMeta) -> std::io::Result<bool> {
 /// whose download was interrupted.
 /// Iff there is an interrupted file, returns Some(size of interrupted file)
 fn interrupted_exists(meta: &FileMeta) -> std::io::Result<Option<u64>> {
-    let local_path = meta.get_tmp_download_path()?;
+    let local_path = meta.get_prefixed_save_path(TMP_DOWNLOAD_PREFIX.into())?;
 
     // check if the file can be opened
     if let Ok(file) = File::open(local_path) {
