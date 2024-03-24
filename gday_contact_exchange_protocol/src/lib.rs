@@ -29,6 +29,7 @@
 //! 8. On their own, the peers use this info to connect directly to each other by using
 //!     [hole punching](https://en.wikipedia.org/wiki/Hole_punching_(networking)).
 //!
+#![doc = include_str!("../README.md")]
 #![forbid(unsafe_code)]
 #![warn(clippy::all)]
 

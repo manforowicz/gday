@@ -44,7 +44,7 @@ fn test_small_messages() {
 
     for msg in test_data {
         stream.write_all(msg).unwrap();
-        stream.flush_write_buf().unwrap();
+        stream.flush().unwrap();
         let mut buf = vec![0; msg.len()];
         stream.read_exact(&mut buf).unwrap();
         assert_eq!(buf, msg[..]);
