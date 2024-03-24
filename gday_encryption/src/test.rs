@@ -25,7 +25,7 @@ fn test_all() {
         &b"b"[..],
         &b"132ddsagasfa"[..],
         &b"vds dagdsfa"[..],
-        &b" dfsafsadf fsa"[..],
+        &b" dfsafsadf fsa "[..],
         &b"ete243yfdga"[..],
         &b"dbasbalp35"[..],
         &b";kbfdbaj;dsjagp98845"[..],

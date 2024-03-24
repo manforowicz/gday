@@ -2,7 +2,7 @@ use crate::state::{self, State};
 use gday_contact_exchange_protocol::{
     deserialize_from_async, serialize_into_async, ClientMsg, ServerMsg,
 };
-use log::{info, warn};
+use log::{debug, warn};
 use tokio::net::TcpStream;
 use tokio_rustls::{server::TlsStream, TlsAcceptor};
 
@@ -20,8 +20,9 @@ pub async fn handle_connection(tcp_stream: TcpStream, tls_acceptor: TlsAcceptor,
     };
 
     // try handling the requests
+
     if let Err(err) = handle_requests(&mut tls_stream, state).await {
-        info!("Dropping connection because: {err}");
+        debug!("Dropping connection because: {err}");
     }
 }
 

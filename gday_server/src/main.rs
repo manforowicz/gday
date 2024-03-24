@@ -9,7 +9,7 @@ mod tests;
 
 use clap::Parser;
 use connection_handler::handle_connection;
-use log::{error, warn};
+use log::{debug, error, info, warn};
 use socket2::{SockRef, TcpKeepalive};
 use state::State;
 use std::{
@@ -47,11 +47,11 @@ struct Args {
 
     /// Max number of requests an IP address can
     /// send in a minute before they're rejected.
-    #[arg(short, long, default_value = "300")]
+    #[arg(short, long, default_value = "60")]
     request_limit: u32,
 
     /// Log verbosity. (trace, debug, info, warn, error)
-    #[arg(short, long, default_value = "warn")]
+    #[arg(short, long, default_value = "info")]
     verbosity: log::LevelFilter,
 }
 
@@ -70,15 +70,18 @@ async fn main() {
     // create the shared global state object
     let state = State::new(args.request_limit, args.timeout);
 
+    info!("Server started.");
+
     loop {
         // try to accept another connection
-        let (stream, _addr) = match tcp_listener.accept().await {
+        let (stream, addr) = match tcp_listener.accept().await {
             Ok(ok) => ok,
             Err(err) => {
-                warn!("Error accepting connection: {err}");
+                warn!("Error accepting incoming TCP connection: {err}");
                 continue;
             }
         };
+        debug!("Accepted incoming TCP connection from {addr}");
 
         // spawn a thread to handle the connection
         tokio::spawn(handle_connection(

@@ -37,7 +37,7 @@ pub fn confirm_receive(files: &[FileMeta]) -> std::io::Result<Vec<Option<u64>>> 
         // this file does not exist
         } else {
             new_size += file.len;
-            new_files.push(Some(file.len));
+            new_files.push(Some(0));
         }
 
         total_size += file.len;
@@ -65,7 +65,7 @@ pub fn confirm_receive(files: &[FileMeta]) -> std::io::Result<Vec<Option<u64>>> 
     std::io::stdin().read_line(&mut response)?;
     match response.trim() {
         // all files
-        "1" => Ok(vec![Some(0)]),
+        "1" => Ok(vec![Some(0); files.len()]),
         // new files
         "2" => Ok(new_files),
         // cancel

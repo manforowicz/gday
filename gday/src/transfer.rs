@@ -8,17 +8,25 @@ use std::io::{Read, Seek, SeekFrom, Write};
 pub fn encrypt_connection<T: Read + Write>(
     mut io_stream: T,
     shared_key: &[u8; 32],
+    is_creator: bool,
 ) -> std::io::Result<EncryptedStream<T>> {
     // send and receive nonces over unencrypted TCP
-    let write_nonce: [u8; 7] = rand::random();
-    io_stream.write_all(&write_nonce)?;
-    let mut read_nonce = [0; 7];
-    io_stream.read_exact(&mut read_nonce)?;
 
-    Ok(EncryptedStream::new(io_stream, shared_key, &write_nonce))
+    let nonce = if is_creator {
+        let nonce: [u8; 7] = rand::random();
+        io_stream.write_all(&nonce)?;
+        io_stream.flush()?;
+        nonce
+    } else {
+        let mut nonce = [0_u8; 7];
+        io_stream.read_exact(&mut nonce)?;
+        nonce
+    };
+
+    Ok(EncryptedStream::new(io_stream, shared_key, &nonce))
 }
 
-/// Sequentially write the given `files` to this `writer`.
+/// Sequentially write the given files to this `writer`.
 pub fn send_files(
     writer: &mut impl Write,
     offered: &[FileMetaLocal],
@@ -28,9 +36,9 @@ pub fn send_files(
     let size: u64 = offered
         .iter()
         .zip(accepted)
-        .map(|(f, a)| {
-            if let Some(start) = a {
-                f.len - start
+        .map(|(offer, response)| {
+            if let Some(start) = response {
+                offer.len - start
             } else {
                 0
             }
@@ -44,7 +52,7 @@ pub fn send_files(
     for (meta, &accepted) in offered.iter().zip(accepted) {
         if let Some(start) = accepted {
             // set progress bar message to file path
-            let msg = meta.short_path.to_string_lossy().to_string();
+            let msg = meta.short_path.display();
             progress.set_message(format!("sending {msg}"));
 
             // copy the file into the writer
@@ -62,6 +70,9 @@ pub fn send_files(
 
     // flush the writer
     writer.flush()?;
+
+    progress.finish_with_message("Done sending!");
+
     Ok(())
 }
 
@@ -70,7 +81,7 @@ pub fn receive_files(
     reader: &mut impl Read,
     offered: &[FileMeta],
     accepted: &[Option<u64>],
-) -> std::io::Result<()> {
+) -> Result<(), crate::protocol::Error> {
     // sum up total transfer size
     let size: u64 = offered
         .iter()
@@ -91,7 +102,7 @@ pub fn receive_files(
         // download whole file
         if let Some(0) = accepted {
             // set progress bar message to file path
-            let msg = meta.short_path.to_string_lossy().to_string();
+            let msg = meta.short_path.display();
             progress.set_message(format!("receiving {msg}"));
 
             // get this file's save path
@@ -107,41 +118,51 @@ pub fn receive_files(
             // create the temporary download file
             let mut file = File::create(&tmp_path)?;
 
-            // copy from the reader into the file
+            // only take the length of the file from the reader
             let mut reader = reader.take(meta.len);
+
+            // wrap the file to track write progress
             let mut writer = ProgressWrite {
                 writer: &mut file,
                 progress: &progress,
             };
+
+            // copy from the reader into the file
             std::io::copy(&mut reader, &mut writer)?;
 
-            // rename the file to its intended name
-            std::fs::rename(tmp_path, save_path)?;
+            // rename the temporary download file to its final name
+            std::fs::rename(tmp_path, meta.get_unused_save_path()?)?;
 
         // resume interrupted download
-        } else if let Some(_start) = accepted {
+        } else if let Some(start) = accepted {
             // set progress bar message to file path
-            let msg = meta.short_path.to_string_lossy().to_string();
+            let msg = meta.short_path.display();
             progress.set_message(format!("receiving {msg}"));
-
-            let save_path = meta.get_save_path()?;
-            let tmp_path = meta.get_tmp_download_path()?;
 
             // TODO: ENSURE THE SAVED FILE IS ACTUALLY 'start' BYTES LONG
 
+            // open the partially downloaded file in append mode
+            let tmp_path = meta.get_tmp_download_path()?;
             let mut file = OpenOptions::new().append(true).open(&tmp_path).unwrap();
 
-            // copy from the reader into the file
-            let mut reader = reader.take(meta.len);
+            // only take the length of the remaining part of the file from the reader
+            let mut reader = reader.take(meta.len - start);
+
+            // wrap the file to track write progress
             let mut writer = ProgressWrite {
                 writer: &mut file,
                 progress: &progress,
             };
+
+            // copy from the reader into the file
             std::io::copy(&mut reader, &mut writer)?;
 
-            // rename the file to its intended name
+            // rename the temporary download file to its final name
+            let save_path = meta.get_save_path()?;
             std::fs::rename(tmp_path, save_path)?;
         }
+
+        progress.finish_with_message("Done downloading!");
     }
 
     Ok(())
@@ -160,7 +181,7 @@ fn create_progress_bar(bytes: u64) -> ProgressBar {
 }
 
 /// A thin wrapper around a [`Write`] IO stream and [`ProgressBar`].
-/// Increments the [`ProgressBar`] when writting.
+/// Increments the [`ProgressBar`] by the number of bytes written.
 struct ProgressWrite<'a, T: Write> {
     writer: &'a mut T,
     progress: &'a ProgressBar,

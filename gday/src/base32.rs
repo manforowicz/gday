@@ -151,10 +151,10 @@ pub enum Error {
     #[error("Base 32 value is too large to fit in 64-bit integer")]
     ValueTooGreat,
 
-    #[error("Incorrect checksum. Double check the code!")]
+    #[error("Incorrect checksum. Double check your code!")]
     IncorrectChecksum,
 
-    #[error("Wronge number of segments in this code.")]
+    #[error("Wrong number of segments in this code.")]
     WrongNumberOfSegments,
 }
 

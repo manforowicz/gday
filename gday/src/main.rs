@@ -66,7 +66,6 @@ fn main() {
 
     // initialize logging
     env_logger::builder()
-        .format_level(false)
         .format_module_path(false)
         .format_target(false)
         .format_timestamp(None)
@@ -99,12 +98,12 @@ fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
             let room_code = if let Some(code) = args.room {
                 code
             } else {
-                rand::thread_rng().gen_range(0..u32::MAX as u64)
+                rand::thread_rng().gen_range(0..u16::MAX as u64)
             };
             let shared_secret = if let Some(secret) = args.room {
                 secret
             } else {
-                rand::thread_rng().gen_range(0..u32::MAX as u64)
+                rand::thread_rng().gen_range(0..u16::MAX as u64)
             };
             let peer_code = PeerCode {
                 server_id,
@@ -116,7 +115,7 @@ fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
             let (contact_sharer, my_contact) =
                 ContactSharer::create_room(room_code, server_connection)?;
 
-            info!("Your contact is: {:?}", my_contact);
+            info!("Your contact is:\n{my_contact}");
 
             println!(
                 "Tell your mate to run \"gday receive {}\"",
@@ -125,7 +124,7 @@ fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
 
             // get peer's contact
             let peer_contact = contact_sharer.get_peer_contact()?;
-            info!("Your mate's contact is: {:?}", peer_contact);
+            info!("Your mate's contact is:\n{peer_contact}");
 
             // connect to the peer
             let (stream, shared_key) = gday_hole_punch::try_connect_to_peer(
@@ -133,7 +132,10 @@ fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
                 peer_contact,
                 &shared_secret.to_be_bytes(),
             )?;
-            let mut stream = encrypt_connection(stream.into_std()?, &shared_key)?;
+
+            let mut stream = encrypt_connection(stream, &shared_key, true)?;
+
+            info!("Established authenticated encrypted connection with peer.");
 
             // get the [`FileMeta`] of the files the user wants to send
             let files = local_files
@@ -153,15 +155,24 @@ fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
         // receiving files
         Command::Receive { code } => {
             let code = PeerCode::from_str(&code)?;
-            let (contact_sharer, local_contact) =
+            let (contact_sharer, my_contact) =
                 ContactSharer::join_room(code.room_code, server_connection)?;
+
+            info!("Your contact is:\n{my_contact}");
+
             let peer_contact = contact_sharer.get_peer_contact()?;
+
+            info!("Your mate's contact is:\n{peer_contact}");
+
             let (stream, shared_key) = gday_hole_punch::try_connect_to_peer(
-                local_contact.private,
+                my_contact.private,
                 peer_contact,
                 &code.shared_secret.to_be_bytes(),
             )?;
-            let mut stream = encrypt_connection(stream.into_std()?, &shared_key)?;
+
+            let mut stream = encrypt_connection(stream, &shared_key, false)?;
+
+            info!("Established authenticated encrypted connection with peer.");
 
             // receive file offer from peer
             let offer: FileOfferMsg = deserialize_from(&mut stream, &mut Vec::new())?;
@@ -180,6 +191,8 @@ fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
             transfer::receive_files(&mut stream, &offer.files, &accepted)?;
         }
     }
+
+    println!("{}", "Success!".bold().green());
 
     Ok(())
 }

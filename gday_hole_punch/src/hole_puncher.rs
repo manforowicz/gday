@@ -5,10 +5,10 @@ use spake2::{Ed25519Group, Identity, Password, Spake2};
 use std::{future::Future, net::SocketAddr, pin::Pin, time::Duration};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
-    net::{TcpSocket, TcpStream},
+    net::TcpSocket,
 };
 
-type PeerConnection = (TcpStream, [u8; 32]);
+type PeerConnection = (std::net::TcpStream, [u8; 32]);
 
 /// Tries to establish a TCP connection with the other peer by using
 /// [TCP hole punching](https://en.wikipedia.org/wiki/TCP_hole_punching).
@@ -45,7 +45,11 @@ pub fn try_connect_to_peer(
         }
     }
 
-    Ok(futures::executor::block_on(futures::future::select_ok(futs))?.0)
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?;
+
+    Ok(runtime.block_on(futures::future::select_ok(futs))?.0)
 }
 
 /// Tries to connect to a socket address.
@@ -58,7 +62,9 @@ async fn try_connect<T: Into<SocketAddr>>(
     let peer = peer.into();
     loop {
         let local_socket = get_local_socket(local)?;
-        let stream = local_socket.connect(peer).await?;
+        let Ok(stream) = local_socket.connect(peer).await else {
+            continue;
+        };
         if let Ok(connection) = verify_peer(shared_secret, stream).await {
             return Ok(connection);
         }
@@ -70,25 +76,31 @@ async fn try_accept(
     local: impl Into<SocketAddr>,
     shared_secret: &[u8],
 ) -> std::io::Result<PeerConnection> {
-    let local = local.into();
-    let local_socket = get_local_socket(local)?;
+    let local_socket = get_local_socket(local.into())?;
     let listener = local_socket.listen(1024)?;
     loop {
-        let (stream, _addr) = listener.accept().await?;
+        let Ok((stream, _addr)) = listener.accept().await else {
+            continue;
+        };
         if let Ok(connection) = verify_peer(shared_secret, stream).await {
             return Ok(connection);
         }
     }
 }
 
-/// Uses SPAKE 2 to generate a cryptographically stronger secret using `shared_secret`.
-/// Confirms that the other peer has the same strong shared secret.
-/// If successfull, returns a [`PeerConnection`].
-async fn verify_peer(shared_secret: &[u8], mut stream: TcpStream) -> Result<PeerConnection, Error> {
-    // Password authenticated key exchange
+/// Uses [SPAKE 2](https://datatracker.ietf.org/doc/rfc9382/)
+/// to derive a cryptographically secure secret from
+/// a potentially weak `shared_secret`.
+/// Verifies that the other peer derived the same secret.
+/// If successful, returns a [`PeerConnection`].
+async fn verify_peer(
+    shared_secret: &[u8],
+    mut stream: tokio::net::TcpStream,
+) -> Result<PeerConnection, Error> {
+    //// Password authenticated key exchange ////
     let (spake, outbound_msg) = Spake2::<Ed25519Group>::start_symmetric(
         &Password::new(shared_secret),
-        &Identity::new(b"gday peers"),
+        &Identity::new(b"gday mates"),
     );
 
     stream.write_all(&outbound_msg).await?;
@@ -97,9 +109,12 @@ async fn verify_peer(shared_secret: &[u8], mut stream: TcpStream) -> Result<Peer
     let mut inbound_msg = [0; 33];
     stream.read_exact(&mut inbound_msg).await?;
 
-    let shared_key: [u8; 32] = spake.finish(&inbound_msg)?.try_into().expect("unreachable");
+    let shared_key: [u8; 32] = spake
+        .finish(&inbound_msg)?
+        .try_into()
+        .expect("Unreachable: Key is always 32 bytes long.");
 
-    // mutually verify that we have the same `shared_key`
+    //// Mutually verify that we have the same `shared_key` ////
 
     // send a random challenge to the peer
     let my_challenge: [u8; 32] = rand::random();
@@ -129,6 +144,8 @@ async fn verify_peer(shared_secret: &[u8], mut stream: TcpStream) -> Result<Peer
     let expected = hasher.finalize();
 
     if expected == peer_hash {
+        let stream = stream.into_std()?;
+        stream.set_nonblocking(false)?;
         Ok((stream, shared_key))
     } else {
         Err(Error::PeerAuthenticationFailed)
