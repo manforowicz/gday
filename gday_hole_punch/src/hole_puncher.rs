@@ -14,6 +14,17 @@ const RETRY_INTERVAL: Duration = Duration::from_millis(100);
 
 /// Tries to establish a TCP connection with the other peer by using
 /// [TCP hole punching](https://en.wikipedia.org/wiki/TCP_hole_punching).
+///
+/// - `local_contact` should be the `private` field of your [`FullContact`]
+/// that the [`crate::ContactSharer`] returned when you created or joined a room.
+/// - `peer_contact` should be the [`FullContact`] returned by [`crate::ContactSharer::get_peer_contact()`].
+/// - `shared_secret` should be a secret that both peers know. It will be used to verify
+/// the peer's identity, and derive a stronger shared key using [SPAKE2](https://docs.rs/spake2/latest/spake2/).
+///
+/// Returns:
+/// - A [`std::net::TcpStream`] to the other peer.
+/// - A `[u8; 32]` shared key that was derived using
+/// [SPAKE2](https://docs.rs/spake2/latest/spake2/) and the weaker `shared_secret`.
 pub fn try_connect_to_peer(
     local_contact: Contact,
     peer_contact: FullContact,
@@ -23,17 +34,6 @@ pub fn try_connect_to_peer(
     let mut futs: Vec<Pin<Box<dyn Future<Output = std::io::Result<PeerConnection>>>>> =
         Vec::with_capacity(6);
 
-    if let Some(local) = local_contact.v6 {
-        futs.push(Box::pin(try_accept(local, p)));
-
-        if let Some(peer) = peer_contact.private.v6 {
-            futs.push(Box::pin(try_connect(local, peer, p)));
-        }
-        if let Some(peer) = peer_contact.public.v6 {
-            futs.push(Box::pin(try_connect(local, peer, p)));
-        }
-    }
-
     if let Some(local) = local_contact.v4 {
         futs.push(Box::pin(try_accept(local, p)));
 
@@ -42,6 +42,17 @@ pub fn try_connect_to_peer(
         }
 
         if let Some(peer) = peer_contact.public.v4 {
+            futs.push(Box::pin(try_connect(local, peer, p)));
+        }
+    }
+
+    if let Some(local) = local_contact.v6 {
+        futs.push(Box::pin(try_accept(local, p)));
+
+        if let Some(peer) = peer_contact.private.v6 {
+            futs.push(Box::pin(try_connect(local, peer, p)));
+        }
+        if let Some(peer) = peer_contact.public.v6 {
             futs.push(Box::pin(try_connect(local, peer, p)));
         }
     }
@@ -91,7 +102,7 @@ async fn try_accept(
     }
 }
 
-/// Uses [SPAKE 2](https://datatracker.ietf.org/doc/rfc9382/)
+/// Uses [SPAKE 2](https://docs.rs/spake2/latest/spake2/)
 /// to derive a cryptographically secure secret from
 /// a potentially weak `shared_secret`.
 /// Verifies that the other peer derived the same secret.
@@ -171,9 +182,9 @@ fn get_local_socket(local_addr: SocketAddr) -> std::io::Result<TcpSocket> {
     let _ = sock.set_reuse_port(true);
 
     let keepalive = TcpKeepalive::new()
-        .with_time(Duration::from_secs(10))
-        .with_interval(Duration::from_secs(1))
-        .with_retries(10);
+        .with_time(Duration::from_secs(5))
+        .with_interval(Duration::from_secs(2))
+        .with_retries(5);
     let _ = sock.set_tcp_keepalive(&keepalive);
 
     socket.bind(local_addr)?;

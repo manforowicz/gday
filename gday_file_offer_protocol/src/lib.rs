@@ -1,4 +1,19 @@
-//! TODO
+//! This protocol lets one user offer to send some files,
+//! and the other user respond with the files it wants to receive.
+//!
+//! On it's own, this crate doesn't do anything other than define a shared protocol, and functions to
+//! send and receive messages of this protocol.
+//!
+//! # Process
+//!
+//! Using this protocol goes something like this:
+//!
+//! 1. Peer A sends [`FileOfferMsg`] to Peer B, containing a [`Vec`] of metadata about
+//!     files it offers to send.
+//!
+//! 2. Peer B sends [`FileResponseMsg`] to Peer A, containing a [`Vec`] of [`Option<u64>`] indicating
+//!     how much of each file to send.
+//!
 #![forbid(unsafe_code)]
 #![warn(clippy::all)]
 
@@ -12,7 +27,7 @@ use std::{
 };
 use thiserror::Error;
 
-/// Information about an offered file
+/// Information about an offered file.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct FileMeta {
     /// The file path offered
@@ -28,11 +43,11 @@ impl FileMeta {
         Ok(std::env::current_dir()?.join(&self.short_path))
     }
 
-    /// Return version of [`Self::get_save_path()`]
+    /// Returns a version of [`Self::get_save_path()`]
     /// that doesn't exist in the filesystem yet.
     ///
     /// If [`Self::get_save_path()`] already exists, suffixes its file stem with
-    /// `(1)`, `(2)`, ..., `(99)` until a free path is found. If all of
+    /// ` (1)`, ` (2)`, ..., ` (99)` until a free path is found. If all of
     /// these are occupied, returns [`Error::FilenameOccupied`].
     pub fn get_unused_save_path(&self) -> Result<PathBuf, Error> {
         let plain_path = self.get_save_path()?;
@@ -108,6 +123,7 @@ fn add_suffix_to_file_stem(path: &mut PathBuf, suffix: &OsStr) -> std::io::Resul
 }
 
 impl From<FileMetaLocal> for FileMeta {
+    /// Converts a [`FileMetaLocal`] into a [`FileMeta`].
     fn from(other: FileMetaLocal) -> Self {
         Self {
             short_path: other.short_path,
@@ -116,7 +132,7 @@ impl From<FileMetaLocal> for FileMeta {
     }
 }
 
-/// Information about a local file
+/// Information about a locally stored file
 #[derive(Debug, Clone)]
 pub struct FileMetaLocal {
     /// The path that will be offered to the peer
@@ -143,21 +159,17 @@ impl std::hash::Hash for FileMetaLocal {
     }
 }
 
-/// At the start of peer to peer communication,
-/// the creator peer sends this message.
-///
-/// Optinonally, they can offer to transmit files
-/// by sending some Vec of their metadatas. In that case,
-/// the other peer will reply with [`FileResponseMsg`].
+/// A list of file metadatas that this peer is offering
+/// to send. The other peer should reply with [`FileResponseMsg`].
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct FileOfferMsg {
     pub files: Vec<FileMeta>,
 }
 
-/// This message responds to [`FileOfferMsg`].
+/// The receiving peer should reply with this message to [`FileOfferMsg`].
 ///
 /// Specifies which of the offered files the other peer
-/// should transmit.
+/// should send.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct FileResponseMsg {
     /// The accepted files. `Some(start_byte)` element accepts the offered
@@ -166,7 +178,8 @@ pub struct FileResponseMsg {
     pub accepted: Vec<Option<u64>>,
 }
 
-/// TODO
+/// Write `msg` to `writer` using [`postcard`].
+/// Prefixes the message with 4 big-endian bytes that hold its length.
 pub fn serialize_into(msg: impl Serialize, writer: &mut impl Write) -> Result<(), Error> {
     // leave space for the message length
     let buf = vec![0_u8; 4];
@@ -184,7 +197,11 @@ pub fn serialize_into(msg: impl Serialize, writer: &mut impl Write) -> Result<()
     Ok(())
 }
 
-/// TODO
+/// Read `msg` from `reader` using [`postcard`].
+/// Assumes the message is prefixed with a byte that holds its length.
+///
+/// `buf` is a [`Vec<u8>`] that will be used as a buffer during deserialization.
+/// It will be resized to match the length of the message.
 pub fn deserialize_from<'a, T: Deserialize<'a>>(
     reader: &mut impl Read,
     buf: &'a mut Vec<u8>,

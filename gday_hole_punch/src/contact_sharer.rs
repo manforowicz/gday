@@ -3,7 +3,7 @@ use gday_contact_exchange_protocol::{
     deserialize_from, serialize_into, ClientMsg, FullContact, ServerMsg, MAX_MSG_SIZE,
 };
 
-/// Used to exchange contact information with a peer via the `gday_server`.
+/// Used to exchange socket addresses with a peer via a Gday server.
 pub struct ContactSharer {
     room_code: u64,
     is_creator: bool,
@@ -11,14 +11,15 @@ pub struct ContactSharer {
 }
 
 impl ContactSharer {
-    /// Creates a new room in the `gday_server` that the given streams connect to.
-    /// Sends contact information to the server.
+    /// Creates a new room with `room_code` in the Gday server
+    /// that `server_connection` connects to.
     ///
-    /// Returns (
+    /// Sends local socket addresses to the server
+    ///
+    /// Returns
     /// - The [`ContactSharer`]
     /// - The [`FullContact`] of this endpoint, as
     ///   determined by the server
-    /// )
     pub fn create_room(
         room_code: u64,
         mut server_connection: ServerConnection,
@@ -47,16 +48,15 @@ impl ContactSharer {
         Ok((this, contact))
     }
 
-    /// Joins a room in the `gday_server` that the given streams connect to.
-    /// `room_id` should be the code provided by the other peer who called `create_room`.
-    /// Sends contact information to the server.
+    /// Joins a room with `room_code` in the Gday server
+    /// that `server_connection` connects to.
     ///
-    /// Returns (
-    /// - The `ContactSharer`
-    /// - The [`FullContact`] that the server returned.
-    ///     Contains this user's public and private socket addresses.
+    /// Sends local socket addresses to the server
     ///
-    /// )
+    /// Returns
+    /// - The [`ContactSharer`]
+    /// - The [`FullContact`] of this endpoint, as
+    ///   determined by the server
     pub fn join_room(
         room_code: u64,
         server_connection: ServerConnection,
@@ -111,10 +111,9 @@ impl ContactSharer {
         Ok(my_contact)
     }
 
-    /// Waits for the `gday_server` to send the contact information the
-    /// other peer submitted.
-    /// Then returns a [`HolePuncher`] which can be used to try establishing
-    /// an authenticated TCP connection with that peer.
+    /// Blocks until the Gday server sends the contact information the
+    /// other peer submitted. Returns the peer's [`FullContact`], as
+    /// determined by the server
     pub fn get_peer_contact(mut self) -> Result<FullContact, Error> {
         let buf = &mut [0; MAX_MSG_SIZE];
         let stream = &mut self.connection.streams()[0];

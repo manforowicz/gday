@@ -7,7 +7,7 @@ use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 
 const FILE_BUFFER_SIZE: usize = 1_000_000;
 
-/// Wrap a [`TcpStream`] in a [`gday_encryption::EncryptedStream`].
+/// Wrap a [`std::net::TcpStream`] in a [`gday_encryption::EncryptedStream`].
 pub fn encrypt_connection<T: Read + Write>(
     mut io_stream: T,
     shared_key: &[u8; 32],

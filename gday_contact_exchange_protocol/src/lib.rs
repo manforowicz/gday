@@ -6,13 +6,13 @@
 //!
 //! Using this protocol goes something like this:
 //!
-//! 1. `peer A` connects to a server via the internet
+//! 1. Peer A connects to a server via the internet
 //!     and requests a new room with `room_code` using [`ClientMsg::CreateRoom`].
 //!
-//! 2. The server replies to `peer A` with [`ServerMsg::RoomCreated`] or [`ServerMsg::ErrorRoomTaken`]
+//! 2. The server replies to peer A with [`ServerMsg::RoomCreated`] or [`ServerMsg::ErrorRoomTaken`]
 //!     depending on if this `room_code` is in use.
 //!
-//! 3. `peer A` externally tells `peer B` their `room_code` (by phone call, text message, carrier pigeon, etc.).
+//! 3. Peer A externally tells peer B their `room_code` (by phone call, text message, carrier pigeon, etc.).
 //!
 //! 4. Both peers send this `room_code` and optionally their local/private socket addresses to the server
 //!     via [`ClientMsg::SendAddr`] messages. The server determines their public addresses from the internet connections.
@@ -29,7 +29,6 @@
 //! 8. On their own, the peers use this info to connect directly to each other by using
 //!     [hole punching](https://en.wikipedia.org/wiki/Hole_punching_(networking)).
 //!
-//! #
 #![forbid(unsafe_code)]
 #![warn(clippy::all)]
 
@@ -205,8 +204,11 @@ pub fn serialize_into(msg: impl Serialize, writer: &mut impl Write) -> Result<()
     Ok(())
 }
 
-/// Write `msg` to `writer` using [`postcard`].
-/// Prefixes the message with a byte that holds its length.
+/// Read `msg` from `reader` using [`postcard`].
+/// Assumes the message is prefixed with a byte that holds its length.
+///
+/// `buf` is a buffer that's used for desrialization. It's recommended to be
+/// [`MAX_MSG_SIZE`] bytes long.
 pub fn deserialize_from<'a, T: Deserialize<'a>>(
     reader: &mut impl Read,
     buf: &'a mut [u8],
@@ -233,8 +235,11 @@ pub async fn serialize_into_async(
     Ok(())
 }
 
-/// Asynchronously write `msg` to `writer` using [`postcard`].
-/// Prefixes the message with a byte that holds its length.
+/// Asynchronously read `msg` from `reader` using [`postcard`].
+/// Assumes the message is prefixed with a byte that holds its length.
+///
+/// `buf` is a buffer that's used for desrialization. It's recommended to be
+/// [`MAX_MSG_SIZE`] bytes long.
 pub async fn deserialize_from_async<'a, T: Deserialize<'a>>(
     reader: &mut (impl AsyncRead + Unpin),
     buf: &'a mut [u8],
@@ -246,7 +251,7 @@ pub async fn deserialize_from_async<'a, T: Deserialize<'a>>(
     Ok(from_bytes(&buf[0..len])?)
 }
 
-/// Error from [`Messenger`].
+/// Message serialization/deserialization error
 #[derive(Error, Debug)]
 #[non_exhaustive]
 pub enum Error {

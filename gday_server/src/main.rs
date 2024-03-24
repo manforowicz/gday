@@ -1,4 +1,4 @@
-//! Runs a server for the `gday_contact_exchange_protocol`.
+//! Runs a server for the [`gday_contact_exchange_protocol`].
 //! Lets two users exchange their public and (optionally) private socket addresses.
 #![forbid(unsafe_code)]
 #![warn(clippy::all)]
