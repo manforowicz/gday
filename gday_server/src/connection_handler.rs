@@ -3,6 +3,7 @@ use gday_contact_exchange_protocol::{
     deserialize_from_async, serialize_into_async, ClientMsg, ServerMsg,
 };
 use log::{debug, warn};
+use std::fmt::Debug;
 use tokio::net::TcpStream;
 use tokio_rustls::{server::TlsStream, TlsAcceptor};
 
@@ -68,11 +69,8 @@ async fn handle_message(
     // get this connection's ip address
     let origin = tls.get_ref().0.peer_addr()?;
 
-    // make a buffer to deserialize into
-    let buf = &mut [0; gday_contact_exchange_protocol::MAX_MSG_SIZE];
-
     // try to deserialize the message
-    let msg = deserialize_from_async(tls, buf).await?;
+    let msg: ClientMsg = deserialize_from_async(tls).await?;
 
     // handle the message
     match msg {

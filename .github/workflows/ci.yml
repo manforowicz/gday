@@ -11,14 +11,21 @@ jobs:
   build_and_test:
     name: Rust project - latest
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        toolchain:
-          - stable
-          - beta
-          - nightly
     steps:
       - uses: actions/checkout@v3
-      - run: rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }}
-      - run: cargo build --verbose
-      - run: cargo test --verbose
+      - run: rustup update stable && rustup default stable
+
+      - name: Build
+        run: cargo build --verbose
+
+      - name: Run tests
+        run: cargo test --verbose
+
+      - name: Check clippy
+        run: cargo clippy --verbose
+
+      - name: Check documentation 
+        run: cargo doc --no-deps --verbose
+
+      - name: Check format
+        run: cargo fmt --check --verbose

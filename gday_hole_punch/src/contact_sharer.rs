@@ -1,6 +1,6 @@
 use crate::{server_connector::ServerConnection, Error};
 use gday_contact_exchange_protocol::{
-    deserialize_from, serialize_into, ClientMsg, FullContact, ServerMsg, MAX_MSG_SIZE,
+    from_reader, to_writer, ClientMsg, FullContact, ServerMsg,
 };
 
 /// Used to exchange socket addresses with a peer via a Gday server.
@@ -28,10 +28,8 @@ impl ContactSharer {
 
         let messenger = &mut server_connection.streams()[0];
 
-        let buf = &mut [0; MAX_MSG_SIZE];
-
-        serialize_into(ClientMsg::CreateRoom { room_code }, messenger)?;
-        let response = deserialize_from(messenger, buf)?;
+        to_writer(ClientMsg::CreateRoom { room_code }, messenger)?;
+        let response: ServerMsg = from_reader(messenger)?;
 
         if response != ServerMsg::RoomCreated {
             return Err(Error::UnexpectedServerReply(response));
@@ -79,7 +77,6 @@ impl ContactSharer {
     /// returns it's response.
     fn share_contact(&mut self) -> Result<FullContact, Error> {
         let mut streams = self.connection.streams();
-        let buf = &mut [0; MAX_MSG_SIZE];
 
         for stream in &mut streams {
             let private_addr = Some(stream.get_ref().local_addr()?);
@@ -88,8 +85,8 @@ impl ContactSharer {
                 is_creator: self.is_creator,
                 private_addr,
             };
-            serialize_into(msg, stream)?;
-            let reply = deserialize_from(stream, buf)?;
+            to_writer(msg, stream)?;
+            let reply: ServerMsg = from_reader(stream)?;
             if reply != ServerMsg::ReceivedAddr {
                 return Err(Error::UnexpectedServerReply(reply));
             }
@@ -100,9 +97,9 @@ impl ContactSharer {
             is_creator: self.is_creator,
         };
 
-        serialize_into(msg, streams[0])?;
+        to_writer(msg, streams[0])?;
 
-        let reply = deserialize_from(streams[0], buf)?;
+        let reply: ServerMsg = from_reader(streams[0])?;
 
         let ServerMsg::ClientContact(my_contact) = reply else {
             return Err(Error::UnexpectedServerReply(reply));
@@ -115,9 +112,8 @@ impl ContactSharer {
     /// other peer submitted. Returns the peer's [`FullContact`], as
     /// determined by the server
     pub fn get_peer_contact(mut self) -> Result<FullContact, Error> {
-        let buf = &mut [0; MAX_MSG_SIZE];
         let stream = &mut self.connection.streams()[0];
-        let reply = deserialize_from(stream, buf)?;
+        let reply: ServerMsg = from_reader(stream)?;
         let ServerMsg::PeerContact(peer) = reply else {
             return Err(Error::UnexpectedServerReply(reply));
         };

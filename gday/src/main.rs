@@ -10,7 +10,7 @@ mod transfer;
 use base32::PeerCode;
 use clap::{Parser, Subcommand};
 use dialog::confirm_receive;
-use gday_file_offer_protocol::{deserialize_from, FileResponseMsg};
+use gday_file_offer_protocol::{from_reader, FileResponseMsg};
 use gday_hole_punch::{
     server_connector::{self, DEFAULT_SERVERS},
     ContactSharer,
@@ -22,7 +22,7 @@ use std::path::PathBuf;
 
 use crate::transfer::encrypt_connection;
 
-use gday_file_offer_protocol::{serialize_into, FileMeta, FileOfferMsg};
+use gday_file_offer_protocol::{to_writer, FileMeta, FileOfferMsg};
 
 const TMP_DOWNLOAD_PREFIX: &str = "GDAY_PARTIAL_DOWNLOAD_";
 
@@ -144,12 +144,12 @@ fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
                 .collect();
 
             // offer these files to the peer
-            serialize_into(FileOfferMsg { files }, &mut stream)?;
+            to_writer(FileOfferMsg { files }, &mut stream)?;
 
             info!("Waiting for peer to respond to file offer.");
 
             // receive file offer from peer
-            let response: FileResponseMsg = deserialize_from(&mut stream, &mut Vec::new())?;
+            let response: FileResponseMsg = from_reader(&mut stream)?;
 
             info!("Starting file send.");
 
@@ -180,13 +180,13 @@ fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
             info!("Established authenticated encrypted connection with peer.");
 
             // receive file offer from peer
-            let offer: FileOfferMsg = deserialize_from(&mut stream, &mut Vec::new())?;
+            let offer: FileOfferMsg = from_reader(&mut stream)?;
 
             // ask user which files to receive
             let accepted = confirm_receive(&offer.files)?;
 
             // respond to the file offer
-            serialize_into(
+            to_writer(
                 FileResponseMsg {
                     accepted: accepted.clone(),
                 },
@@ -198,8 +198,6 @@ fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
             transfer::receive_files(&mut stream, &offer.files, &accepted)?;
         }
     }
-
-    println!("{}", "Done!".bold().green());
 
     Ok(())
 }

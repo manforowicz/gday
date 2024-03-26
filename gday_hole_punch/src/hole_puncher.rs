@@ -12,6 +12,10 @@ type PeerConnection = (std::net::TcpStream, [u8; 32]);
 
 const RETRY_INTERVAL: Duration = Duration::from_millis(100);
 
+// TODO: ADD BETTER ERROR REPORTING.
+// add a timeout.
+// if fails, specify if it failed on connecting to peer, or verifying peer.
+
 /// Tries to establish a TCP connection with the other peer by using
 /// [TCP hole punching](https://en.wikipedia.org/wiki/TCP_hole_punching).
 ///
@@ -183,7 +187,7 @@ fn get_local_socket(local_addr: SocketAddr) -> std::io::Result<TcpSocket> {
 
     let keepalive = TcpKeepalive::new()
         .with_time(Duration::from_secs(5))
-        .with_interval(Duration::from_secs(2))
+        .with_interval(Duration::from_secs(1))
         .with_retries(5);
     let _ = sock.set_tcp_keepalive(&keepalive);
 

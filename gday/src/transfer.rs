@@ -90,9 +90,9 @@ pub fn receive_files(
     let size: u64 = offered
         .iter()
         .zip(accepted)
-        .map(|(f, a)| {
-            if let Some(start) = a {
-                f.len - start
+        .map(|(offer, response)| {
+            if let Some(start) = response {
+                offer.len - start
             } else {
                 0
             }
@@ -166,9 +166,9 @@ pub fn receive_files(
             let save_path = meta.get_save_path()?;
             std::fs::rename(tmp_path, save_path)?;
         }
-
-        progress.finish_with_message("Done downloading!");
     }
+
+    progress.finish_with_message("Done downloading!");
 
     Ok(())
 }

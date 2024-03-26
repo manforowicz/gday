@@ -1,9 +1,9 @@
 [package]
 name = "gday"
 version = "0.1.0"
-edition = "2021"
 authors = ["Marcin Anforowicz"]
-description = "Command line tool to easily send files directly and securely to peers, without port forwarding or relays."
+edition = "2021"
+description = "Command line tool to send files easily, securely, and directly, without a relay or port forwarding."
 license = "MIT"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

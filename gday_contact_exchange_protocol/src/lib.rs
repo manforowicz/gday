@@ -29,14 +29,12 @@
 //! 8. On their own, the peers use this info to connect directly to each other by using
 //!     [hole punching](https://en.wikipedia.org/wiki/Hole_punching_(networking)).
 //!
-#![doc = include_str!("../README.md")]
 #![forbid(unsafe_code)]
 #![warn(clippy::all)]
 
 mod tests;
 
-use postcard::{from_bytes, to_slice};
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{
     io::{Read, Write},
     net::{SocketAddr, SocketAddrV4, SocketAddrV6},
@@ -173,92 +171,63 @@ impl std::fmt::Display for FullContact {
     }
 }
 
-//////////////////////////////////////////////////////////////////
-
-// Calculations using the [Postcard wire format](https://postcard.jamesmunns.com/wire-format)
-// The max size of an  `Option<SocketAddr>` in Postcard is
-// 5 (option) + 5 (SocketAddr) + 5 (octet bytes len) + 16 (octet bytes) + 3 (port) = 29 bytes
-// The max size of a `Contact` in Postcard is
-// 29 + 29 = 58 bytes
-// The max size of a `FullContact` is
-// 58 + 58 = 116 bytes
-// The max size of a `ClientMsg` is
-// 5 + 10 + 1 + 29 = 55 bytes
-// The max size of a `ServerMsg` is
-// 5 + 116 = 121 bytes
-//
-// This means the length of a message can be represented with a single u8.
-
-/// The maximum length of a serialized message.
-/// Constrained by the max value of the message length byte header.
-pub const MAX_MSG_SIZE: usize = u8::MAX as usize;
-
-/// Write `msg` to `writer` using [`postcard`].
-/// Prefixes the message with a byte that holds its length.
-pub fn serialize_into(msg: impl Serialize, writer: &mut impl Write) -> Result<(), Error> {
-    let mut buf = [0_u8; MAX_MSG_SIZE];
-    let len = to_slice(&msg, &mut buf[1..])?.len();
-    let len_byte = u8::try_from(len).expect("Unreachable: Message always shorter than u8::MAX");
-    buf[0] = len_byte;
-    writer.write_all(&buf[0..len + 1])?;
+/// Write `msg` to `writer` using [`serde_json`].
+/// Prefixes the message with 4 big-endian bytes that hold its length.
+pub fn to_writer(msg: impl Serialize, writer: &mut impl Write) -> Result<(), Error> {
+    let vec = serde_json::to_vec(&msg)?;
+    let len_byte = u32::try_from(vec.len())?;
+    writer.write_all(&len_byte.to_be_bytes())?;
+    writer.write_all(&vec)?;
     writer.flush()?;
     Ok(())
 }
 
-/// Read `msg` from `reader` using [`postcard`].
-/// Assumes the message is prefixed with a byte that holds its length.
-///
-/// `buf` is a buffer that's used for desrialization. It's recommended to be
-/// [`MAX_MSG_SIZE`] bytes long.
-pub fn deserialize_from<'a, T: Deserialize<'a>>(
-    reader: &mut impl Read,
-    buf: &'a mut [u8],
-) -> Result<T, Error> {
-    let mut len = [0_u8; 1];
+/// Read `msg` from `reader` using [`serde_json`].
+/// Assumes the message is prefixed with 4 big-endian bytes tha holds its length.
+pub fn from_reader<T: DeserializeOwned>(reader: &mut impl Read) -> Result<T, Error> {
+    let mut len = [0_u8; 4];
     reader.read_exact(&mut len)?;
-    let len = len[0] as usize;
-    reader.read_exact(&mut buf[0..len])?;
-    Ok(from_bytes(&buf[0..len])?)
+    let len = u32::from_be_bytes(len) as usize;
+
+    let mut buf = vec![0; len];
+    reader.read_exact(&mut buf)?;
+    Ok(serde_json::from_reader(&buf[..])?)
 }
 
-/// Asynchronously write `msg` to `writer` using [`postcard`].
+/// Asynchronously write `msg` to `writer` using [`serde_json`].
 /// Prefixes the message with a byte that holds its length.
 pub async fn serialize_into_async(
     msg: impl Serialize,
     writer: &mut (impl AsyncWrite + Unpin),
 ) -> Result<(), Error> {
-    let mut buf = [0_u8; MAX_MSG_SIZE];
-    let len = to_slice(&msg, &mut buf[1..])?.len();
-    let len_byte = u8::try_from(len)?;
-    buf[0] = len_byte;
-    writer.write_all(&buf[0..len + 1]).await?;
+    let vec = serde_json::to_vec(&msg)?;
+    let len_byte = u32::try_from(vec.len())?;
+    writer.write_all(&len_byte.to_be_bytes()).await?;
+    writer.write_all(&vec).await?;
     writer.flush().await?;
     Ok(())
 }
 
-/// Asynchronously read `msg` from `reader` using [`postcard`].
+/// Asynchronously read `msg` from `reader` using [`serde_json`].
 /// Assumes the message is prefixed with a byte that holds its length.
-///
-/// `buf` is a buffer that's used for desrialization. It's recommended to be
-/// [`MAX_MSG_SIZE`] bytes long.
-pub async fn deserialize_from_async<'a, T: Deserialize<'a>>(
+pub async fn deserialize_from_async<T: DeserializeOwned>(
     reader: &mut (impl AsyncRead + Unpin),
-    buf: &'a mut [u8],
 ) -> Result<T, Error> {
-    let mut len = [0_u8; 1];
+    let mut len = [0_u8; 4];
     reader.read_exact(&mut len).await?;
-    let len = len[0] as usize;
-    reader.read_exact(&mut buf[0..len]).await?;
-    Ok(from_bytes(&buf[0..len])?)
+    let len = u32::from_be_bytes(len) as usize;
+
+    let mut buf = vec![0; len];
+    reader.read_exact(&mut buf).await?;
+    Ok(serde_json::from_reader(&buf[..])?)
 }
 
 /// Message serialization/deserialization error
 #[derive(Error, Debug)]
 #[non_exhaustive]
 pub enum Error {
-    /// [`postcard`] error encoding or decoding a message.
-    #[error("Postcard error encoding/decoding message: {0}")]
-    Postcard(#[from] postcard::Error),
+    #[error("JSON error encoding/decoding message: {0}")]
+    JSON(#[from] serde_json::Error),
 
     /// IO Error sending or receiving a message
     #[error("IO Error: {0}")]

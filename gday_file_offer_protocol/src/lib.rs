@@ -18,8 +18,7 @@
 #![warn(clippy::all)]
 
 use os_str_bytes::OsStrBytesExt;
-use postcard::{from_bytes, to_extend};
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{
     ffi::{OsStr, OsString},
     io::{Read, Write},
@@ -178,50 +177,34 @@ pub struct FileResponseMsg {
     pub accepted: Vec<Option<u64>>,
 }
 
-/// Write `msg` to `writer` using [`postcard`].
+/// Write `msg` to `writer` using [`serde_json`].
 /// Prefixes the message with 4 big-endian bytes that hold its length.
-pub fn serialize_into(msg: impl Serialize, writer: &mut impl Write) -> Result<(), Error> {
-    // leave space for the message length
-    let buf = vec![0_u8; 4];
-
-    // write the message to buf
-    let mut buf = to_extend(&msg, buf)?;
-
-    // write the length to the beginning
-    let len = u32::try_from(buf.len() - 4)?;
-    buf[0..4].copy_from_slice(&len.to_be_bytes());
-
-    // write to the writer
-    writer.write_all(&buf)?;
+pub fn to_writer(msg: impl Serialize, writer: &mut impl Write) -> Result<(), Error> {
+    let vec = serde_json::to_vec(&msg)?;
+    let len_byte = u32::try_from(vec.len())?;
+    writer.write_all(&len_byte.to_be_bytes())?;
+    writer.write_all(&vec)?;
     writer.flush()?;
     Ok(())
 }
 
-/// Read `msg` from `reader` using [`postcard`].
-/// Assumes the message is prefixed with a byte that holds its length.
-///
-/// `buf` is a [`Vec<u8>`] that will be used as a buffer during deserialization.
-/// It will be resized to match the length of the message.
-pub fn deserialize_from<'a, T: Deserialize<'a>>(
-    reader: &mut impl Read,
-    buf: &'a mut Vec<u8>,
-) -> Result<T, Error> {
-    // read the length of the message
+/// Read `msg` from `reader` using [`serde_json`].
+/// Assumes the message is prefixed with 4 big-endian bytes that hold its length.
+pub fn from_reader<T: DeserializeOwned>(reader: &mut impl Read) -> Result<T, Error> {
     let mut len = [0_u8; 4];
     reader.read_exact(&mut len)?;
     let len = u32::from_be_bytes(len) as usize;
 
-    // read the message
-    buf.resize(len, 0);
-    reader.read_exact(buf)?;
-    Ok(from_bytes(buf)?)
+    let mut buf = vec![0; len];
+    reader.read_exact(&mut buf)?;
+    Ok(serde_json::from_reader(&buf[..])?)
 }
 
 #[derive(Error, Debug)]
 #[non_exhaustive]
 pub enum Error {
     #[error("Error encoding or decoding message: {0}")]
-    Postcard(#[from] postcard::Error),
+    JSON(#[from] serde_json::Error),
 
     #[error("Error encoding or decoding message: {0}")]
     IO(#[from] std::io::Error),

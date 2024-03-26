@@ -37,12 +37,12 @@ pub struct ServerInfo {
 }
 
 /// A single [`rustls`] TLS TCP stream to a Gday server.
-pub type ServerStream = rustls::StreamOwned<rustls::ClientConnection, TcpStream>;
+pub type TLSStream = rustls::StreamOwned<rustls::ClientConnection, TcpStream>;
 
-/// Can hold both a IPv4 and IPv6 [`ServerStream`] to a Gday server.
+/// Can hold both a IPv4 and IPv6 [`TLSStream`] to a Gday server.
 pub struct ServerConnection {
-    pub v4: Option<ServerStream>,
-    pub v6: Option<ServerStream>,
+    pub v4: Option<TLSStream>,
+    pub v6: Option<TLSStream>,
 }
 
 /// Some private helper functions used by [`ContactSharer`]
@@ -77,7 +77,7 @@ impl ServerConnection {
 
     /// Returns a [`Vec`] of all the [`ServerStream`]s in this connection.
     /// Order is guaranteed to always be the same.
-    pub(super) fn streams(&mut self) -> Vec<&mut ServerStream> {
+    pub(super) fn streams(&mut self) -> Vec<&mut TLSStream> {
         let mut streams = Vec::new();
 
         if let Some(messenger) = &mut self.v6 {
@@ -92,7 +92,7 @@ impl ServerConnection {
 
     /// Enables `SO_REUSEADDR` and `SO_REUSEPORT` so that the port of
     /// this stream can be reused for hole punching.
-    fn configure_stream(stream: &ServerStream) {
+    fn configure_stream(stream: &TLSStream) {
         let sock = SockRef::from(stream.get_ref());
         let _ = sock.set_reuse_address(true);
         let _ = sock.set_reuse_port(true);

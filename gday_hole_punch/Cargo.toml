@@ -1,9 +1,9 @@
 [package]
 name = "gday_hole_punch"
 version = "0.1.0"
-edition = "2021"
 authors = ["Marcin Anforowicz"]
-description = "A simple ChaCha20Poly1305 encryption wrapper around an async IO stream."
+edition = "2021"
+description = "Establish an authenticated peer-to-peer internet connection using TCP hole-punching."
 license = "MIT"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

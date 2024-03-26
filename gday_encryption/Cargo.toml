@@ -1,8 +1,8 @@
 [package]
 name = "gday_encryption"
 version = "0.1.0"
-edition = "2021"
 authors = ["Marcin Anforowicz"]
+edition = "2021"
 description = "A simple ChaCha20Poly1305 encryption wrapper around an IO stream."
 license = "MIT"
 
