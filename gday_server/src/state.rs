@@ -83,7 +83,7 @@ impl State {
             let mut interval = tokio::time::interval(Duration::from_secs(60));
             loop {
                 interval.tick().await;
-                cloned_self.request_counts.lock().unwrap().clear();
+                cloned_self.request_counts.lock().expect("Couldn't acquire state lock.").clear();
             }
         });
 
@@ -97,7 +97,7 @@ impl State {
     pub fn create_room(&mut self, room_code: u64, origin: IpAddr) -> Result<u64, Error> {
         self.increment_request_count(origin)?;
 
-        let mut rooms = self.rooms.lock().unwrap();
+        let mut rooms = self.rooms.lock().expect("Couldn't acquire state lock.");
 
         // return error if this room code has been taken
         if rooms.contains_key(&room_code) {
@@ -110,7 +110,7 @@ impl State {
         let cloned_self = self.clone();
         tokio::spawn(async move {
             tokio::time::sleep(timeout).await;
-            cloned_self.rooms.lock().unwrap().remove(&room_code);
+            cloned_self.rooms.lock().expect("Couldn't acquire state lock.").remove(&room_code);
         });
 
         Ok(room_code)
@@ -131,7 +131,7 @@ impl State {
     ) -> Result<(), Error> {
         self.increment_request_count(origin)?;
 
-        let mut rooms = self.rooms.lock().unwrap();
+        let mut rooms = self.rooms.lock().expect("Couldn't acquire state lock.");
         let room = rooms.get_mut(&room_code).ok_or(Error::NoSuchRoomCode)?;
         let full_contact = &mut room.get_client_mut(is_creator).contact;
 
@@ -167,7 +167,7 @@ impl State {
     ) -> Result<(FullContact, oneshot::Receiver<FullContact>), Error> {
         self.increment_request_count(origin)?;
 
-        let mut rooms = self.rooms.lock().unwrap();
+        let mut rooms = self.rooms.lock().expect("Couldn't acquire state lock.");
         let room = rooms.get_mut(&room_code).ok_or(Error::NoSuchRoomCode)?;
 
         let (tx, rx) = oneshot::channel();
@@ -202,7 +202,7 @@ impl State {
     /// Returns a [`Error::TooManyRequests`] if [`State::max_requests_per_minute`]
     /// is exceeded.
     fn increment_request_count(&mut self, ip: IpAddr) -> Result<(), Error> {
-        let mut request_counts = self.request_counts.lock().unwrap();
+        let mut request_counts = self.request_counts.lock().expect("Couldn't acquire state lock.");
         let conns_count = request_counts.entry(ip).or_insert(0);
 
         if *conns_count > *self.max_requests_per_minute {

@@ -28,7 +28,7 @@ const RETRY_INTERVAL: Duration = Duration::from_millis(100);
 /// Returns:
 /// - A [`std::net::TcpStream`] to the other peer.
 /// - A `[u8; 32]` shared key that was derived using
-/// [SPAKE2](https://docs.rs/spake2/latest/spake2/) and the weaker `shared_secret`.
+///     [SPAKE2](https://docs.rs/spake2/latest/spake2/) and the weaker `shared_secret`.
 pub fn try_connect_to_peer(
     local_contact: Contact,
     peer_contact: FullContact,

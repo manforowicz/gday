@@ -1,7 +1,5 @@
 use crate::{server_connector::ServerConnection, Error};
-use gday_contact_exchange_protocol::{
-    from_reader, to_writer, ClientMsg, FullContact, ServerMsg,
-};
+use gday_contact_exchange_protocol::{from_reader, to_writer, ClientMsg, FullContact, ServerMsg};
 
 /// Used to exchange socket addresses with a peer via a Gday server.
 pub struct ContactSharer {

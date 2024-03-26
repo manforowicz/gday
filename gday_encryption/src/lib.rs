@@ -143,7 +143,9 @@ impl<T: Write> EncryptedStream<T> {
                 .encrypt_next_in_place(&[], &mut msg)
                 .map_err(|_| std::io::Error::new(ErrorKind::InvalidData, "Encryption error"))?;
 
-            let len = u16::try_from(msg.len()).unwrap().to_be_bytes();
+            let len = u16::try_from(msg.len())
+                .expect("unreachable: Length of message buffer should always fit in u16")
+                .to_be_bytes();
 
             // write length to header
             self.to_send[0..2].copy_from_slice(&len);
@@ -160,7 +162,9 @@ impl<T: Write> EncryptedStream<T> {
         self.is_flushing = false;
 
         // make space for new header
-        self.to_send.extend_from_slice(&[0, 0]).unwrap();
+        self.to_send
+            .extend_from_slice(&[0, 0])
+            .expect("unreachable: to_send must have space for the header.");
         Ok(())
     }
 }
@@ -209,7 +213,9 @@ impl<T: Write> Write for EncryptedStream<T> {
         }
 
         let bytes_taken = std::cmp::min(buf.len(), self.to_send.spare_capacity().len() - TAG_SIZE);
-        self.to_send.extend_from_slice(&buf[..bytes_taken]).unwrap();
+        self.to_send.extend_from_slice(&buf[..bytes_taken]).expect(
+            "unreachable: bytes_taken is less than or equal to to_send.spare_capacity().len()",
+        );
 
         if self.to_send.spare_capacity().len() == TAG_SIZE {
             self.flush_write_buf()?;

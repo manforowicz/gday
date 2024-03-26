@@ -178,7 +178,7 @@ fn create_progress_bar(bytes: u64) -> ProgressBar {
     let style = ProgressStyle::with_template(
         "{msg} [{wide_bar}] {bytes}/{total_bytes} | {bytes_per_sec} | eta: {eta}",
     )
-    .unwrap();
+    .expect("Progress bar style string was invalid.");
     let draw = ProgressDrawTarget::stderr_with_hz(2);
     ProgressBar::with_draw_target(Some(bytes), draw)
         .with_style(style)

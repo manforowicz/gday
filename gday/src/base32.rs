@@ -139,7 +139,7 @@ fn encode(mut num: u64) -> String {
         s.push(b'0');
     }
 
-    String::from_utf8(s).unwrap()
+    String::from_utf8(s).expect("Base 32 string is invalid. This shouldn't ever happen.")
 }
 
 #[derive(Error, Debug)]
