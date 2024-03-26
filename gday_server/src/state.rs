@@ -83,7 +83,11 @@ impl State {
             let mut interval = tokio::time::interval(Duration::from_secs(60));
             loop {
                 interval.tick().await;
-                cloned_self.request_counts.lock().expect("Couldn't acquire state lock.").clear();
+                cloned_self
+                    .request_counts
+                    .lock()
+                    .expect("Couldn't acquire state lock.")
+                    .clear();
             }
         });
 
@@ -110,7 +114,11 @@ impl State {
         let cloned_self = self.clone();
         tokio::spawn(async move {
             tokio::time::sleep(timeout).await;
-            cloned_self.rooms.lock().expect("Couldn't acquire state lock.").remove(&room_code);
+            cloned_self
+                .rooms
+                .lock()
+                .expect("Couldn't acquire state lock.")
+                .remove(&room_code);
         });
 
         Ok(room_code)
@@ -202,7 +210,10 @@ impl State {
     /// Returns a [`Error::TooManyRequests`] if [`State::max_requests_per_minute`]
     /// is exceeded.
     fn increment_request_count(&mut self, ip: IpAddr) -> Result<(), Error> {
-        let mut request_counts = self.request_counts.lock().expect("Couldn't acquire state lock.");
+        let mut request_counts = self
+            .request_counts
+            .lock()
+            .expect("Couldn't acquire state lock.");
         let conns_count = request_counts.entry(ip).or_insert(0);
 
         if *conns_count > *self.max_requests_per_minute {
