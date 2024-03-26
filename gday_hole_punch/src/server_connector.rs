@@ -80,10 +80,10 @@ impl ServerConnection {
     pub(super) fn streams(&mut self) -> Vec<&mut TLSStream> {
         let mut streams = Vec::new();
 
-        if let Some(messenger) = &mut self.v6 {
+        if let Some(messenger) = &mut self.v4 {
             streams.push(messenger);
         }
-        if let Some(messenger) = &mut self.v4 {
+        if let Some(messenger) = &mut self.v6 {
             streams.push(messenger);
         }
 

@@ -62,7 +62,8 @@ pub fn try_connect_to_peer(
     }
 
     let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
+        .enable_io()
+        .enable_time()
         .build()?;
 
     Ok(runtime.block_on(futures::future::select_ok(futs))?.0)
