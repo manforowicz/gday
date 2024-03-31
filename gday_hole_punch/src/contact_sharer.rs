@@ -2,13 +2,13 @@ use crate::{server_connector::ServerConnection, Error};
 use gday_contact_exchange_protocol::{from_reader, to_writer, ClientMsg, FullContact, ServerMsg};
 
 /// Used to exchange socket addresses with a peer via a Gday server.
-pub struct ContactSharer {
+pub struct ContactSharer<'a> {
     room_code: u64,
     is_creator: bool,
-    connection: ServerConnection,
+    connection: &'a mut ServerConnection,
 }
 
-impl ContactSharer {
+impl<'a> ContactSharer<'a> {
     /// Creates a new room with `room_code` in the Gday server
     /// that `server_connection` connects to.
     ///
@@ -20,7 +20,7 @@ impl ContactSharer {
     ///   determined by the server
     pub fn create_room(
         room_code: u64,
-        mut server_connection: ServerConnection,
+        server_connection: &'a mut ServerConnection,
     ) -> Result<(Self, FullContact), Error> {
         server_connection.configure()?;
 
@@ -55,7 +55,7 @@ impl ContactSharer {
     ///   determined by the server
     pub fn join_room(
         room_code: u64,
-        server_connection: ServerConnection,
+        server_connection: &'a mut ServerConnection,
     ) -> Result<(Self, FullContact), Error> {
         server_connection.configure()?;
 
@@ -109,7 +109,7 @@ impl ContactSharer {
     /// Blocks until the Gday server sends the contact information the
     /// other peer submitted. Returns the peer's [`FullContact`], as
     /// determined by the server
-    pub fn get_peer_contact(mut self) -> Result<FullContact, Error> {
+    pub fn get_peer_contact(self) -> Result<FullContact, Error> {
         let stream = &mut self.connection.streams()[0];
         let reply: ServerMsg = from_reader(stream)?;
         let ServerMsg::PeerContact(peer) = reply else {

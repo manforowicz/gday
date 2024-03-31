@@ -13,6 +13,8 @@ type PeerConnection = (std::net::TcpStream, [u8; 32]);
 
 const RETRY_INTERVAL: Duration = Duration::from_millis(100);
 
+
+
 // TODO: ADD BETTER ERROR REPORTING.
 // add a timeout.
 // if fails, specify if it failed on connecting to peer, or verifying peer.

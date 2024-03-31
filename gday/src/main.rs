@@ -82,7 +82,7 @@ fn main() {
 fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
     // use custom server if the user provided one,
     // otherwise pick a random default server
-    let (server_connection, server_id) = if let Some(domain_name) = args.server {
+    let (mut server_connection, server_id) = if let Some(domain_name) = args.server {
         (server_connector::connect_to_domain_name(&domain_name)?, 0)
     } else {
         server_connector::connect_to_random_server(DEFAULT_SERVERS)?
@@ -114,7 +114,7 @@ fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
 
             // create a room in the server
             let (contact_sharer, my_contact) =
-                ContactSharer::create_room(room_code, server_connection)?;
+                ContactSharer::create_room(room_code, &mut server_connection)?;
 
             info!("Your contact is:\n{my_contact}");
 
@@ -149,21 +149,26 @@ fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
             // offer these files to the peer
             to_writer(FileOfferMsg { files }, &mut stream)?;
 
-            info!("Waiting for peer to respond to file offer.");
+            println!("Waiting for your mate to respond to your file offer.");
 
             // receive file offer from peer
             let response: FileResponseMsg = from_reader(&mut stream)?;
 
-            info!("Starting file send.");
-
-            transfer::send_files(&mut stream, &local_files, &response.accepted)?;
+            if response.accepted.iter().all(|x| x.is_none()) {
+                println!("Your mate rejected all your offered files.");
+            } else {
+                if !response.accepted.iter().filter_map(|x| *x).all(|x| x == 0) {
+                    println!("Resuming transfer of interrupted file(s).");
+                }
+                transfer::send_files(&mut stream, &local_files, &response.accepted)?;
+            }
         }
 
         // receiving files
         Command::Receive { code } => {
             let code = PeerCode::from_str(&code)?;
             let (contact_sharer, my_contact) =
-                ContactSharer::join_room(code.room_code, server_connection)?;
+                ContactSharer::join_room(code.room_code, &mut server_connection)?;
 
             info!("Your contact is:\n{my_contact}");
 
@@ -197,9 +202,11 @@ fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
                 &mut stream,
             )?;
 
-            info!("Starting file download.");
-
-            transfer::receive_files(&mut stream, &offer.files, &accepted)?;
+            if accepted.iter().all(|x| x.is_none()) {
+                println!("No files will be downloaded.");
+            } else {
+                transfer::receive_files(&mut stream, &offer.files, &accepted)?;
+            }
         }
     }
 

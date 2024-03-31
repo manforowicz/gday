@@ -3,7 +3,7 @@ use gday_encryption::EncryptedStream;
 use gday_file_offer_protocol::{FileMeta, FileMetaLocal};
 use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
 use std::fs::{File, OpenOptions};
-use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
+use std::io::{BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 
 const FILE_BUFFER_SIZE: usize = 1_000_000;
 
@@ -51,6 +51,9 @@ pub fn send_files(
     // create a progress bar object
     let progress = create_progress_bar(size);
 
+    // wrap the writer in progress bar
+    let mut writer = progress.wrap_write(writer);
+
     // iterate over all the files
     for (meta, &accepted) in offered.iter().zip(accepted) {
         if let Some(start) = accepted {
@@ -64,16 +67,9 @@ pub fn send_files(
             // TODO: maybe check if file length is correct?
 
             file.seek(SeekFrom::Start(start))?;
-            let mut writer = ProgressWrite {
-                writer,
-                progress: &progress,
-            };
             std::io::copy(&mut file, &mut writer)?;
         }
     }
-
-    // flush the writer
-    writer.flush()?;
 
     progress.finish_with_message("Done sending!");
 
@@ -82,7 +78,7 @@ pub fn send_files(
 
 /// Sequentially save the given `files` from this `reader`.
 pub fn receive_files(
-    reader: &mut impl Read,
+    reader: &mut impl BufRead,
     offered: &[FileMeta],
     accepted: &[Option<u64>],
 ) -> Result<(), gday_file_offer_protocol::Error> {
@@ -125,11 +121,8 @@ pub fn receive_files(
             // only take the length of the file from the reader
             let mut reader = reader.take(meta.len);
 
-            // wrap the file to track write progress
-            let mut writer = ProgressWrite {
-                writer: &mut file,
-                progress: &progress,
-            };
+            // wrap the writer in progress bar
+            let mut writer = progress.wrap_write(&mut file);
 
             // copy from the reader into the file
             std::io::copy(&mut reader, &mut writer)?;
@@ -148,16 +141,13 @@ pub fn receive_files(
             // open the partially downloaded file in append mode
             let tmp_path = meta.get_prefixed_save_path(TMP_DOWNLOAD_PREFIX.into())?;
             let file = OpenOptions::new().append(true).open(&tmp_path)?;
-            let mut file = BufWriter::with_capacity(FILE_BUFFER_SIZE, file);
+            let file = BufWriter::with_capacity(FILE_BUFFER_SIZE, file);
 
             // only take the length of the remaining part of the file from the reader
             let mut reader = reader.take(meta.len - start);
 
-            // wrap the file to track write progress
-            let mut writer = ProgressWrite {
-                writer: &mut file,
-                progress: &progress,
-            };
+            // wrap the writer in progress bar
+            let mut writer = progress.wrap_write(file);
 
             // copy from the reader into the file
             std::io::copy(&mut reader, &mut writer)?;
@@ -183,24 +173,4 @@ fn create_progress_bar(bytes: u64) -> ProgressBar {
     ProgressBar::with_draw_target(Some(bytes), draw)
         .with_style(style)
         .with_message("starting...")
-}
-
-/// A thin wrapper around a [`Write`] IO stream and [`ProgressBar`].
-/// Increments the [`ProgressBar`] by the number of bytes written.
-struct ProgressWrite<'a, T: Write> {
-    writer: &'a mut T,
-    progress: &'a ProgressBar,
-}
-
-impl<'a, T: Write> Write for ProgressWrite<'a, T> {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        let bytes_written = self.writer.write(buf)?;
-
-        self.progress.inc(bytes_written as u64);
-        Ok(bytes_written)
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        self.writer.flush()
-    }
 }
