@@ -13,8 +13,6 @@ type PeerConnection = (std::net::TcpStream, [u8; 32]);
 
 const RETRY_INTERVAL: Duration = Duration::from_millis(100);
 
-
-
 // TODO: ADD BETTER ERROR REPORTING.
 // add a timeout.
 // if fails, specify if it failed on connecting to peer, or verifying peer.
@@ -83,7 +81,7 @@ pub fn try_connect_to_peer(
                 Err(err) => errors.push(err),
             }
         }
-        Err(HolePunchErrors {errors})
+        Err(HolePunchErrors { errors })
     })
 }
 
@@ -284,6 +282,6 @@ fn get_local_socket(local_addr: SocketAddr) -> std::io::Result<TcpSocket> {
 
 #[derive(thiserror::Error, Debug)]
 #[error("Hole punching unsuccessful: {:#?}", errors)]
-pub struct HolePunchErrors { 
-    errors: Vec<crate::Error>
+pub struct HolePunchErrors {
+    errors: Vec<crate::Error>,
 }

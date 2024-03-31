@@ -71,6 +71,7 @@ pub fn send_files(
         }
     }
 
+    writer.flush()?;
     progress.finish_with_message("Done sending!");
 
     Ok(())
