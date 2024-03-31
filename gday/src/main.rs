@@ -26,6 +26,8 @@ use gday_file_offer_protocol::{to_writer, FileMeta, FileOfferMsg};
 
 const TMP_DOWNLOAD_PREFIX: &str = "GDAY_PARTIAL_DOWNLOAD_";
 
+const HOLE_PUNCH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+
 /// Send files directly to peers
 #[derive(Parser, Debug)]
 #[command(author, version, about)]
@@ -131,6 +133,7 @@ fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
                 my_contact.private,
                 peer_contact,
                 &shared_secret.to_be_bytes(),
+                HOLE_PUNCH_TIMEOUT,
             )?;
 
             let mut stream = encrypt_connection(stream, &shared_key, true)?;
@@ -173,6 +176,7 @@ fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
                 my_contact.private,
                 peer_contact,
                 &code.shared_secret.to_be_bytes(),
+                HOLE_PUNCH_TIMEOUT,
             )?;
 
             let mut stream = encrypt_connection(stream, &shared_key, false)?;

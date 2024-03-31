@@ -64,4 +64,7 @@ pub enum Error {
 
     #[error("Invalid DNS name: {0}")]
     InvalidDNSName(#[from] rustls::pki_types::InvalidDnsNameError),
+
+    #[error("Couldn't hole-punch peer-to-peer connection in under the timeout.")]
+    HolePunchTimeout,
 }

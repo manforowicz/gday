@@ -10,7 +10,6 @@ license = "MIT"
 
 [dependencies]
 blake3 = "1.5.1"
-futures = "0.3.30"
 gday_contact_exchange_protocol = { version = "0.1.0", path = "../gday_contact_exchange_protocol" }
 log = "0.4.21"
 rand = "0.8.5"

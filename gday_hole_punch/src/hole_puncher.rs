@@ -1,8 +1,9 @@
 use crate::Error;
 use gday_contact_exchange_protocol::{Contact, FullContact};
+use log::{debug, trace};
 use socket2::{SockRef, TcpKeepalive};
 use spake2::{Ed25519Group, Identity, Password, Spake2};
-use std::{future::Future, net::SocketAddr, pin::Pin, time::Duration};
+use std::{net::SocketAddr, time::Duration};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpSocket,
@@ -33,78 +34,159 @@ pub fn try_connect_to_peer(
     local_contact: Contact,
     peer_contact: FullContact,
     shared_secret: &[u8],
-) -> std::io::Result<PeerConnection> {
+    timeout: std::time::Duration,
+) -> Result<PeerConnection, HolePunchErrors> {
+    // time at which to give up hole punching
+    let end_time = tokio::time::Instant::now() + timeout;
+
+    // shorten the variable name for conciseness
     let p = shared_secret;
-    let mut futs: Vec<Pin<Box<dyn Future<Output = std::io::Result<PeerConnection>>>>> =
-        Vec::with_capacity(6);
-
-    if let Some(local) = local_contact.v4 {
-        futs.push(Box::pin(try_accept(local, p)));
-
-        if let Some(peer) = peer_contact.private.v4 {
-            futs.push(Box::pin(try_connect(local, peer, p)));
-        }
-
-        if let Some(peer) = peer_contact.public.v4 {
-            futs.push(Box::pin(try_connect(local, peer, p)));
-        }
-    }
-
-    if let Some(local) = local_contact.v6 {
-        futs.push(Box::pin(try_accept(local, p)));
-
-        if let Some(peer) = peer_contact.private.v6 {
-            futs.push(Box::pin(try_connect(local, peer, p)));
-        }
-        if let Some(peer) = peer_contact.public.v6 {
-            futs.push(Box::pin(try_connect(local, peer, p)));
-        }
-    }
 
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_io()
         .enable_time()
-        .build()?;
+        .build()
+        .expect("Tokio async runtime error.");
 
-    Ok(runtime.block_on(futures::future::select_ok(futs))?.0)
+    // hole punch asynchronously
+    runtime.block_on(async {
+        let mut futs = tokio::task::JoinSet::new();
+        if let Some(local) = local_contact.v4 {
+            futs.spawn(try_accept(local, p.to_vec(), end_time));
+
+            if let Some(peer) = peer_contact.private.v4 {
+                futs.spawn(try_connect(local, peer, p.to_vec(), end_time));
+            }
+
+            if let Some(peer) = peer_contact.public.v4 {
+                futs.spawn(try_connect(local, peer, p.to_vec(), end_time));
+            }
+        }
+
+        if let Some(local) = local_contact.v6 {
+            futs.spawn(try_accept(local, p.to_vec(), end_time));
+
+            if let Some(peer) = peer_contact.private.v6 {
+                futs.spawn(try_connect(local, peer, p.to_vec(), end_time));
+            }
+            if let Some(peer) = peer_contact.public.v6 {
+                futs.spawn(try_connect(local, peer, p.to_vec(), end_time));
+            }
+        }
+        let mut errors = Vec::new();
+        trace!("Starting hole-punching");
+        while let Some(outcome) = futs.join_next().await {
+            match outcome.expect("Async error") {
+                Ok(connection) => return Ok(connection),
+                Err(err) => errors.push(err),
+            }
+        }
+        Err(HolePunchErrors {errors})
+    })
 }
 
-/// Tries to connect to a socket address.
+/// Tries to TCP connect to `peer` from `local`.
+/// Returns the most recent error if not successful by `end_time`.
 async fn try_connect<T: Into<SocketAddr>>(
     local: T,
     peer: T,
-    shared_secret: &[u8],
-) -> std::io::Result<PeerConnection> {
+    shared_secret: Vec<u8>,
+    end_time: tokio::time::Instant,
+) -> Result<PeerConnection, Error> {
     let local = local.into();
     let peer = peer.into();
-    loop {
-        tokio::time::sleep(RETRY_INTERVAL).await;
-        let local_socket = get_local_socket(local)?;
-        let Ok(stream) = local_socket.connect(peer).await else {
-            continue;
-        };
-        if let Ok(connection) = verify_peer(shared_secret, stream).await {
-            return Ok(connection);
+    let mut last_error = Error::HolePunchTimeout;
+    let mut interval = tokio::time::interval(RETRY_INTERVAL);
+
+    trace!("Trying to connect from {local} to {peer}.");
+
+    while tokio::time::Instant::now() < end_time {
+        // try connecting
+        match tokio::time::timeout_at(end_time, try_connect_once(local, peer, &shared_secret)).await
+        {
+            // return successfully connection
+            Ok(Ok(connection)) => return Ok(connection),
+            // update `last_error`
+            Ok(Err(err)) => {
+                debug!("Error when trying to connect from {local} to {peer}: {err}");
+                last_error = err;
+            }
+            // passed `end_time`
+            Err(..) => break,
         }
+
+        // wait some time to avoid flooding the network
+        match tokio::time::timeout_at(end_time, interval.tick()).await {
+            // done waiting
+            Ok(..) => (),
+            // passed `end_time`
+            Err(..) => break,
+        };
     }
+    Err(last_error)
 }
 
-/// Tries to accept a connection from a socket address.
+/// Tries to accept a peer TCP connection on `local`.
+/// Returns the most recent error if not successful by `end_time`.
 async fn try_accept(
     local: impl Into<SocketAddr>,
-    shared_secret: &[u8],
-) -> std::io::Result<PeerConnection> {
-    let local_socket = get_local_socket(local.into())?;
+    shared_secret: Vec<u8>,
+    end_time: tokio::time::Instant,
+) -> Result<PeerConnection, Error> {
+    let local = local.into();
+    trace!("Trying accept peer's connection on {local}.");
+    let local_socket = get_local_socket(local)?;
     let listener = local_socket.listen(1024)?;
-    loop {
-        tokio::time::sleep(RETRY_INTERVAL).await;
-        let Ok((stream, _addr)) = listener.accept().await else {
-            continue;
-        };
-        if let Ok(connection) = verify_peer(shared_secret, stream).await {
-            return Ok(connection);
+    let mut last_error = Error::HolePunchTimeout;
+    let mut interval = tokio::time::interval(RETRY_INTERVAL);
+
+    while tokio::time::Instant::now() < end_time {
+        // try accepting
+        match tokio::time::timeout_at(end_time, try_accept_once(&listener, &shared_secret)).await {
+            // return successful connection
+            Ok(Ok(connection)) => return Ok(connection),
+            // update `last_error`
+            Ok(Err(err)) => {
+                debug!("Error when trying to accept peer's connection on {local}: {err}");
+                last_error = err;
+            }
+            // passed `end_time`
+            Err(..) => break,
         }
+
+        // wait some time to avoid flooding the network
+        match tokio::time::timeout_at(end_time, interval.tick()).await {
+            // done waiting
+            Ok(..) => (),
+            // passed `end_time`
+            Err(..) => break,
+        };
     }
+    Err(last_error)
+}
+
+async fn try_connect_once(
+    local: SocketAddr,
+    peer: SocketAddr,
+    shared_secret: &[u8],
+) -> Result<PeerConnection, Error> {
+    let local_socket = get_local_socket(local)?;
+    let stream = local_socket.connect(peer).await?;
+    debug!("Connected to {peer} from {local}. Will try to authenticate.");
+    verify_peer(shared_secret, stream).await
+}
+
+async fn try_accept_once(
+    listener: &tokio::net::TcpListener,
+    shared_secret: &[u8],
+) -> Result<PeerConnection, Error> {
+    let (stream, addr) = listener.accept().await?;
+    debug!(
+        "Connected from {} to {}. Will try to authenticate.",
+        addr,
+        stream.local_addr()?
+    );
+    verify_peer(shared_secret, stream).await
 }
 
 /// Uses [SPAKE 2](https://docs.rs/spake2/latest/spake2/)
@@ -132,6 +214,8 @@ async fn verify_peer(
         .finish(&inbound_msg)?
         .try_into()
         .expect("Unreachable: Key is always 32 bytes long.");
+
+    debug!("Derived a strong key with the peer. Will now verify we both have the same key.");
 
     //// Mutually verify that we have the same `shared_key` ////
 
@@ -194,4 +278,10 @@ fn get_local_socket(local_addr: SocketAddr) -> std::io::Result<TcpSocket> {
 
     socket.bind(local_addr)?;
     Ok(socket)
+}
+
+#[derive(thiserror::Error, Debug)]
+#[error("Hole punching unsuccessful: {:#?}", errors)]
+pub struct HolePunchErrors { 
+    errors: Vec<crate::Error>
 }

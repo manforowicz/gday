@@ -39,7 +39,6 @@ use std::{
     io::{Read, Write},
     net::{SocketAddr, SocketAddrV4, SocketAddrV6},
 };
-use thiserror::Error;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 /// A message from client to server.
@@ -223,7 +222,7 @@ pub async fn deserialize_from_async<T: DeserializeOwned>(
 }
 
 /// Message serialization/deserialization error
-#[derive(Error, Debug)]
+#[derive(thiserror::Error, Debug)]
 #[non_exhaustive]
 pub enum Error {
     #[error("JSON error encoding/decoding message: {0}")]
