@@ -7,10 +7,12 @@ mod base32;
 mod dialog;
 mod transfer;
 
+use crate::transfer::encrypt_connection;
 use base32::PeerCode;
 use clap::{Parser, Subcommand};
 use dialog::confirm_receive;
 use gday_file_offer_protocol::{from_reader, FileResponseMsg};
+use gday_file_offer_protocol::{to_writer, FileMeta, FileOfferMsg};
 use gday_hole_punch::{
     server_connector::{self, DEFAULT_SERVERS},
     ContactSharer,
@@ -20,12 +22,7 @@ use owo_colors::OwoColorize;
 use rand::Rng;
 use std::path::PathBuf;
 
-use crate::transfer::encrypt_connection;
-
-use gday_file_offer_protocol::{to_writer, FileMeta, FileOfferMsg};
-
 const TMP_DOWNLOAD_PREFIX: &str = "GDAY_PARTIAL_DOWNLOAD_";
-
 const HOLE_PUNCH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
 /// Send files directly to peers

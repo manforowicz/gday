@@ -27,4 +27,6 @@ the peer's device is acting as some sort of server.
 
 - Add checks in the file transfer to avoid TOCTOU bugs.
 
-- Change the progress bar to use indicatif's built-in wrap write.
+- Add some sort of end-to-end integration tests.
+
+- Allow sending a simple text string instead of only files.
