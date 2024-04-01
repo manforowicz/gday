@@ -2,7 +2,7 @@
 ![Crates.io Version](https://img.shields.io/crates/v/gday_encryption) ![docs.rs](https://img.shields.io/docsrs/gday_encryption)
 
 Want to send files easily, securely, and directly, without a relay or port forwarding?
-Then go to the [gday page](gday/README.md).
+Then go to the [gday page](/gday/README.md).
 
 WARNING! This library has not been officially audited for security.
 

@@ -68,8 +68,8 @@ pub fn confirm_receive(files: &[FileMeta]) -> std::io::Result<Vec<Option<u64>>> 
         HumanBytes(new_size).bold()
     );
     println!("{}", "Options:".bold());
-    println!("1. Download all files.");
-    println!("2. Download only files with new path or size. Resume any interrupted downloads.");
+    println!("1. Download only files with new path or size. Resume any interrupted downloads.");
+    println!("2. Fully download all files.");
     println!("3. Cancel.");
     println!("Note: Gday will create new files, instead of overwriting existing files.");
     print!("{} ", "Choose an option (1, 2, or 3):".bold());
@@ -79,10 +79,10 @@ pub fn confirm_receive(files: &[FileMeta]) -> std::io::Result<Vec<Option<u64>>> 
     let mut response = String::new();
     std::io::stdin().read_line(&mut response)?;
     match response.trim() {
-        // all files
-        "1" => Ok(vec![Some(0); files.len()]),
         // new files
-        "2" => Ok(new_files),
+        "1" => Ok(new_files),
+        // all files
+        "2" => Ok(vec![Some(0); files.len()]),
         // cancel
         _ => Ok(vec![None; files.len()]),
     }
@@ -96,7 +96,7 @@ pub fn confirm_send(paths: &[PathBuf]) -> std::io::Result<Vec<FileMetaLocal>> {
     let files = get_paths_metadatas(paths)?;
 
     // print all the file names and sizes
-    println!("{} {}", files.len().bold(), "files:".bold());
+    println!("{} {}", files.len().bold(), "files to send:".bold());
     for file in &files {
         println!("{} ({})", file.short_path.display(), HumanBytes(file.len));
     }
@@ -109,18 +109,7 @@ pub fn confirm_send(paths: &[PathBuf]) -> std::io::Result<Vec<FileMetaLocal>> {
         HumanBytes(total_size).bold()
     );
 
-    // ask the user whether they'd like to send these files
-    print!("{}", "Would you like to send these files? (y/n): ".bold());
-    std::io::stdout().flush()?;
-    let mut response = String::new();
-    std::io::stdin().read_line(&mut response)?;
-
-    if "yes".starts_with(&response.trim().to_lowercase()) {
-        Ok(files)
-    } else {
-        println!("User cancelled file send.");
-        std::process::exit(0);
-    }
+    Ok(files)
 }
 
 /// Checks if there already exists a file with the same save path

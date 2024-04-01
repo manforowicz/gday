@@ -8,7 +8,7 @@ license = "MIT"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-clap = { version = "4.5.3", features = ["derive"] }
+clap = { version = "4.5.4", features = ["derive"] }
 env_logger = "0.11.3"
 gday_encryption = { version = "0.1.0", path = "../gday_encryption" }
 gday_file_offer_protocol = { version = "0.1.0", path = "../gday_file_offer_protocol" }

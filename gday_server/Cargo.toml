@@ -9,14 +9,12 @@ license = "MIT"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-clap = { version = "4.5.3", features = ["derive"] }
+clap = { version = "4.5.4", features = ["derive"] }
 socket2 = "0.5.6"
-tokio = { version = "1.36.0", features = ["rt-multi-thread", "macros", "net", "time", "sync"] }
+tokio = { version = "1.37.0", features = ["rt-multi-thread", "macros", "net", "time", "sync"] }
 tokio-rustls = "0.26.0"
 gday_contact_exchange_protocol = { path = "../gday_contact_exchange_protocol" }
 thiserror = "1.0.58"
 log = "0.4.21"
 env_logger = "0.11.3"
 rustls-pemfile = "2.1.1"
-ciborium = "0.2.2"
-serde = "1.0.197"

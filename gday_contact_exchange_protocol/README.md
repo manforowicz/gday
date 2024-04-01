@@ -2,7 +2,7 @@
 ![Crates.io Version](https://img.shields.io/crates/v/gday_contact_exchange_protocol) ![docs.rs](https://img.shields.io/docsrs/gday_contact_exchange_protocol)
 
 Want to send files easily, securely, and directly, without a relay or port forwarding?
-Then go to the [gday page](gday/README.md).
+Then go to the [gday page](/gday/README.md).
 
 This library defines a protocol that lets two users exchange
 their public and/or private socket addresses via a server.

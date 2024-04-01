@@ -1,4 +1,4 @@
-# `gday`
+# Gday Project
 
 **WORK IN PROGRESS - THIS PROJECT IS NOT READY YET**
 
@@ -6,6 +6,10 @@ Want to send files easily, securely, and directly, without a relay or port forwa
 Then go to the [gday page](gday/README.md).
 
 ## Similar Projects
+
+I heavily took inspiration from these projects.
+I'm very grateful to their creators and contributors.
+We stand on the shoulders of giants.
 
 <table>
     <tr>
