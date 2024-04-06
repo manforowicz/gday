@@ -112,7 +112,7 @@ impl<T: Write> Write for EncryptedStream<T> {
 }
 
 impl<T: Read> EncryptedStream<T> {
-    /// Reads and decrypts at least 1 new chunks into `self.decrypted`.
+    /// Reads and decrypts at least 1 new chunk into `self.decrypted`.
     /// - Must only be called when `self.decrypted` is empty,
     ///     so that it has space to decrypt into.
     fn inner_read(&mut self) -> std::io::Result<()> {

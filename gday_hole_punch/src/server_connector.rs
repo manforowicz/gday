@@ -13,15 +13,20 @@ use std::{
     time::Duration,
 };
 
-/// The default list of public Gday servers.
+/// The default list of default public Gday servers.
+/// - Submit an issue on Gday's GitHub if you'd like to add your own.
+/// - All of these only serve encrypted TLS and listen on port 2311.
 pub const DEFAULT_SERVERS: &[ServerInfo] = &[ServerInfo {
     domain_name: "gday.manforowicz.com",
     id: 1,
     prefer: true,
 }];
 
-/// The port that public Gday servers listen on.
-pub const DEFAULT_PORT: u16 = 234;
+/// The port that unencrypted TCP Gday servers listen on.
+pub const DEFAULT_TCP_PORT: u16 = 2310;
+
+/// The port that encrypted TLS Gday servers listen on.
+pub const DEFAULT_TLS_PORT: u16 = 2311;
 
 /// Information about a single Gday server.
 pub struct ServerInfo {
@@ -29,15 +34,15 @@ pub struct ServerInfo {
     pub domain_name: &'static str,
     /// The ID of the server. Helpful when telling the other peer which
     /// server to connect to.
+    ///
     /// Should NOT be zero, since peers can use that value to represent
     /// a custom server.
     pub id: u64,
-    /// Only servers with `prefer` are considered when connecting to a
-    /// random server. All servers are available when connecting to a
-    /// specific server.
+    /// Only servers with `prefer` are considered when choosing a random
+    /// server to connect to.
     ///
     /// New servers shouldn't be preferred, to ensure compatibility with
-    /// peers that don't know about them.
+    /// peers that don't yet know about them.
     pub prefer: bool,
 }
 
@@ -149,22 +154,23 @@ impl ServerConnection {
     }
 }
 
-/// Sequentially try connecting to the given servers, returning the first successful connection.
+/// In random order, sequentially try connecting to the given `servers`.
+/// (connects to port [`DEFAULT_TLS_PORT`] (2311) via TLS)
 ///
-/// Returns (
-/// - The [`ServerConnection`] to the server.
+/// Returns
+/// - The [`ServerConnection`] of the first successful connection.
 /// - The `id` of the server that [`ServerConnection`] connected to.
-/// )
 ///
-/// Returns an error if connecting fails.
+/// Returns an error if all connection attempts failed.
 pub fn connect_to_random_server(servers: &[ServerInfo]) -> Result<(ServerConnection, u64), Error> {
     let preferred: Vec<&ServerInfo> = servers.iter().filter(|s| s.prefer).collect();
     let preferred_names: Vec<&str> = preferred.iter().map(|s| s.domain_name).collect();
-    let (conn, i) = connect_to_random_address(&preferred_names)?;
+    let (conn, i) = connect_to_random_domain_name(&preferred_names)?;
     Ok((conn, preferred[i].id))
 }
 
 /// Try connecting to the server with this `server_id` and returning a [`ServerConnection`].
+/// (connects to port [`DEFAULT_TLS_PORT`] (2311) via TLS)
 ///
 /// Returns an error if `servers` contains no server with id `server_id` or connecting
 /// to the server fails.
@@ -175,42 +181,52 @@ pub fn connect_to_server_id(
     let Some(server) = servers.iter().find(|server| server.id == server_id) else {
         return Err(Error::ServerIDNotFound(server_id));
     };
-    connect_to_domain_name(server.domain_name, true)
+    connect_to_domain_name(server.domain_name, DEFAULT_TLS_PORT, true)
 }
 
-/// Sequentially try connecting to the given addresses, returning the first successful connection.
+/// In random order, sequentially tries connecting to the given `domain_names`.
+/// (connects to port [`DEFAULT_TLS_PORT`] (2311) via TLS)
 ///
-/// Returns (
-/// - The [`ServerConnection`] to the server.
+/// Returns
+/// - The [`ServerConnection`] of the first successful connection.
 /// - The index of the address in `addresses` that the [`ServerConnection`] connected to.
-/// )
 ///
-/// Returns an error if connecting fails.
-pub fn connect_to_random_address(
+/// Returns an error if all connection attempts failed.
+pub fn connect_to_random_domain_name(
     domain_names: &[&str],
 ) -> Result<(ServerConnection, usize), Error> {
     let mut indices: Vec<usize> = (0..domain_names.len()).collect();
     indices.shuffle(&mut rand::thread_rng());
 
+    let mut recent_error = Error::CouldntConnectToServers;
+
     for i in indices {
         let server = domain_names[i];
-        let streams = match connect_to_domain_name(server, true) {
+        let streams = match connect_to_domain_name(server, DEFAULT_TLS_PORT, true) {
             Ok(streams) => streams,
             Err(err) => {
-                error!("Couldn't connect to \"{}\": {}", server, err);
+                recent_error = err;
+                error!("Couldn't connect to \"{}\": {}", server, recent_error);
                 continue;
             }
         };
         return Ok((streams, i));
     }
-    Err(Error::CouldntConnectToServers)
+    Err(recent_error)
 }
 
-/// Try connecting to this `domain_name` and returning a [`ServerConnection`]
-/// TODO: Add info about `encrypt`
-pub fn connect_to_domain_name(domain_name: &str, encrypt: bool) -> Result<ServerConnection, Error> {
-    let address = format!("{domain_name}:{DEFAULT_PORT}");
-    debug!("Connecting to '{address}`");
+/// Tries connecting to this `domain_name` and `port`, on both IPv4 and IPv6.
+/// - Gives up connecting to each TCP address after 2 seconds.
+/// - Uses TLS if `encrypt` is true, otherwise uses unencrypted TCP.
+/// - Returns a [`ServerConnection`] with all the successful streams.
+/// - Returns an error if couldn't connect to the server at all.
+pub fn connect_to_domain_name(
+    domain_name: &str,
+    port: u16,
+    encrypt: bool,
+) -> Result<ServerConnection, Error> {
+    let address = format!("{domain_name}:{port}");
+    debug!("Connecting to server '{address}`");
     let addrs: Vec<SocketAddr> = address.to_socket_addrs()?.collect();
 
     // try establishing a TCP connection on IPv4

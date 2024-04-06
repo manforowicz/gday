@@ -3,12 +3,11 @@
 #![forbid(unsafe_code)]
 #![warn(clippy::all)]
 
-mod base32;
 mod dialog;
+mod peer_code;
 mod transfer;
 
 use crate::transfer::encrypt_connection;
-use base32::PeerCode;
 use clap::{Parser, Subcommand};
 use dialog::confirm_receive;
 use gday_file_offer_protocol::{from_reader, FileResponseMsg};
@@ -19,6 +18,7 @@ use gday_hole_punch::{
 };
 use log::{error, info};
 use owo_colors::OwoColorize;
+use peer_code::PeerCode;
 use rand::Rng;
 use std::path::PathBuf;
 
@@ -32,21 +32,17 @@ struct Args {
     #[command(subcommand)]
     operation: Command,
 
-    /// Use a custom Gday server with this domain name
+    /// Use a custom gday server with this domain name.
     #[arg(long)]
     server: Option<String>,
 
-    /// Use a custom room code
-    #[arg(long)]
-    room: Option<u64>,
+    /// Use a custom port of the custom server.
+    #[arg(long, requires("server"))]
+    port: Option<u16>,
 
-    /// Use unencrypted TCP instead of TLS. TODO
-    #[arg(long)]
+    /// Use unencrypted TCP instead of TLS to the custom server.
+    #[arg(long, requires("server"))]
     unencrypted: bool,
-
-    /// Use a custom shared secret
-    #[arg(long)]
-    secret: Option<u64>,
 
     /// Verbosity. (trace, debug, info, warn, error)
     #[arg(short, long, default_value = "warn")]
@@ -56,7 +52,17 @@ struct Args {
 #[derive(Subcommand, Debug)]
 enum Command {
     /// Send files
-    Send { paths: Vec<PathBuf> },
+    Send {
+        /// Custom base-16 peer code of form "server_id.room_code.shared_secret".
+        /// 
+        /// server_id must be valid, or 0 when custom --server set.
+        /// 
+        /// Doesn't require a checksum digit.
+        #[arg(long)]
+        code: Option<String>,
+
+        paths: Vec<PathBuf>,
+    },
 
     /// Receive files
     Receive { code: String },
@@ -84,8 +90,15 @@ fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
     // use custom server if the user provided one,
     // otherwise pick a random default server
     let (mut server_connection, server_id) = if let Some(domain_name) = args.server {
+        let port = if let Some(port) = args.port {
+            port
+        } else if args.unencrypted {
+            gday_hole_punch::server_connector::DEFAULT_TCP_PORT
+        } else {
+            gday_hole_punch::server_connector::DEFAULT_TLS_PORT
+        };
         (
-            server_connector::connect_to_domain_name(&domain_name, true)?,
+            server_connector::connect_to_domain_name(&domain_name, port, !args.unencrypted)?,
             0,
         )
     } else {
@@ -94,31 +107,27 @@ fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
 
     match args.operation {
         // sending files
-        Command::Send { paths } => {
+        Command::Send { paths, code } => {
             // confirm the user wants to send these files
             let local_files = dialog::confirm_send(&paths)?;
 
             // generate random `room_code` and `shared_secret`
             // if the user didn't provide custom ones
-            let room_code = if let Some(code) = args.room {
-                code
+            let peer_code = if let Some(code) = code {
+                PeerCode::from_str(&code, false)?
             } else {
-                rand::thread_rng().gen_range(0..u16::MAX as u64)
-            };
-            let shared_secret = if let Some(secret) = args.room {
-                secret
-            } else {
-                rand::thread_rng().gen_range(0..u16::MAX as u64)
-            };
-            let peer_code = PeerCode {
-                server_id,
-                room_code,
-                shared_secret,
+                let room_code = rand::thread_rng().gen_range(0..u16::MAX as u64);
+                let shared_secret = rand::thread_rng().gen_range(0..u16::MAX as u64);
+                PeerCode {
+                    server_id,
+                    room_code,
+                    shared_secret,
+                }
             };
 
             // create a room in the server
             let (contact_sharer, my_contact) =
-                ContactSharer::create_room(room_code, &mut server_connection)?;
+                ContactSharer::create_room(peer_code.room_code, &mut server_connection)?;
 
             info!("Your contact is:\n{my_contact}");
 
@@ -136,7 +145,7 @@ fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
             let (stream, shared_key) = gday_hole_punch::try_connect_to_peer(
                 my_contact.private,
                 peer_contact,
-                &shared_secret.to_be_bytes(),
+                &peer_code.shared_secret.to_be_bytes(),
                 HOLE_PUNCH_TIMEOUT,
             )?;
 
@@ -170,7 +179,7 @@ fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
 
         // receiving files
         Command::Receive { code } => {
-            let code = PeerCode::from_str(&code)?;
+            let code = PeerCode::from_str(&code, true)?;
             let (contact_sharer, my_contact) =
                 ContactSharer::join_room(code.room_code, &mut server_connection)?;
 
