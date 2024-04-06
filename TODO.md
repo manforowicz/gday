@@ -1,19 +1,11 @@
 # To-Do's
-Items to consider implementing. Not all of them are desirable or necessary.
-These are just some quick notes that might not make sense.
-
-- Have the hole puncher actively prefer local sockets over public sockets.
-But I don't think this matters much since
-most NATs don't support hairpin translation, and if they do, I doubt its much slower than a direct connection.
+Quick notes on items to consider implementing.
+Not all of them are desirable or necessary.
 
 - Deduplicate errors in the error vec the hole puncher can return.
 This might give a more helpful error message to the user.
 
-- Give the client and server the option to use plain TCP instead of TLS.
-This might be difficult because various inner functions require a get address function.
-Maybe I can create a trait that allows for such a function call, and implement this trait
-for both raw TCP and TLS? That sounds overly complicated, but maybe it's the only option?
-Or potentially just pass an address parameter everywhere??
+- Give the client the option to select a server to use.
 
 - Restructure the hole puncher to force keeping connection to server open
 during hole-punching. That might please some NATs that lose state when TCP connection is closed.
@@ -29,4 +21,10 @@ the peer's device is acting as some sort of server.
 
 - Add some sort of end-to-end integration tests.
 
+- Maybe add some versioning to the protocols?
+
+## Low-priority ideas
+
 - Allow sending a simple text string instead of only files.
+    Though, I don't think this is a common use case, so will only
+    add if I get requests.

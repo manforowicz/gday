@@ -30,23 +30,27 @@ use tokio_rustls::{
 #[command(author, version, about)]
 struct Args {
     /// PEM-encoded private TLS server key
-    #[arg(short, long)]
-    key: PathBuf,
+    #[arg(short, long, required_unless_present("unencrypted"))]
+    key: Option<PathBuf>,
 
     /// PEM-encoded signed TLS server certificate
-    #[arg(short, long)]
-    certificate: PathBuf,
+    #[arg(short, long, required_unless_present("unencrypted"))]
+    certificate: Option<PathBuf>,
+
+    /// Use unencrypted TCP instead of TLS
+    #[arg(short, long, conflicts_with_all(["key", "certificate"]))]
+    unencrypted: bool,
 
     /// The socket address from which to listen
-    #[arg(short, long, default_value = "[::]:8080")]
+    #[arg(short, long, default_value = "[::]:234")]
     address: String,
 
-    /// Number of seconds before a new room is deleted.
+    /// Number of seconds before a new room is deleted
     #[arg(short, long, default_value = "300")]
     timeout: u64,
 
     /// Max number of requests an IP address can
-    /// send in a minute before they're rejected.
+    /// send in a minute before they're rejected
     #[arg(short, long, default_value = "60")]
     request_limit: u32,
 
@@ -63,9 +67,15 @@ async fn main() {
     // set the log level according to the command line argument
     env_logger::builder().filter_level(args.verbosity).init();
 
-    // get tcp listener and acceptor
+    // get tcp listener
     let tcp_listener = get_tcp_listener(args.address).await;
-    let tls_acceptor = get_tls_acceptor(&args.key, &args.certificate);
+
+    // get the TLS acceptor if applicable
+    let tls_acceptor = if let (Some(k), Some(c)) = (args.key, args.certificate) {
+        Some(get_tls_acceptor(&k, &c))
+    } else {
+        None
+    };
 
     // create the shared global state object
     let state = State::new(args.request_limit, args.timeout);

@@ -40,6 +40,10 @@ struct Args {
     #[arg(long)]
     room: Option<u64>,
 
+    /// Use unencrypted TCP instead of TLS. TODO
+    #[arg(long)]
+    unencrypted: bool,
+
     /// Use a custom shared secret
     #[arg(long)]
     secret: Option<u64>,
@@ -80,7 +84,10 @@ fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
     // use custom server if the user provided one,
     // otherwise pick a random default server
     let (mut server_connection, server_id) = if let Some(domain_name) = args.server {
-        (server_connector::connect_to_domain_name(&domain_name)?, 0)
+        (
+            server_connector::connect_to_domain_name(&domain_name, true)?,
+            0,
+        )
     } else {
         server_connector::connect_to_random_server(DEFAULT_SERVERS)?
     };

@@ -77,7 +77,7 @@ impl<'a> ContactSharer<'a> {
         let mut streams = self.connection.streams();
 
         for stream in &mut streams {
-            let private_addr = Some(stream.get_ref().local_addr()?);
+            let private_addr = Some(stream.local_addr()?);
             let msg = ClientMsg::SendAddr {
                 room_code: self.room_code,
                 is_creator: self.is_creator,

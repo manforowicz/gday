@@ -1,9 +1,11 @@
 //! Functions for connecting to a Gday server.
+//! TODO: Tidy up this file
 
 use crate::Error;
 use log::{debug, error};
 use rand::seq::SliceRandom;
 use socket2::SockRef;
+use std::io::{Read, Write};
 use std::net::SocketAddr::{V4, V6};
 use std::{
     net::{SocketAddr, TcpStream, ToSocketAddrs},
@@ -17,6 +19,9 @@ pub const DEFAULT_SERVERS: &[ServerInfo] = &[ServerInfo {
     id: 1,
     prefer: true,
 }];
+
+/// The port that public Gday servers listen on.
+pub const DEFAULT_PORT: u16 = 234;
 
 /// Information about a single Gday server.
 pub struct ServerInfo {
@@ -36,13 +41,65 @@ pub struct ServerInfo {
     pub prefer: bool,
 }
 
-/// A single [`rustls`] TLS TCP stream to a Gday server.
-pub type TLSStream = rustls::StreamOwned<rustls::ClientConnection, TcpStream>;
+#[allow(clippy::large_enum_variant)]
+pub enum ServerStream {
+    TCP(TcpStream),
+    TLS(rustls::StreamOwned<rustls::ClientConnection, TcpStream>),
+}
 
-/// Can hold both a IPv4 and IPv6 [`TLSStream`] to a Gday server.
+impl Read for ServerStream {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        match self {
+            Self::TCP(stream) => stream.read(buf),
+            Self::TLS(stream) => stream.read(buf),
+        }
+    }
+}
+
+impl Write for ServerStream {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        match self {
+            Self::TCP(stream) => stream.write(buf),
+            Self::TLS(stream) => stream.write(buf),
+        }
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        match self {
+            Self::TCP(stream) => stream.flush(),
+            Self::TLS(stream) => stream.flush(),
+        }
+    }
+}
+
+impl ServerStream {
+    /// Returns the local socket address of this stream
+    pub fn local_addr(&self) -> std::io::Result<SocketAddr> {
+        match self {
+            Self::TCP(stream) => stream.local_addr(),
+            Self::TLS(stream) => stream.get_ref().local_addr(),
+        }
+    }
+
+    /// Enables SO_REUSEADDR and SO_REUSEPORT
+    /// So that this socket can be reused for
+    /// hole-punching.
+    fn enable_reuse(&self) {
+        let stream = match self {
+            Self::TCP(stream) => stream,
+            Self::TLS(stream) => stream.get_ref(),
+        };
+
+        let sock = SockRef::from(stream);
+        let _ = sock.set_reuse_address(true);
+        let _ = sock.set_reuse_port(true);
+    }
+}
+
+/// Can hold both a IPv4 and IPv6 [`ServerStream`] to a Gday server.
 pub struct ServerConnection {
-    pub v4: Option<TLSStream>,
-    pub v6: Option<TLSStream>,
+    pub v4: Option<ServerStream>,
+    pub v6: Option<ServerStream>,
 }
 
 /// Some private helper functions used by [`ContactSharer`]
@@ -58,44 +115,37 @@ impl ServerConnection {
         }
 
         if let Some(stream) = &self.v4 {
-            let addr = stream.get_ref().local_addr()?;
+            let addr = stream.local_addr()?;
             if !matches!(addr, V4(_)) {
                 return Err(Error::ExpectedIPv4);
             };
-            Self::configure_stream(stream);
+            stream.enable_reuse();
         }
 
         if let Some(stream) = &self.v6 {
-            let addr = stream.get_ref().local_addr()?;
+            let addr = stream.local_addr()?;
             if !matches!(addr, V6(_)) {
                 return Err(Error::ExpectedIPv6);
             };
-            Self::configure_stream(stream);
+            stream.enable_reuse();
         }
         Ok(())
     }
 
-    /// Returns a [`Vec`] of all the [`ServerStream`]s in this connection.
-    /// Order is guaranteed to always be the same.
-    pub(super) fn streams(&mut self) -> Vec<&mut TLSStream> {
+    /// Returns a [`Vec`] of all the [`TLSStream`]s in this connection.
+    /// Will return IPV6 followed by IPV4
+    pub(super) fn streams(&mut self) -> Vec<&mut ServerStream> {
         let mut streams = Vec::new();
 
-        if let Some(messenger) = &mut self.v4 {
-            streams.push(messenger);
+        if let Some(stream) = &mut self.v6 {
+            streams.push(stream);
         }
-        if let Some(messenger) = &mut self.v6 {
-            streams.push(messenger);
+
+        if let Some(stream) = &mut self.v4 {
+            streams.push(stream);
         }
 
         streams
-    }
-
-    /// Enables `SO_REUSEADDR` and `SO_REUSEPORT` so that the port of
-    /// this stream can be reused for hole punching.
-    fn configure_stream(stream: &TLSStream) {
-        let sock = SockRef::from(stream.get_ref());
-        let _ = sock.set_reuse_address(true);
-        let _ = sock.set_reuse_port(true);
     }
 }
 
@@ -125,7 +175,7 @@ pub fn connect_to_server_id(
     let Some(server) = servers.iter().find(|server| server.id == server_id) else {
         return Err(Error::ServerIDNotFound(server_id));
     };
-    connect_to_domain_name(server.domain_name)
+    connect_to_domain_name(server.domain_name, true)
 }
 
 /// Sequentially try connecting to the given addresses, returning the first successful connection.
@@ -144,7 +194,7 @@ pub fn connect_to_random_address(
 
     for i in indices {
         let server = domain_names[i];
-        let streams = match connect_to_domain_name(server) {
+        let streams = match connect_to_domain_name(server, true) {
             Ok(streams) => streams,
             Err(err) => {
                 error!("Couldn't connect to \"{}\": {}", server, err);
@@ -157,8 +207,9 @@ pub fn connect_to_random_address(
 }
 
 /// Try connecting to this `domain_name` and returning a [`ServerConnection`]
-pub fn connect_to_domain_name(domain_name: &str) -> Result<ServerConnection, Error> {
-    let address = format!("{domain_name}:8080");
+/// TODO: Add info about `encrypt`
+pub fn connect_to_domain_name(domain_name: &str, encrypt: bool) -> Result<ServerConnection, Error> {
+    let address = format!("{domain_name}:{DEFAULT_PORT}");
     debug!("Connecting to '{address}`");
     let addrs: Vec<SocketAddr> = address.to_socket_addrs()?.collect();
 
@@ -191,34 +242,46 @@ pub fn connect_to_domain_name(domain_name: &str) -> Result<ServerConnection, Err
         }
     }
 
-    // wrap the DNS name of the server
-    let name = rustls::pki_types::ServerName::try_from(domain_name.to_string())?;
-
-    // get the TLS config
-    let tls_config = get_tls_config();
-
-    // wrap the TCP in TLS streams, throwing an error if anything goes wrong
     let mut server_connection = ServerConnection { v4: None, v6: None };
+    if encrypt {
+        // wrap the DNS name of the server
+        let name = rustls::pki_types::ServerName::try_from(domain_name.to_string())?;
 
-    if let Some(Ok(tcp_v4)) = tcp_v4 {
-        let conn_v4 = rustls::ClientConnection::new(Arc::new(tls_config.clone()), name.clone())?;
-        server_connection.v4 = Some(rustls::StreamOwned::new(conn_v4, tcp_v4));
+        // get the TLS config
+        let tls_config = get_tls_config();
+
+        // wrap the TCP in TLS streams, throwing an error if anything goes wrong
+        if let Some(Ok(tcp_v4)) = tcp_v4 {
+            let conn_v4 = rustls::ClientConnection::new(tls_config.clone(), name.clone())?;
+            let tls_stream = rustls::StreamOwned::new(conn_v4, tcp_v4);
+            server_connection.v4 = Some(ServerStream::TLS(tls_stream));
+        }
+
+        if let Some(Ok(tcp_v6)) = tcp_v6 {
+            let conn_v6 = rustls::ClientConnection::new(tls_config.clone(), name.clone())?;
+            let tls_stream = rustls::StreamOwned::new(conn_v6, tcp_v6);
+            server_connection.v6 = Some(ServerStream::TLS(tls_stream));
+        }
+    } else {
+        if let Some(Ok(tcp_v4)) = tcp_v4 {
+            server_connection.v4 = Some(ServerStream::TCP(tcp_v4));
+        }
+
+        if let Some(Ok(tcp_v6)) = tcp_v6 {
+            server_connection.v4 = Some(ServerStream::TCP(tcp_v6));
+        }
     }
-
-    if let Some(Ok(tcp_v6)) = tcp_v6 {
-        let conn_v6 = rustls::ClientConnection::new(Arc::new(tls_config.clone()), name.clone())?;
-        server_connection.v6 = Some(rustls::StreamOwned::new(conn_v6, tcp_v6));
-    }
-
     Ok(server_connection)
 }
 
 /// Get default TLS config
-fn get_tls_config() -> rustls::ClientConfig {
+fn get_tls_config() -> Arc<rustls::ClientConfig> {
     let root_store =
         rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
 
-    rustls::ClientConfig::builder()
-        .with_root_certificates(root_store)
-        .with_no_client_auth()
+    Arc::new(
+        rustls::ClientConfig::builder()
+            .with_root_certificates(root_store)
+            .with_no_client_auth(),
+    )
 }

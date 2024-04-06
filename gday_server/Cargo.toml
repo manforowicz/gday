@@ -3,7 +3,7 @@ name = "gday_server"
 version = "0.1.0"
 authors = ["Marcin Anforowicz"]
 edition = "2021"
-description = "Lets 2 peers exchange their private and public addresses."
+description = "A server that lets 2 peers exchange their private and public addresses via the gday contact exchange protocol."
 license = "MIT"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -11,7 +11,13 @@ license = "MIT"
 [dependencies]
 clap = { version = "4.5.4", features = ["derive"] }
 socket2 = "0.5.6"
-tokio = { version = "1.37.0", features = ["rt-multi-thread", "macros", "net", "time", "sync"] }
+tokio = { version = "1.37.0", features = [
+    "rt-multi-thread",
+    "macros",
+    "net",
+    "time",
+    "sync",
+] }
 tokio-rustls = "0.26.0"
 gday_contact_exchange_protocol = { path = "../gday_contact_exchange_protocol" }
 thiserror = "1.0.58"

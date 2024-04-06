@@ -162,16 +162,33 @@ pub enum Error {
 mod tests {
     use super::*;
 
+    /// Test encoding a message.
     #[test]
-    fn test_general() {
+    fn test_encode() {
         let peer_code = PeerCode {
-            room_code: 17535328141421925132,
-            server_id: 4358432574238545432,
-            shared_secret: 9175435743820743890,
+            room_code: 1,
+            server_id: 288,
+            shared_secret: 1,
         };
 
-        let str: String = peer_code.to_str();
-        let received = PeerCode::from_str(&str).unwrap();
+        let message = peer_code.to_str();
+        assert_eq!(message, "90.1.1.E");
+    }
+
+    /// Test decoding a message with lowercase letters and
+    /// - o instead of 0
+    /// - i or l instead of 1
+    #[test]
+    fn test_decode() {
+        let message = "9o.i.l.e";
+        let received = PeerCode::from_str(message).unwrap();
+
+        let peer_code = PeerCode {
+            room_code: 1,
+            server_id: 288,
+            shared_secret: 1,
+        };
+
         assert_eq!(peer_code, received);
     }
 
@@ -184,7 +201,6 @@ mod tests {
         };
 
         let str: String = peer_code.to_str();
-        println!("{str}");
         let received = PeerCode::from_str(&str).unwrap();
         assert_eq!(peer_code, received);
     }

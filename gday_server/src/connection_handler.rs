@@ -3,38 +3,62 @@ use gday_contact_exchange_protocol::{
     deserialize_from_async, serialize_into_async, ClientMsg, ServerMsg,
 };
 use log::{debug, warn};
-use std::fmt::Debug;
-use tokio::net::TcpStream;
-use tokio_rustls::{server::TlsStream, TlsAcceptor};
+use std::net::SocketAddr;
+use tokio::{
+    io::{AsyncRead, AsyncWrite},
+    net::TcpStream,
+};
+use tokio_rustls::TlsAcceptor;
 
 /// Establishes a tls connection with the `tls_acceptor` on this `tcp_stream`.
 /// Handles all incoming requests.
 /// Exits with an error message if an issue is encountered.
-pub async fn handle_connection(tcp_stream: TcpStream, tls_acceptor: TlsAcceptor, state: State) {
+pub async fn handle_connection(
+    mut tcp_stream: TcpStream,
+    tls_acceptor: Option<TlsAcceptor>,
+    state: State,
+) {
     // try establishing a TLS connection
-    let mut tls_stream = match tls_acceptor.accept(tcp_stream).await {
-        Ok(tls_stream) => tls_stream,
+
+    let origin = match tcp_stream.peer_addr() {
+        Ok(origin) => origin,
         Err(err) => {
-            warn!("Error establishing TLS connection: {err}");
+            warn!("Couldn't get client's IP address: {err}");
             return;
         }
     };
 
-    // try handling the requests
-
-    if let Err(err) = handle_requests(&mut tls_stream, state).await {
-        debug!("Dropping connection because: {err}");
+    if let Some(tls_acceptor) = tls_acceptor {
+        let mut tls_stream = match tls_acceptor.accept(tcp_stream).await {
+            Ok(tls_stream) => tls_stream,
+            Err(err) => {
+                warn!("Error establishing TLS connection: {err}");
+                return;
+            }
+        };
+        handle_requests(&mut tls_stream, state, origin)
+            .await
+            .unwrap_or_else(|err| {
+                debug!("Dropping connection because: {err}");
+            });
+    } else {
+        handle_requests(&mut tcp_stream, state, origin)
+            .await
+            .unwrap_or_else(|err| {
+                debug!("Dropping connection because: {err}");
+            });
     }
 }
 
 /// Handles requests from this connection.
 /// Returns an error if any problem is encountered.
 async fn handle_requests(
-    tls: &mut TlsStream<TcpStream>,
+    tls: &mut (impl AsyncRead + AsyncWrite + Unpin),
     mut state: State,
+    origin: SocketAddr,
 ) -> Result<(), HandleMessageError> {
     loop {
-        let result = handle_message(tls, &mut state).await;
+        let result = handle_message(tls, &mut state, origin).await;
         match result {
             Ok(()) => (),
             Err(HandleMessageError::State(state::Error::NoSuchRoomCode)) => {
@@ -63,12 +87,10 @@ async fn handle_requests(
 }
 
 async fn handle_message(
-    tls: &mut TlsStream<TcpStream>,
+    tls: &mut (impl AsyncRead + AsyncWrite + Unpin),
     state: &mut State,
+    origin: SocketAddr,
 ) -> Result<(), HandleMessageError> {
-    // get this connection's ip address
-    let origin = tls.get_ref().0.peer_addr()?;
-
     // try to deserialize the message
     let msg: ClientMsg = deserialize_from_async(tls).await?;
 

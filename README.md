@@ -33,7 +33,7 @@ We stand on the shoulders of giants.
         <td>✅</td>
     </tr>
     <tr>
-        <td><a href="https://github.com/schollz/croc">croc</a></td>
+        <td><a href="https://github.com/magic-wormhole/magic-wormhole">magic-wormhole</a></td>
         <td>❌</td>
         <td>✅</td>
         <td>✅</td>
@@ -43,7 +43,7 @@ We stand on the shoulders of giants.
         <td>✅</td>
     </tr>
     <tr>
-        <td><a href="https://github.com/magic-wormhole/magic-wormhole">magic-wormhole</a></td>
+        <td><a href="https://github.com/schollz/croc">croc</a></td>
         <td>❌</td>
         <td>✅</td>
         <td>✅</td>
