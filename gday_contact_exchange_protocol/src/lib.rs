@@ -182,7 +182,7 @@ pub fn to_writer(msg: impl Serialize, writer: &mut impl Write) -> Result<(), Err
 }
 
 /// Read `msg` from `reader` using [`serde_json`].
-/// Assumes the message is prefixed with 4 big-endian bytes tha holds its length.
+/// Assumes the message is prefixed with 4 big-endian bytes that holds its length.
 pub fn from_reader<T: DeserializeOwned>(reader: &mut impl Read) -> Result<T, Error> {
     let mut len = [0_u8; 4];
     reader.read_exact(&mut len)?;
@@ -194,7 +194,7 @@ pub fn from_reader<T: DeserializeOwned>(reader: &mut impl Read) -> Result<T, Err
 }
 
 /// Asynchronously write `msg` to `writer` using [`serde_json`].
-/// Prefixes the message with a byte that holds its length.
+/// Prefixes the message with a 4 big-endian bytes that hold its length.
 pub async fn serialize_into_async(
     msg: impl Serialize,
     writer: &mut (impl AsyncWrite + Unpin),
@@ -208,7 +208,7 @@ pub async fn serialize_into_async(
 }
 
 /// Asynchronously read `msg` from `reader` using [`serde_json`].
-/// Assumes the message is prefixed with a byte that holds its length.
+/// Assumes the message is prefixed with 4 big-endian bytes that hold its length.
 pub async fn deserialize_from_async<T: DeserializeOwned>(
     reader: &mut (impl AsyncRead + Unpin),
 ) -> Result<T, Error> {
@@ -228,10 +228,9 @@ pub enum Error {
     #[error("JSON error encoding/decoding message: {0}")]
     JSON(#[from] serde_json::Error),
 
-    /// IO Error sending or receiving a message
     #[error("IO Error: {0}")]
     IO(#[from] std::io::Error),
 
-    #[error("Message longer than max of 256 bytes.")]
+    #[error("Can't send message longer than 2^32 bytes: {0}")]
     MsgTooLong(#[from] std::num::TryFromIntError),
 }

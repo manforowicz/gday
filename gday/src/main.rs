@@ -1,5 +1,10 @@
-//! `gday` is a command line line tool for direct file transfer between peers.
-//! TODO
+//! `gday` is a command line line tool for peers to send each other files.
+//! Features:
+//! - Never uses relays. Instead, uses a gday_contact_exchange_server to share socket
+//!     addresses with peer, and then performs
+//!     [Hole Punching](https://en.wikipedia.org/wiki/TCP_hole_punching)
+//!     to establish a direct connection. Note that this may fail when one of the peers
+//!     is behind a strict [NAT](https://en.wikipedia.org/wiki/Network_address_translation).
 #![forbid(unsafe_code)]
 #![warn(clippy::all)]
 
@@ -9,9 +14,10 @@ mod transfer;
 
 use crate::transfer::encrypt_connection;
 use clap::{Parser, Subcommand};
-use dialog::confirm_receive;
-use gday_file_offer_protocol::{from_reader, FileResponseMsg};
-use gday_file_offer_protocol::{to_writer, FileMeta, FileOfferMsg};
+use dialog::ask_receive;
+use gday_file_offer_protocol::{
+    from_reader, to_writer, FileMeta, FileMetaLocal, FileOfferMsg, FileResponseMsg,
+};
 use gday_hole_punch::{
     server_connector::{self, DEFAULT_SERVERS},
     ContactSharer,
@@ -33,15 +39,15 @@ struct Args {
     operation: Command,
 
     /// Use a custom gday server with this domain name.
-    #[arg(long)]
+    #[arg(short, long)]
     server: Option<String>,
 
-    /// Use a custom port of the custom server.
-    #[arg(long, requires("server"))]
+    /// Which server port to connect to.
+    #[arg(short, long, requires("server"))]
     port: Option<u16>,
 
     /// Use unencrypted TCP instead of TLS to the custom server.
-    #[arg(long, requires("server"))]
+    #[arg(short, long, requires("server"))]
     unencrypted: bool,
 
     /// Verbosity. (trace, debug, info, warn, error)
@@ -53,18 +59,18 @@ struct Args {
 enum Command {
     /// Send files
     Send {
-        /// Custom base-16 peer code of form "server_id.room_code.shared_secret".
-        /// 
+        /// Custom shared code of form "server_id.room_code.shared_secret" (base 16).
+        ///
         /// server_id must be valid, or 0 when custom --server set.
-        /// 
+        ///
         /// Doesn't require a checksum digit.
-        #[arg(long)]
+        #[arg(short, long)]
         code: Option<String>,
 
         paths: Vec<PathBuf>,
     },
 
-    /// Receive files
+    /// Receive files. Input the code your peer told you.
     Receive { code: String },
 }
 
@@ -109,12 +115,12 @@ fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
         // sending files
         Command::Send { paths, code } => {
             // confirm the user wants to send these files
-            let local_files = dialog::confirm_send(&paths)?;
+            let local_files = dialog::ask_send(&paths)?;
 
             // generate random `room_code` and `shared_secret`
             // if the user didn't provide custom ones
             let peer_code = if let Some(code) = code {
-                PeerCode::from_str(&code, false)?
+                PeerCode::parse(&code, false)?
             } else {
                 let room_code = rand::thread_rng().gen_range(0..u16::MAX as u64);
                 let shared_secret = rand::thread_rng().gen_range(0..u16::MAX as u64);
@@ -173,13 +179,15 @@ fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
                 if !response.accepted.iter().filter_map(|x| *x).all(|x| x == 0) {
                     println!("Resuming transfer of interrupted file(s).");
                 }
-                transfer::send_files(&mut stream, &local_files, &response.accepted)?;
+                let pairs: Vec<(FileMetaLocal, Option<u64>)> =
+                    local_files.into_iter().zip(response.accepted).collect();
+                transfer::send_files(&mut stream, &pairs)?;
             }
         }
 
         // receiving files
         Command::Receive { code } => {
-            let code = PeerCode::from_str(&code, true)?;
+            let code = PeerCode::parse(&code, true)?;
             let (contact_sharer, my_contact) =
                 ContactSharer::join_room(code.room_code, &mut server_connection)?;
 
@@ -205,7 +213,7 @@ fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
             let offer: FileOfferMsg = from_reader(&mut stream)?;
 
             // ask user which files to receive
-            let accepted = confirm_receive(&offer.files)?;
+            let accepted = ask_receive(&offer.files)?;
 
             // respond to the file offer
             to_writer(
@@ -218,7 +226,9 @@ fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
             if accepted.iter().all(|x| x.is_none()) {
                 println!("No files will be downloaded.");
             } else {
-                transfer::receive_files(&mut stream, &offer.files, &accepted)?;
+                let pairs: Vec<(FileMeta, Option<u64>)> =
+                    offer.files.into_iter().zip(accepted).collect();
+                transfer::receive_files(&mut stream, &pairs)?;
             }
         }
     }

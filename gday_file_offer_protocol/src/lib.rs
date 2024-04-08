@@ -17,6 +17,8 @@
 #![forbid(unsafe_code)]
 #![warn(clippy::all)]
 
+mod tests;
+
 use os_str_bytes::OsStrBytesExt;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{
@@ -27,7 +29,7 @@ use std::{
 use thiserror::Error;
 
 /// Information about an offered file.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct FileMeta {
     /// The file path offered
     pub short_path: PathBuf,
@@ -36,17 +38,33 @@ pub struct FileMeta {
 }
 
 impl FileMeta {
-    /// Returns the current directory joined with this [`FileMeta`]'s
-    /// `short_path`.
+    /// Returns the current directory joined with [`Self::short_path`]
     pub fn get_save_path(&self) -> std::io::Result<PathBuf> {
         Ok(std::env::current_dir()?.join(&self.short_path))
+    }
+
+    /// Returns `true` iff a file already exists at [`Self::get_save_path()`]
+    /// with the same length as [`Self::len`].
+    pub fn already_exists(&self) -> std::io::Result<bool> {
+        let local_save_path = self.get_save_path()?;
+
+        // check if the file can be opened
+        if let Ok(file) = std::fs::File::open(local_save_path) {
+            // check if its length is the same
+            if let Ok(local_meta) = file.metadata() {
+                if local_meta.len() == self.len {
+                    return Ok(true);
+                }
+            }
+        }
+        Ok(false)
     }
 
     /// Returns a version of [`Self::get_save_path()`]
     /// that doesn't exist in the filesystem yet.
     ///
     /// If [`Self::get_save_path()`] already exists, suffixes its file stem with
-    /// ` (1)`, ` (2)`, ..., ` (99)` until a free path is found. If all of
+    /// `_1`, `_2`, ..., `_3` until a free path is found. If all of
     /// these are occupied, returns [`Error::FilenameOccupied`].
     pub fn get_unused_save_path(&self) -> Result<PathBuf, Error> {
         let plain_path = self.get_save_path()?;
@@ -63,7 +81,7 @@ impl FileMeta {
             // otherwise make a new `modified_path`
             // with a different suffix
             modified_path = plain_path.clone();
-            let suffix = OsString::from(format!(" ({i})"));
+            let suffix = OsString::from(format!("_{i}"));
             add_suffix_to_file_stem(&mut modified_path, &suffix)?;
         }
 
@@ -72,12 +90,12 @@ impl FileMeta {
 
     /// Returns [`Self::get_save_path()`] with its file name
     /// prefixed by `prefix`.
-    pub fn get_prefixed_save_path(&self, prefix: OsString) -> std::io::Result<PathBuf> {
+    pub fn get_prefixed_save_path(&self, prefix: String) -> std::io::Result<PathBuf> {
         // get this file's save path
         let mut save_path = self.get_save_path()?;
 
         // add a prefix to its filename
-        add_prefix_to_file_name(&mut save_path, prefix)?;
+        add_prefix_to_file_name(&mut save_path, prefix.into())?;
 
         Ok(save_path)
     }
@@ -86,7 +104,7 @@ impl FileMeta {
 /// Prepend `prefix` to the file name of `path`
 fn add_prefix_to_file_name(path: &mut PathBuf, mut prefix: OsString) -> std::io::Result<()> {
     // isolate the file name
-    let filename: &OsStr = path.file_name().expect("Path terminates in .. ?");
+    let filename: &OsStr = path.file_name().expect("Path terminates in ..");
 
     // add a prefix to the file name
     prefix.push(filename);
@@ -100,7 +118,7 @@ fn add_prefix_to_file_name(path: &mut PathBuf, mut prefix: OsString) -> std::io:
 /// Append `suffix` to the file stem of `path`
 fn add_suffix_to_file_stem(path: &mut PathBuf, suffix: &OsStr) -> std::io::Result<()> {
     // isolate the file name
-    let filename = path.file_name().expect("Path terminates in .. ?");
+    let filename = path.file_name().expect("Path terminates in ..");
 
     // split the filename at the first '.'
     if let Some((first, second)) = filename.split_once('.') {
@@ -160,7 +178,7 @@ impl std::hash::Hash for FileMetaLocal {
 
 /// A list of file metadatas that this peer is offering
 /// to send. The other peer should reply with [`FileResponseMsg`].
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct FileOfferMsg {
     pub files: Vec<FileMeta>,
 }
@@ -169,7 +187,7 @@ pub struct FileOfferMsg {
 ///
 /// Specifies which of the offered files the other peer
 /// should send.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct FileResponseMsg {
     /// The accepted files. `Some(start_byte)` element accepts the offered
     /// file from [`FileOfferMsg::files`] at the same index.
@@ -209,9 +227,9 @@ pub enum Error {
     #[error("Error encoding or decoding message: {0}")]
     IO(#[from] std::io::Error),
 
-    #[error("Serialized message too large: {0}")]
+    #[error("Can't send message longer than 2^32 bytes: {0}")]
     MsgTooLarge(#[from] std::num::TryFromIntError),
 
-    #[error("100 files with base name {0} already exist. Aborting save.")]
+    #[error("100 files with base name '{0}' already exist. Aborting save.")]
     FilenameOccupied(PathBuf),
 }

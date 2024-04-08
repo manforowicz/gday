@@ -281,7 +281,7 @@ fn get_local_socket(local_addr: SocketAddr) -> std::io::Result<TcpSocket> {
 }
 
 #[derive(thiserror::Error, Debug)]
-#[error("Hole punching unsuccessful: {:#?}", errors)]
+#[error("Couldn't establish connection to peer. {:#?}", errors)]
 pub struct HolePunchErrors {
     errors: Vec<crate::Error>,
 }

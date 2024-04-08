@@ -215,11 +215,14 @@ pub fn connect_to_random_domain_name(
     Err(recent_error)
 }
 
+const SERVER_CONNECT_TIMEOUT: Duration = Duration::from_secs(2);
+
 /// Tries connecting to this `domain_name` and `port`, on both IPv4 and IPv6.
 /// - Gives up connecting to each TCP address after 2 seconds.
+/// - Returns an error if each attempted failed.
 /// - Uses TLS if `encrypt` is true, otherwise uses unencrypted TCP.
+/// - Returns an error for any issues with TLS.
 /// - Returns a [`ServerConnection`] with all the successful streams.
-/// - Returns an error if couldn't connect to the server at all.
 pub fn connect_to_domain_name(
     domain_name: &str,
     port: u16,
@@ -227,25 +230,13 @@ pub fn connect_to_domain_name(
 ) -> Result<ServerConnection, Error> {
     let address = format!("{domain_name}:{port}");
     debug!("Connecting to server '{address}`");
-    let addrs: Vec<SocketAddr> = address.to_socket_addrs()?.collect();
+    let addrs = address.to_socket_addrs()?;
 
-    // try establishing a TCP connection on IPv4
-    let tcp_v4 = addrs.iter().find_map(|addr| {
-        if let SocketAddr::V4(_) = addr {
-            Some(TcpStream::connect_timeout(addr, Duration::from_secs(2)))
-        } else {
-            None
-        }
-    });
+    let addr_v4: Option<SocketAddr> = addrs.clone().find(|a| a.is_ipv4());
+    let tcp_v4 = addr_v4.map(|addr| TcpStream::connect_timeout(&addr, SERVER_CONNECT_TIMEOUT));
 
-    // try establishing a TCP connection on IPv6
-    let tcp_v6 = addrs.iter().find_map(|addr| {
-        if let SocketAddr::V6(_) = addr {
-            Some(TcpStream::connect_timeout(addr, Duration::from_secs(2)))
-        } else {
-            None
-        }
-    });
+    let addr_v6: Option<SocketAddr> = addrs.clone().find(|a| a.is_ipv4());
+    let tcp_v6 = addr_v6.map(|addr| TcpStream::connect_timeout(&addr, SERVER_CONNECT_TIMEOUT));
 
     // return an error if couldn't establish any connections
     if !matches!(tcp_v4, Some(Ok(_))) && !matches!(tcp_v6, Some(Ok(_))) {
@@ -268,14 +259,14 @@ pub fn connect_to_domain_name(
 
         // wrap the TCP in TLS streams, throwing an error if anything goes wrong
         if let Some(Ok(tcp_v4)) = tcp_v4 {
-            let conn_v4 = rustls::ClientConnection::new(tls_config.clone(), name.clone())?;
-            let tls_stream = rustls::StreamOwned::new(conn_v4, tcp_v4);
+            let conn = rustls::ClientConnection::new(tls_config.clone(), name.clone())?;
+            let tls_stream = rustls::StreamOwned::new(conn, tcp_v4);
             server_connection.v4 = Some(ServerStream::TLS(tls_stream));
         }
 
         if let Some(Ok(tcp_v6)) = tcp_v6 {
-            let conn_v6 = rustls::ClientConnection::new(tls_config.clone(), name.clone())?;
-            let tls_stream = rustls::StreamOwned::new(conn_v6, tcp_v6);
+            let conn = rustls::ClientConnection::new(tls_config.clone(), name.clone())?;
+            let tls_stream = rustls::StreamOwned::new(conn, tcp_v6);
             server_connection.v6 = Some(ServerStream::TLS(tls_stream));
         }
     } else {
@@ -284,7 +275,7 @@ pub fn connect_to_domain_name(
         }
 
         if let Some(Ok(tcp_v6)) = tcp_v6 {
-            server_connection.v4 = Some(ServerStream::TCP(tcp_v6));
+            server_connection.v6 = Some(ServerStream::TCP(tcp_v6));
         }
     }
     Ok(server_connection)

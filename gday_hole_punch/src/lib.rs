@@ -26,7 +26,7 @@ use gday_contact_exchange_protocol::ServerMsg;
 #[derive(thiserror::Error, Debug)]
 #[non_exhaustive]
 pub enum Error {
-    #[error("Both provided addresses were None.")]
+    #[error("The given ServerConnection contains no streams.")]
     NoStreamsProvided,
 
     #[error("Expected IPv4 address, but received an IPv6 address.")]
@@ -41,30 +41,35 @@ pub enum Error {
     #[error("Error talking with server: {0}")]
     MessengerError(#[from] gday_contact_exchange_protocol::Error),
 
-    #[error("Unexpected server reply: {0:?}")]
+    #[error("Unexpected reply from server: {0:?}")]
     UnexpectedServerReply(ServerMsg),
 
-    #[error("SPAKE failed: {0}")]
+    #[error("Connected to peer, but key exchange failed: {0}. Check the peer shared secret.")]
     SpakeFailed(#[from] spake2::Error),
 
-    #[error("Couldn't authenticate peer. Check the peer shared secret.")]
+    #[error("Connected, but couldn't authenticate peer. Check the peer shared secret.")]
     PeerAuthenticationFailed,
 
-    #[error("Couldn't resolve IP addresses for '{0}'")]
+    #[error("Couldn't resolve any IP addresses for server '{0}'")]
     CouldntResolveAddress(String),
 
     #[error("TLS error: {0}")]
     Rustls(#[from] rustls::Error),
 
-    #[error("No server with ID '{0}' exists in this list.")]
+    #[error("No server with ID '{0}' exists.")]
     ServerIDNotFound(u64),
 
     #[error("Couldn't connect to any of these servers.")]
     CouldntConnectToServers,
 
-    #[error("Invalid DNS name: {0}")]
+    #[error("Invalid server DNS name: {0}")]
     InvalidDNSName(#[from] rustls::pki_types::InvalidDnsNameError),
 
-    #[error("Couldn't hole-punch peer-to-peer connection in under the timeout.")]
+    #[error(
+        "Timed out while trying to connect to peer, likely due to an uncooperative \
+    NAT (network address translator). \
+    Try from a different network or use a tool that transfers \
+    files over a relay to circumvent NATs, such as magic-wormhole."
+    )]
     HolePunchTimeout,
 }

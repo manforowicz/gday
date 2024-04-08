@@ -10,12 +10,12 @@ use std::{
 
 use crate::TMP_DOWNLOAD_PREFIX;
 
-/// Asks the user which of these files to accept.
-/// Every accepted file in `files` will be represented by a
-/// `true` at the same index in the returned `Vec<bool>`.
-/// TODO: Update this DOC comment
-pub fn confirm_receive(files: &[FileMeta]) -> std::io::Result<Vec<Option<u64>>> {
-    // size of all new and interrupted files to download
+/// Asks the user which of these offered `files` to accept.
+/// Returns a `Vec<Option<u64>>`, where each
+/// - `None` represents rejecting the file at this index,
+/// - `Some(0)` represents fully accepting the file at this index,
+/// - `Some(x)` represents resuming with the first `x` bytes skipped.
+pub fn ask_receive(files: &[FileMeta]) -> std::io::Result<Vec<Option<u64>>> {
     let mut new_files = Vec::<Option<u64>>::with_capacity(files.len());
     let mut new_size = 0;
     let mut total_size = 0;
@@ -31,8 +31,8 @@ pub fn confirm_receive(files: &[FileMeta]) -> std::io::Result<Vec<Option<u64>>> 
         print!("{} ({})", file.short_path.display(), HumanBytes(file.len));
 
         // file was already downloaded
-        if file_exists(file)? {
-            print!(" {}", "ALREADY EXISTS".bold());
+        if file.already_exists()? {
+            print!(" {}", "ALREADY EXISTS".green().bold());
             new_files.push(None);
 
         // an interrupted download exists
@@ -41,9 +41,9 @@ pub fn confirm_receive(files: &[FileMeta]) -> std::io::Result<Vec<Option<u64>>> 
 
             print!(
                 " {} {} {}",
-                "PARTIALLY DOWNLOADED.".bold(),
-                HumanBytes(remaining_len).bold(),
-                "REMAINING".bold()
+                "PARTIALLY DOWNLOADED.".red().bold(),
+                HumanBytes(remaining_len).red().bold(),
+                "REMAINING".red().bold()
             );
             new_size += remaining_len;
             new_files.push(Some(local_len));
@@ -60,7 +60,7 @@ pub fn confirm_receive(files: &[FileMeta]) -> std::io::Result<Vec<Option<u64>>> 
 
     println!();
     println!(
-        "Total size of offered files: {}",
+        "Size of all offered files: {}",
         HumanBytes(total_size).bold()
     );
     println!(
@@ -68,10 +68,15 @@ pub fn confirm_receive(files: &[FileMeta]) -> std::io::Result<Vec<Option<u64>>> 
         HumanBytes(new_size).bold()
     );
     println!("{}", "Options:".bold());
-    println!("1. Download only files with new path or size. Resume any interrupted downloads.");
-    println!("2. Fully download all files.");
-    println!("3. Cancel.");
-    println!("Note: Gday will create new files, instead of overwriting existing files.");
+    println!(
+        "{}",
+        "1. Download only files with new path or size. Resume any interrupted downloads.".bold()
+    );
+    println!("{}", "2. Fully download all files.".bold());
+    println!("{}", "3. Cancel.".bold());
+    println!(
+        "Note: gday won't overwrite existing files (it suffixes any new files with the same name)."
+    );
     print!("{} ", "Choose an option (1, 2, or 3):".bold());
     std::io::stdout().flush()?;
 
@@ -88,10 +93,10 @@ pub fn confirm_receive(files: &[FileMeta]) -> std::io::Result<Vec<Option<u64>>> 
     }
 }
 
-/// Finds all the files at the provided paths.
-/// Asks the user to confirm they want to send them, otherwise exits.
+/// Recursively finds all the files at the provided paths and
+/// asks the user to confirm they want to send them, otherwise exits.
 /// Returns the list of files these paths lead to.
-pub fn confirm_send(paths: &[PathBuf]) -> std::io::Result<Vec<FileMetaLocal>> {
+pub fn ask_send(paths: &[PathBuf]) -> std::io::Result<Vec<FileMetaLocal>> {
     // get the file metadatas for all these paths
     let files = get_paths_metadatas(paths)?;
 
@@ -108,25 +113,18 @@ pub fn confirm_send(paths: &[PathBuf]) -> std::io::Result<Vec<FileMetaLocal>> {
         "Total size: ".bold(),
         HumanBytes(total_size).bold()
     );
+    print!("Would you like to send these? (y/n): ");
+    std::io::stdout().flush()?;
 
-    Ok(files)
-}
-
-/// Checks if there already exists a file with the same save path
-/// and size as `meta`.
-fn file_exists(meta: &FileMeta) -> std::io::Result<bool> {
-    let local_save_path = meta.get_save_path()?;
-
-    // check if the file can be opened
-    if let Ok(file) = File::open(local_save_path) {
-        // check if its length is the same
-        if let Ok(local_meta) = file.metadata() {
-            if local_meta.len() == meta.len {
-                return Ok(true);
-            }
-        }
+    // act on user choice
+    let mut response = String::new();
+    std::io::stdin().read_line(&mut response)?;
+    if "yes".starts_with(response.trim()) {
+        Ok(files)
+    } else {
+        println!("Cancelled.");
+        std::process::exit(0);
     }
-    Ok(false)
 }
 
 /// Checks if there exists a file like `meta`
