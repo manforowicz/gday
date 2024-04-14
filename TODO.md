@@ -22,6 +22,8 @@ Not all of them are desirable or necessary.
 
 - Make sure reader returns an EOF error if interrupted?
 
+- Have hole punch error say what connection path each error occured from.
+
 - Think: What other functionality can I pull out into gday_file_offer_protocol.
 
 ## Low-priority ideas

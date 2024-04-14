@@ -9,6 +9,7 @@ mod tests;
 
 use clap::Parser;
 use connection_handler::handle_connection;
+use gday_contact_exchange_protocol::{DEFAULT_TCP_PORT, DEFAULT_TLS_PORT};
 use log::{debug, error, info, warn};
 use socket2::{SockRef, TcpKeepalive};
 use state::State;
@@ -41,9 +42,10 @@ struct Args {
     #[arg(short, long, conflicts_with_all(["key", "certificate"]))]
     unencrypted: bool,
 
-    /// The socket address from which to listen
-    #[arg(short, long, default_value = "[::]:234")]
-    address: String,
+    /// Custom socket address on which to listen.
+    /// Default: [::]:2311 for TLS, [::]:2310 when unencrypted
+    #[arg(short, long)]
+    address: Option<String>,
 
     /// Number of seconds before a new room is deleted
     #[arg(short, long, default_value = "300")]
@@ -67,8 +69,16 @@ async fn main() {
     // set the log level according to the command line argument
     env_logger::builder().filter_level(args.verbosity).init();
 
+    let addr = if let Some(addr) = args.address {
+        addr
+    } else if args.unencrypted {
+        format!("[::]:{DEFAULT_TCP_PORT}")
+    } else {
+        format!("[::]:{DEFAULT_TLS_PORT}")
+    };
+
     // get tcp listener
-    let tcp_listener = get_tcp_listener(args.address).await;
+    let tcp_listener = get_tcp_listener(addr).await;
 
     // get the TLS acceptor if applicable
     let tls_acceptor = if let (Some(k), Some(c)) = (args.key, args.certificate) {

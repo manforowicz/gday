@@ -99,9 +99,9 @@ fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
         let port = if let Some(port) = args.port {
             port
         } else if args.unencrypted {
-            gday_hole_punch::server_connector::DEFAULT_TCP_PORT
+            gday_hole_punch::DEFAULT_TCP_PORT
         } else {
-            gday_hole_punch::server_connector::DEFAULT_TLS_PORT
+            gday_hole_punch::DEFAULT_TLS_PORT
         };
         (
             server_connector::connect_to_domain_name(&domain_name, port, !args.unencrypted)?,

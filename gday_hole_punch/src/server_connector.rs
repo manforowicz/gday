@@ -2,6 +2,7 @@
 //! TODO: Tidy up this file
 
 use crate::Error;
+use gday_contact_exchange_protocol::DEFAULT_TLS_PORT;
 use log::{debug, error};
 use rand::seq::SliceRandom;
 use socket2::SockRef;
@@ -21,12 +22,6 @@ pub const DEFAULT_SERVERS: &[ServerInfo] = &[ServerInfo {
     id: 1,
     prefer: true,
 }];
-
-/// The port that unencrypted TCP Gday servers listen on.
-pub const DEFAULT_TCP_PORT: u16 = 2310;
-
-/// The port that encrypted TLS Gday servers listen on.
-pub const DEFAULT_TLS_PORT: u16 = 2311;
 
 /// Information about a single Gday server.
 pub struct ServerInfo {

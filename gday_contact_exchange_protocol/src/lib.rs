@@ -41,6 +41,14 @@ use std::{
 };
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
+/// The port that contact exchange servers
+/// using unencrypted TCP should listen on
+pub const DEFAULT_TCP_PORT: u16 = 2310;
+
+/// The port that contact exchange servers
+/// using encrypted TLS should listen on
+pub const DEFAULT_TLS_PORT: u16 = 2311;
+
 /// A message from client to server.
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Clone, Copy)]
 pub enum ClientMsg {
