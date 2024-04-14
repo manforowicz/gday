@@ -201,7 +201,7 @@ pub fn connect_to_random_domain_name(
             Ok(streams) => streams,
             Err(err) => {
                 recent_error = err;
-                error!("Couldn't connect to \"{}\": {}", server, recent_error);
+                error!("Couldn't connect to \"{server}:{DEFAULT_TLS_PORT}\": {recent_error}");
                 continue;
             }
         };

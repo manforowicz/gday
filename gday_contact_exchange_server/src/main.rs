@@ -78,7 +78,7 @@ async fn main() {
     };
 
     // get tcp listener
-    let tcp_listener = get_tcp_listener(addr).await;
+    let tcp_listener = get_tcp_listener(&addr).await;
 
     // get the TLS acceptor if applicable
     let tls_acceptor = if let (Some(k), Some(c)) = (args.key, args.certificate) {
@@ -91,6 +91,8 @@ async fn main() {
     let state = State::new(args.request_limit, args.timeout);
 
     info!("Server started.");
+    info!("Listening on {addr}.");
+    info!("Is encrypted?: {}", !args.unencrypted);
 
     loop {
         // try to accept another connection
