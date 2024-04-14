@@ -126,6 +126,10 @@ pub enum ServerMsg {
     /// The server responds with this if it has any sort of connection error.
     /// The server then closes the connection.
     ErrorConnection,
+
+    /// The server responds with this if it has an internal error.
+    /// The server then closes the connection.
+    ErrorInternal,
 }
 
 impl Display for ServerMsg {
@@ -152,6 +156,7 @@ impl Display for ServerMsg {
             Self::ErrorTooManyRequests => write!(f, "Too many requests from this IP address."),
             Self::ErrorSyntax => write!(f, "Couldn't parse message syntax from client."),
             Self::ErrorConnection => write!(f, "Connection error to client."),
+            Self::ErrorInternal => write!(f, "Internal server error."),
         }
     }
 }
