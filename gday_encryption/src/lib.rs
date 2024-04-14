@@ -1,4 +1,5 @@
-//! TODO: ADD DOC
+//! A simple encrypted wrapper around an IO stream.
+//! Uses [`chacha20poly1305`] with the [`chacha20poly1305::aead::stream`].
 #![forbid(unsafe_code)]
 #![warn(clippy::all)]
 
@@ -14,8 +15,8 @@ use std::io::{BufRead, ErrorKind, Read, Write};
 
 const TAG_SIZE: usize = 16;
 
-/// An encrypted wrapper around an IO stream.
-/// Uses a ChaCha20Poly12305 BE32 stream.
+/// A simple encrypted wrapper around an IO stream.
+/// Uses [`chacha20poly1305`] with the [`chacha20poly1305::aead::stream`].
 pub struct EncryptedStream<T> {
     /// The IO stream to be wrapped in encryption
     inner: T,
@@ -112,7 +113,8 @@ impl<T: Write> Write for EncryptedStream<T> {
 }
 
 impl<T: Read> EncryptedStream<T> {
-    /// Reads and decrypts at least 1 new chunk into `self.decrypted`.
+    /// Reads and decrypts at least 1 new chunk into `self.decrypted`,
+    /// unless reached EOF.
     /// - Must only be called when `self.decrypted` is empty,
     ///     so that it has space to decrypt into.
     fn inner_read(&mut self) -> std::io::Result<()> {
@@ -127,6 +129,9 @@ impl<T: Read> EncryptedStream<T> {
         while self.received.len() < 2 {
             let read_buf = self.received.spare_capacity();
             let bytes_read = self.inner.read(read_buf)?;
+            if bytes_read == 0 {
+                return Ok(()); // EOF
+            }
             self.received.increase_len(bytes_read);
         }
 
@@ -143,6 +148,12 @@ impl<T: Read> EncryptedStream<T> {
         while self.received.len() < chunk_len {
             let read_buf = self.received.spare_capacity();
             let bytes_read = self.inner.read(read_buf)?;
+            if bytes_read == 0 {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::UnexpectedEof,
+                    "Unexpected EOF while receiving encrypted chunk.",
+                ));
+            }
             self.received.increase_len(bytes_read);
         }
 
@@ -154,7 +165,7 @@ impl<T: Read> EncryptedStream<T> {
             data.get(2..2 + len)
         }
 
-        // while there's another full encrypted chunk:
+        // decrypt all chunks in `self.received`
         while let Some(cipher_chunk) = peek_cipher_chunk(&self.received) {
             // decrypt in `self.decrypted`
             let mut decryption_space = self.decrypted.split_off_aead_buf(self.decrypted.len());

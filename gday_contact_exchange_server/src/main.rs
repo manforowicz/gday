@@ -43,7 +43,7 @@ struct Args {
     unencrypted: bool,
 
     /// Custom socket address on which to listen.
-    /// Default: \[::\]:2311 for TLS, \[::\]:2310 when unencrypted
+    /// [default: `[::]:2311` for TLS, `[::]:2310` when --unencrypted]
     #[arg(short, long)]
     address: Option<String>,
 

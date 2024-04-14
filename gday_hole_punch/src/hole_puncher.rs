@@ -127,7 +127,7 @@ async fn try_accept(
     shared_secret: Vec<u8>,
 ) -> Result<PeerConnection, Error> {
     let local = local.into();
-    trace!("Trying accept peer's connection on {local}.");
+    trace!("Waiting to accept connections on {local}.");
     let local_socket = get_local_socket(local)?;
     let listener = local_socket.listen(1024)?;
     let mut interval = tokio::time::interval(RETRY_INTERVAL);

@@ -6,12 +6,6 @@ Not all of them are desirable or necessary.
 
 - Add some sort of end-to-end integration tests.
 
-- Add error handling for if the peer's file accept response is the wrong length.
-
-- Make sure reader returns an EOF error if interrupted?
-
-- Think: What other functionality can I pull out into gday_file_offer_protocol.
-
 - Add explanation in readme, of how this differs from magic wormhole.
 
 ## Abandoned ideas

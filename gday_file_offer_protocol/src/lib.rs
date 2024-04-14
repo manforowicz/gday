@@ -192,7 +192,7 @@ pub struct FileResponseMsg {
     /// The accepted files. `Some(start_byte)` element accepts the offered
     /// file from [`FileOfferMsg::files`] at the same index.
     /// Only bytes `(start_byte..)` will be sent.
-    pub accepted: Vec<Option<u64>>,
+    pub response: Vec<Option<u64>>,
 }
 
 /// Write `msg` to `writer` using [`serde_json`].

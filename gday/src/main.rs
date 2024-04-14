@@ -31,7 +31,6 @@ use std::path::PathBuf;
 const TMP_DOWNLOAD_PREFIX: &str = "GDAY_PARTIAL_DOWNLOAD_";
 const HOLE_PUNCH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
-/// Send files directly to peers
 #[derive(Parser, Debug)]
 #[command(author, version, about)]
 struct Args {
@@ -93,16 +92,18 @@ fn main() {
 }
 
 fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
+    // get the server port
+    let port = if let Some(port) = args.port {
+        port
+    } else if args.unencrypted {
+        gday_hole_punch::DEFAULT_TCP_PORT
+    } else {
+        gday_hole_punch::DEFAULT_TLS_PORT
+    };
+
     // use custom server if the user provided one,
     // otherwise pick a random default server
     let (mut server_connection, server_id) = if let Some(domain_name) = args.server {
-        let port = if let Some(port) = args.port {
-            port
-        } else if args.unencrypted {
-            gday_hole_punch::DEFAULT_TCP_PORT
-        } else {
-            gday_hole_punch::DEFAULT_TLS_PORT
-        };
         (
             server_connector::connect_to_domain_name(&domain_name, port, !args.unencrypted)?,
             0,
@@ -145,7 +146,6 @@ fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
             // get peer's contact
             let peer_contact = contact_sharer.get_peer_contact()?;
             info!("Your mate's contact is:\n{peer_contact}");
-            info!("Trying TCP hole punching.");
 
             // connect to the peer
             let (stream, shared_key) = gday_hole_punch::try_connect_to_peer(
@@ -173,14 +173,22 @@ fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
             // receive file offer from peer
             let response: FileResponseMsg = from_reader(&mut stream)?;
 
-            if response.accepted.iter().all(|x| x.is_none()) {
-                println!("Your mate rejected all your offered files.");
-            } else {
-                if !response.accepted.iter().filter_map(|x| *x).all(|x| x == 0) {
-                    println!("Resuming transfer of interrupted file(s).");
+            let accepted = response.response.iter().filter_map(|&x| x);
+            let num_accepted = accepted.clone().count();
+            let resumptions = accepted.filter(|&x| x != 0).count();
+
+            println!(
+                "Your mate accepted {}/{} files",
+                num_accepted,
+                local_files.len()
+            );
+
+            if num_accepted != 0 {
+                if resumptions != 0 {
+                    println!("Resuming transfer of {resumptions} previously interrupted file(s).");
                 }
                 let pairs: Vec<(FileMetaLocal, Option<u64>)> =
-                    local_files.into_iter().zip(response.accepted).collect();
+                    local_files.into_iter().zip(response.response).collect();
                 transfer::send_files(&mut stream, &pairs)?;
             }
         }
@@ -196,7 +204,6 @@ fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
             let peer_contact = contact_sharer.get_peer_contact()?;
 
             info!("Your mate's contact is:\n{peer_contact}");
-            info!("Trying TCP hole punching.");
 
             let (stream, shared_key) = gday_hole_punch::try_connect_to_peer(
                 my_contact.private,
@@ -218,7 +225,7 @@ fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
             // respond to the file offer
             to_writer(
                 FileResponseMsg {
-                    accepted: accepted.clone(),
+                    response: accepted.clone(),
                 },
                 &mut stream,
             )?;

@@ -36,6 +36,7 @@ mod tests;
 
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{
+    fmt::Display,
     io::{Read, Write},
     net::{SocketAddr, SocketAddrV4, SocketAddrV6},
 };
@@ -120,11 +121,39 @@ pub enum ServerMsg {
 
     /// The server responds with this if it receives a [`ClientMsg`]
     /// with any sort of improper syntax. The server then closes the connection.
-    SyntaxError,
+    ErrorSyntax,
 
     /// The server responds with this if it has any sort of connection error.
     /// The server then closes the connection.
-    ConnectionError,
+    ErrorConnection,
+}
+
+impl Display for ServerMsg {
+    /// Formats this [`ServerMsg`]. Useful for pretty-printing error messages
+    /// to users.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::RoomCreated => write!(f, "Room in server created successfully."),
+            Self::ReceivedAddr => write!(f, "Server received your address."),
+            Self::ClientContact(c) => write!(f, "Your contact is {c}."),
+            Self::PeerContact(c) => write!(f, "Your peer's contact is {c}."),
+            Self::ErrorRoomTaken => write!(
+                f,
+                "Can't create room with this id, because it was already created."
+            ),
+            Self::ErrorPeerTimedOut => write!(
+                f,
+                "Timed out while waiting for peer to finish sending their address."
+            ),
+            Self::ErrorNoSuchRoomID => write!(
+                f,
+                "Can't join room with this id, because it hasn't been created."
+            ),
+            Self::ErrorTooManyRequests => write!(f, "Too many requests from this IP address."),
+            Self::ErrorSyntax => write!(f, "Couldn't parse message syntax from client."),
+            Self::ErrorConnection => write!(f, "Connection error to client."),
+        }
+    }
 }
 
 /// The addresses of a single network endpoint.

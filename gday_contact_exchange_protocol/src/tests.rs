@@ -94,7 +94,7 @@ fn get_server_msg_examples() -> Vec<ServerMsg> {
         ServerMsg::ErrorPeerTimedOut,
         ServerMsg::ErrorNoSuchRoomID,
         ServerMsg::ErrorTooManyRequests,
-        ServerMsg::SyntaxError,
-        ServerMsg::ConnectionError,
+        ServerMsg::ErrorSyntax,
+        ServerMsg::ErrorConnection,
     ]
 }

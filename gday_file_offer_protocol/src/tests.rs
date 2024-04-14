@@ -49,10 +49,10 @@ fn get_offer_msg_examples() -> Vec<FileOfferMsg> {
 fn get_response_msg_examples() -> Vec<FileResponseMsg> {
     vec![
         FileResponseMsg {
-            accepted: vec![None, Some(0), Some(100)],
+            response: vec![None, Some(0), Some(100)],
         },
         FileResponseMsg {
-            accepted: vec![None, None, None],
+            response: vec![None, None, None],
         },
     ]
 }

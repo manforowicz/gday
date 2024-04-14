@@ -48,7 +48,7 @@ fn test_large_messages() {
     let pipe = VecDeque::new();
     let mut stream = crate::EncryptedStream::new(pipe, &key, &nonce);
 
-    let msg = vec![123; 70_000];
+    let msg = vec![123; 200_000];
 
     for _ in 0..5 {
         stream.write_all(&msg).unwrap();
@@ -57,4 +57,23 @@ fn test_large_messages() {
         stream.read_exact(&mut received).unwrap();
         assert_eq!(msg, received);
     }
+}
+
+/// Confirm there are no infinite loops on EOF
+#[test]
+fn test_unexpected_eof() {
+    let nonce: [u8; 7] = [42; 7];
+    let key: [u8; 32] = [123; 32];
+    let mut pipe = VecDeque::new();
+    let mut writer = crate::EncryptedStream::new(&mut pipe, &key, &nonce);
+
+    let msg = TEST_DATA[0];
+
+    writer.write_all(msg).unwrap();
+    writer.flush().unwrap();
+    pipe.pop_back().unwrap();
+    let mut reader = crate::EncryptedStream::new(&mut pipe, &key, &nonce);
+    let mut buf = vec![0; msg.len()];
+    let result = reader.read_exact(&mut buf);
+    assert!(result.is_err());
 }

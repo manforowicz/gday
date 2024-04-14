@@ -53,8 +53,8 @@ pub enum Error {
     #[error("Error talking with contact exchange server: {0}")]
     MessengerError(#[from] gday_contact_exchange_protocol::Error),
 
-    /// TODO: Improve this error message
-    #[error("Unexpected reply from server: {0:?}")]
+    /// Unexpected reply from server
+    #[error("Server unexpectedly replied: {0}")]
     UnexpectedServerReply(ServerMsg),
 
     /// Connected to peer, but key exchange failed

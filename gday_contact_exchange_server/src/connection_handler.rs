@@ -75,11 +75,11 @@ async fn handle_requests(
                 return result;
             }
             Err(HandleMessageError::Protocol(_)) => {
-                serialize_into_async(ServerMsg::SyntaxError, tls).await?;
+                serialize_into_async(ServerMsg::ErrorSyntax, tls).await?;
                 return result;
             }
             Err(HandleMessageError::IO(_)) => {
-                serialize_into_async(ServerMsg::ConnectionError, tls).await?;
+                serialize_into_async(ServerMsg::ErrorConnection, tls).await?;
                 return result;
             }
         }
