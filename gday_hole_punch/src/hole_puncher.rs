@@ -45,10 +45,13 @@ pub fn try_connect_to_peer(
         .expect("Tokio async runtime error.");
 
     // hole punch asynchronously
-    match runtime.block_on(tokio::time::timeout(
-        timeout,
-        hole_punch(local_contact, peer_contact, shared_secret),
-    )) {
+    match runtime.block_on(async {
+        tokio::time::timeout(
+            timeout,
+            hole_punch(local_contact, peer_contact, shared_secret),
+        )
+        .await
+    }) {
         Ok(result) => result,
         Err(..) => Err(Error::HolePunchTimeout),
     }

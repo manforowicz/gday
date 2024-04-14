@@ -65,7 +65,8 @@ pub enum Error {
     /// This could be due to a man-in-the-middle attack or a mismatched shared secret.
     #[error(
         "Connected to peer, but couldn't verify their shared secret. \
-        This could be due to a man-in-the-middle attack or a mismatched shared secret."
+        This could be due to a man-in-the-middle attack or a mismatched shared secret.
+        Re-check your shared secret."
     )]
     PeerAuthenticationFailed,
 

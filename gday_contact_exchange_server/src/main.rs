@@ -43,7 +43,7 @@ struct Args {
     unencrypted: bool,
 
     /// Custom socket address on which to listen.
-    /// Default: [::]:2311 for TLS, [::]:2310 when unencrypted
+    /// Default: \[::\]:2311 for TLS, \[::\]:2310 when unencrypted
     #[arg(short, long)]
     address: Option<String>,
 
@@ -90,9 +90,9 @@ async fn main() {
     // create the shared global state object
     let state = State::new(args.request_limit, args.timeout);
 
-    info!("Server started.");
     info!("Listening on {addr}.");
     info!("Is encrypted?: {}", !args.unencrypted);
+    info!("Server started.");
 
     loop {
         // try to accept another connection

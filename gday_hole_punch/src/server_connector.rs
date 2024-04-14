@@ -230,7 +230,7 @@ pub fn connect_to_domain_name(
     let addr_v4: Option<SocketAddr> = addrs.clone().find(|a| a.is_ipv4());
     let tcp_v4 = addr_v4.map(|addr| TcpStream::connect_timeout(&addr, SERVER_CONNECT_TIMEOUT));
 
-    let addr_v6: Option<SocketAddr> = addrs.clone().find(|a| a.is_ipv4());
+    let addr_v6: Option<SocketAddr> = addrs.clone().find(|a| a.is_ipv6());
     let tcp_v6 = addr_v6.map(|addr| TcpStream::connect_timeout(&addr, SERVER_CONNECT_TIMEOUT));
 
     // return an error if couldn't establish any connections

@@ -7,9 +7,8 @@ Then go to the [gday page](gday/README.md).
 
 ## Similar Projects
 
-I heavily took inspiration from these projects.
+I took inspiration from these great projects.
 I'm very grateful to their creators and contributors.
-We stand on the shoulders of giants.
 
 <table>
     <tr>

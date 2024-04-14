@@ -32,7 +32,7 @@ pub fn encrypt_connection<T: Read + Write>(
 pub fn send_files(
     writer: &mut impl Write,
     files: &[(FileMetaLocal, Option<u64>)],
-) -> std::io::Result<()> {
+) -> Result<(), Error> {
     // sum up total transfer size,
     // for display on the progress bar
     let size: u64 = files
@@ -57,7 +57,7 @@ pub fn send_files(
 
             let file = File::open(&offer.local_path)?;
             if file.metadata()?.len() != offer.len {
-                todo!("Throw an error!");
+                return Err(Error::UnexpectedFileLen);
             }
 
             // copy the file into the writer
@@ -78,7 +78,7 @@ pub fn send_files(
 pub fn receive_files(
     reader: &mut impl BufRead,
     files: &[(FileMeta, Option<u64>)],
-) -> Result<(), gday_file_offer_protocol::Error> {
+) -> Result<(), Error> {
     // sum up total transfer size
     let size: u64 = files
         .iter()
@@ -136,7 +136,7 @@ pub fn receive_files(
             let tmp_path = offer.get_prefixed_save_path(TMP_DOWNLOAD_PREFIX.into())?;
             let file = OpenOptions::new().append(true).open(&tmp_path)?;
             if file.metadata()?.len() != *start {
-                todo!("Throw error");
+                return Err(Error::UnexpectedFileLen);
             }
             let file = BufWriter::with_capacity(FILE_BUFFER_SIZE, file);
 
@@ -170,4 +170,19 @@ fn create_progress_bar(bytes: u64) -> ProgressBar {
     ProgressBar::with_draw_target(Some(bytes), draw)
         .with_style(style)
         .with_message("starting...")
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    /// A local file changed length between checks.
+    #[error("A local file changed length between checks.")]
+    UnexpectedFileLen,
+
+    /// Couldn't find an empty save path for a file
+    #[error("Couldn't find an empty save path: {0}")]
+    CouldntGetEmptySavePath(#[from] gday_file_offer_protocol::Error),
+
+    /// IO Error
+    #[error("IO Error: {0}")]
+    IO(#[from] std::io::Error),
 }
