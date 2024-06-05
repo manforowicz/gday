@@ -12,7 +12,7 @@ anyhow = "1.0.82"
 clap = { version = "4.5.4", features = ["derive"] }
 env_logger = "0.11.3"
 gday_encryption = { version = "0.1.0", path = "../gday_encryption" }
-gday_file_offer_protocol = { version = "0.1.0", path = "../gday_file_offer_protocol" }
+gday_file_transfer = { version = "0.1.0", path = "../gday_file_transfer" }
 gday_hole_punch = { version = "0.1.0", path = "../gday_hole_punch" }
 indicatif = "0.17.8"
 log = "0.4.21"
@@ -22,3 +22,8 @@ postcard = "1.0.8"
 rand = "0.8.5"
 serde = { version = "1.0.197", features = ["serde_derive"] }
 thiserror = "1.0.58"
+
+[dev-dependencies]
+assert_cmd = "2.0.14"
+gday_server = { version = "0.1.0", path = "../gday_server" }
+tempfile = "3.10.1"

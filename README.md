@@ -7,19 +7,19 @@ Send files directly to anyone.
 ## Example
 
 <pre>
-<b style="color:lime;">mate_1:</b>  gday send file1 folder2
+<b style="color:lime;">peer_1:</b> gday send msg.txt image.jpg
 <i>*Asks for confirmation*</i>
 Tell your mate to run "gday receive <b>1.188T.W3H.E</b>".
 <b>Transfer complete.</b>
 </pre>
 
 <pre>
-<b style="color:lime;">mate_2:</b>  gday receive <b>1.188T.W3H.E</b>
-<i>*Asks which files to accept*</i>
+<b style="color:lime;">peer_2:</b> gday receive <b>1.188T.W3H.E</b>
+<i>*Asks for confirmation*</i>
 <b>Transfer complete.</b>
 </pre>
 
-![demo](/gday_demo.webp)
+[![asciicast](https://asciinema.org/a/662397.svg)](https://asciinema.org/a/662397)
 
 ## Features
 

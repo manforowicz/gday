@@ -7,23 +7,24 @@ use crate::{FileMeta, FileOfferMsg, FileResponseMsg};
 /// Test serializing and deserializing messages.
 #[test]
 fn sending_messages() {
-    let mut bytes = std::collections::VecDeque::new();
+    let mut bytes =
+        crate::encrypt_connection(std::collections::VecDeque::new(), &[42; 32]).unwrap();
 
     for msg in get_offer_msg_examples() {
-        crate::to_writer(msg, &mut bytes).unwrap();
+        crate::write_to(msg, &mut bytes).unwrap();
     }
 
     for msg in get_offer_msg_examples() {
-        let deserialized_msg: FileOfferMsg = crate::from_reader(&mut bytes).unwrap();
+        let deserialized_msg: FileOfferMsg = crate::read_from(&mut bytes).unwrap();
         assert_eq!(msg, deserialized_msg);
     }
 
     for msg in get_response_msg_examples() {
-        crate::to_writer(msg, &mut bytes).unwrap();
+        crate::write_to(msg, &mut bytes).unwrap();
     }
 
     for msg in get_response_msg_examples() {
-        let deserialized_msg: FileResponseMsg = crate::from_reader(&mut bytes).unwrap();
+        let deserialized_msg: FileResponseMsg = crate::read_from(&mut bytes).unwrap();
         assert_eq!(msg, deserialized_msg);
     }
 }

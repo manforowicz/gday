@@ -1,15 +1,17 @@
 [package]
-name = "gday_file_offer_protocol"
+name = "gday_file_transfer"
 version = "0.1.0"
 authors = ["Marcin Anforowicz"]
 edition = "2021"
-description = "A protocol for peers to offer to send each other files."
+description = "A minimal protocol to securely transfer files over an IO stream. Used by gday."
 license = "MIT"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+gday_encryption = { version = "0.1.0", path = "../gday_encryption" }
 os_str_bytes = "7.0.0"
-serde = "1.0.197"
+rand = "0.8.5"
+serde = { version = "1.0.197", features = ["derive"] }
 serde_json = "1.0.115"
 thiserror = "1.0.58"

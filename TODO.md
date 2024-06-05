@@ -8,6 +8,10 @@ Not all of them are desirable or necessary.
 
 - Add explanation in readme, of how this differs from magic wormhole.
 
+- Figure out why gday freezes when server is unresponsive.
+
+- Make additional command line options only show when there's a need for them.
+
 ## Abandoned ideas
 
 - Maybe add some versioning to the protocols?
@@ -38,4 +42,4 @@ For the bash demo:
 - `Ctrl+b %` to split screen.
 - `Ctrl+b o` to switch pane.
 - `export PS1="\033[1;92mpeer 1\n$ \033[0m"` to shorten bash prompt
-- `export PATH="<PATH TO GDAY HERE>:$PATH` to get `gday` command.
+- `export PATH=<PATH TO GDAY'S DIRECTORY>:$PATH` to get `gday` command.

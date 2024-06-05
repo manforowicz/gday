@@ -1,24 +1,5 @@
-//! This protocol lets one user offer to send some files,
-//! and the other user respond with the files it wants to receive.
-//!
-//! On it's own, this crate doesn't do anything other than define a shared protocol, and functions to
-//! send and receive messages of this protocol.
-//!
-//! # Process
-//!
-//! Using this protocol goes something like this:
-//!
-//! 1. Peer A sends [`FileOfferMsg`] to Peer B, containing a [`Vec`] of metadata about
-//!     files it offers to send.
-//!
-//! 2. Peer B sends [`FileResponseMsg`] to Peer A, containing a [`Vec`] of [`Option<u64>`] indicating
-//!     how much of each file to send.
-//!
-#![forbid(unsafe_code)]
-#![warn(clippy::all)]
-
-mod tests;
-
+use crate::Error;
+use gday_encryption::EncryptedStream;
 use os_str_bytes::OsStrBytesExt;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{
@@ -26,14 +7,24 @@ use std::{
     io::{Read, Write},
     path::PathBuf,
 };
-use thiserror::Error;
 
 /// Information about an offered file.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct FileMeta {
-    /// The file path offered
+    /// The path offered
     pub short_path: PathBuf,
-    /// Length of the file
+    /// Length of the file in bytes
+    pub len: u64,
+}
+
+/// Information about a locally stored file
+#[derive(Debug, Clone)]
+pub struct FileMetaLocal {
+    /// The path that will be offered to the peer
+    pub short_path: PathBuf,
+    /// The file's location on this local machine
+    pub local_path: PathBuf,
+    /// Length of the file in bytes
     pub len: u64,
 }
 
@@ -60,13 +51,13 @@ impl FileMeta {
         Ok(false)
     }
 
-    /// Returns a version of [`Self::get_save_path()`]
-    /// that doesn't exist in the filesystem yet.
+    /// Returns a suffixed [`Self::get_save_path()`]
+    /// that isn't taken yet.
     ///
     /// If [`Self::get_save_path()`] already exists, suffixes its file stem with
-    /// `_1`, `_2`, ..., `_3` until a free path is found. If all of
+    /// `_1`, `_2`, ..., `_99` until a free path is found. If all of
     /// these are occupied, returns [`Error::FilenameOccupied`].
-    pub fn get_unused_save_path(&self) -> Result<PathBuf, Error> {
+    pub fn get_unoccupied_save_path(&self) -> Result<PathBuf, Error> {
         let plain_path = self.get_save_path()?;
 
         let mut modified_path = plain_path.clone();
@@ -81,62 +72,32 @@ impl FileMeta {
             // otherwise make a new `modified_path`
             // with a different suffix
             modified_path = plain_path.clone();
-            let suffix = OsString::from(format!("_{i}"));
+            let suffix = OsString::from(format!(" ({i})"));
             add_suffix_to_file_stem(&mut modified_path, &suffix)?;
         }
 
         Err(Error::FilenameOccupied(plain_path))
     }
 
-    /// Returns [`Self::get_save_path()`] with its file name
-    /// prefixed by `prefix`.
-    pub fn get_prefixed_save_path(&self, prefix: String) -> std::io::Result<PathBuf> {
-        // get this file's save path
-        let mut save_path = self.get_save_path()?;
-
-        // add a prefix to its filename
-        add_prefix_to_file_name(&mut save_path, prefix.into())?;
-
-        Ok(save_path)
-    }
-}
-
-/// Prepend `prefix` to the file name of `path`
-fn add_prefix_to_file_name(path: &mut PathBuf, mut prefix: OsString) -> std::io::Result<()> {
-    // isolate the file name
-    let filename: &OsStr = path.file_name().expect("Path terminates in ..");
-
-    // add a prefix to the file name
-    prefix.push(filename);
-
-    // join the path together
-    path.set_file_name(prefix);
-
-    Ok(())
-}
-
-/// Append `suffix` to the file stem of `path`
-fn add_suffix_to_file_stem(path: &mut PathBuf, suffix: &OsStr) -> std::io::Result<()> {
-    // isolate the file name
-    let filename = path.file_name().expect("Path terminates in ..");
-
-    // split the filename at the first '.'
-    if let Some((first, second)) = filename.split_once('.') {
-        let mut first = OsString::from(first);
-        first.push(suffix);
-        first.push(".");
-        first.push(second);
-        path.set_file_name(first);
-
-    // if filename doesn't contain '.'
-    // then append the suffix to the whole filename
-    } else {
-        let mut filename = OsString::from(filename);
-        filename.push(suffix);
+    /// Returns [`Self::get_unoccupied_save_path()`] suffixed by `".part"`.
+    pub fn get_partial_download_path(&self) -> Result<PathBuf, Error> {
+        let mut path = self.get_unoccupied_save_path()?;
+        let mut filename = path
+            .file_name()
+            .expect("Path terminates in ..")
+            .to_os_string();
+        filename.push(".part");
         path.set_file_name(filename);
+        Ok(path)
     }
 
-    Ok(())
+    /// Returns `true` iff [`Self::get_partial_download_path()`] already exists.
+    pub fn partial_download_exists(&self) -> Result<bool, Error> {
+        let download_path = self.get_partial_download_path()?;
+
+        // check if the file can be opened
+        Ok(std::fs::File::open(download_path).is_ok())
+    }
 }
 
 impl From<FileMetaLocal> for FileMeta {
@@ -147,17 +108,6 @@ impl From<FileMetaLocal> for FileMeta {
             len: other.len,
         }
     }
-}
-
-/// Information about a locally stored file
-#[derive(Debug, Clone)]
-pub struct FileMetaLocal {
-    /// The path that will be offered to the peer
-    pub short_path: PathBuf,
-    /// The file's location on this local machine
-    pub local_path: PathBuf,
-    /// Length of the file
-    pub len: u64,
 }
 
 impl PartialEq for FileMetaLocal {
@@ -176,7 +126,7 @@ impl std::hash::Hash for FileMetaLocal {
     }
 }
 
-/// A list of file metadatas that this peer is offering
+/// A [`Vec`] of file metadatas that this peer is offering
 /// to send. The other peer should reply with [`FileResponseMsg`].
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct FileOfferMsg {
@@ -184,9 +134,15 @@ pub struct FileOfferMsg {
 }
 
 /// The receiving peer should reply with this message to [`FileOfferMsg`].
+/// Specifies which of the offered files the other peer should send.
 ///
-/// Specifies which of the offered files the other peer
-/// should send.
+/// A [`Vec`] of [`Option<u64>`] that correspond to the offered [`FileMeta`]
+/// at the same indices.
+///
+/// - `None` indicates that the corresponding file is rejected.
+/// - `Some(0)` indicates that the corresponding file is fully accepted.
+/// - `Some(k)` indicates that the corresponding file is accepted,
+/// except for the first `k` bytes.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct FileResponseMsg {
     /// The accepted files. `Some(start_byte)` element accepts the offered
@@ -197,9 +153,14 @@ pub struct FileResponseMsg {
 
 /// Write `msg` to `writer` using [`serde_json`].
 /// Prefixes the message with 4 big-endian bytes that hold its length.
-pub fn to_writer(msg: impl Serialize, writer: &mut impl Write) -> Result<(), Error> {
+pub fn write_to(
+    msg: impl Serialize,
+    writer: &mut EncryptedStream<impl Write>,
+) -> Result<(), Error> {
     let vec = serde_json::to_vec(&msg)?;
-    let len_byte = u32::try_from(vec.len())?;
+    let Ok(len_byte) = u32::try_from(vec.len()) else {
+        return Err(Error::MsgTooLong);
+    };
     writer.write_all(&len_byte.to_be_bytes())?;
     writer.write_all(&vec)?;
     writer.flush()?;
@@ -208,7 +169,7 @@ pub fn to_writer(msg: impl Serialize, writer: &mut impl Write) -> Result<(), Err
 
 /// Read `msg` from `reader` using [`serde_json`].
 /// Assumes the message is prefixed with 4 big-endian bytes that hold its length.
-pub fn from_reader<T: DeserializeOwned>(reader: &mut impl Read) -> Result<T, Error> {
+pub fn read_from<T: DeserializeOwned>(reader: &mut EncryptedStream<impl Read>) -> Result<T, Error> {
     let mut len = [0_u8; 4];
     reader.read_exact(&mut len)?;
     let len = u32::from_be_bytes(len) as usize;
@@ -218,18 +179,26 @@ pub fn from_reader<T: DeserializeOwned>(reader: &mut impl Read) -> Result<T, Err
     Ok(serde_json::from_reader(&buf[..])?)
 }
 
-#[derive(Error, Debug)]
-#[non_exhaustive]
-pub enum Error {
-    #[error("Error encoding or decoding message: {0}")]
-    JSON(#[from] serde_json::Error),
+/// Private helper function. Appends `suffix` to the file stem of `path`.
+fn add_suffix_to_file_stem(path: &mut PathBuf, suffix: &OsStr) -> std::io::Result<()> {
+    // isolate the file name
+    let filename = path.file_name().expect("Path terminates in ..");
 
-    #[error("Error encoding or decoding message: {0}")]
-    IO(#[from] std::io::Error),
+    // split the filename at the first '.'
+    if let Some((first, second)) = filename.split_once('.') {
+        let mut filename = OsString::from(first);
+        filename.push(suffix);
+        filename.push(".");
+        filename.push(second);
+        path.set_file_name(filename);
 
-    #[error("Can't send message longer than 2^32 bytes: {0}")]
-    MsgTooLarge(#[from] std::num::TryFromIntError),
+    // if filename doesn't contain '.'
+    // then append the suffix to the whole filename
+    } else {
+        let mut filename = OsString::from(filename);
+        filename.push(suffix);
+        path.set_file_name(filename);
+    }
 
-    #[error("100 files with base name '{0}' already exist. Aborting save.")]
-    FilenameOccupied(PathBuf),
+    Ok(())
 }

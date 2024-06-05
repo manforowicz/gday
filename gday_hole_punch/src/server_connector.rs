@@ -210,10 +210,10 @@ pub fn connect_to_random_domain_name(
     Err(recent_error)
 }
 
-const SERVER_CONNECT_TIMEOUT: Duration = Duration::from_secs(2);
+const SERVER_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Tries connecting to this `domain_name` and `port`, on both IPv4 and IPv6.
-/// - Gives up connecting to each TCP address after 2 seconds.
+/// - Gives up connecting to each TCP address after 5 seconds.
 /// - Returns an error if each attempted failed.
 /// - Uses TLS if `encrypt` is true, otherwise uses unencrypted TCP.
 /// - Returns an error for any issues with TLS.

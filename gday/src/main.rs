@@ -10,25 +10,24 @@
 
 mod dialog;
 mod peer_code;
+mod tests;
 mod transfer;
 
-use crate::transfer::encrypt_connection;
+use crate::{dialog::ask_receive, peer_code::PeerCode};
 use clap::{Parser, Subcommand};
-use dialog::ask_receive;
-use gday_file_offer_protocol::{
-    from_reader, to_writer, FileMeta, FileMetaLocal, FileOfferMsg, FileResponseMsg,
+use gday_file_transfer::{
+    encrypt_connection, read_from, write_to, FileMeta, FileMetaLocal, FileOfferMsg, FileResponseMsg,
 };
 use gday_hole_punch::{
     server_connector::{self, DEFAULT_SERVERS},
     ContactSharer,
 };
-use log::{error, info};
+use log::error;
+use log::info;
 use owo_colors::OwoColorize;
-use peer_code::PeerCode;
 use rand::Rng;
 use std::path::PathBuf;
 
-const TMP_DOWNLOAD_PREFIX: &str = "GDAY_PARTIAL_DOWNLOAD_";
 const HOLE_PUNCH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
 #[derive(Parser, Debug)]
@@ -66,6 +65,7 @@ enum Command {
         #[arg(short, long)]
         code: Option<String>,
 
+        /// TODO: Comment
         paths: Vec<PathBuf>,
     },
 
@@ -91,7 +91,7 @@ fn main() {
     }
 }
 
-fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
+fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
     // get the server port
     let port = if let Some(port) = args.port {
         port
@@ -114,7 +114,7 @@ fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
 
     match args.operation {
         // sending files
-        Command::Send { paths, code } => {
+        crate::Command::Send { paths, code } => {
             // confirm the user wants to send these files
             let local_files = dialog::ask_send(&paths)?;
 
@@ -155,7 +155,7 @@ fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
                 HOLE_PUNCH_TIMEOUT,
             )?;
 
-            let mut stream = encrypt_connection(stream, &shared_key, true)?;
+            let mut stream = encrypt_connection(stream, &shared_key)?;
 
             info!("Established authenticated encrypted connection with peer.");
 
@@ -166,12 +166,12 @@ fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
                 .collect();
 
             // offer these files to the peer
-            to_writer(FileOfferMsg { files }, &mut stream)?;
+            write_to(FileOfferMsg { files }, &mut stream)?;
 
             println!("Waiting for your mate to respond to your file offer.");
 
             // receive file offer from peer
-            let response: FileResponseMsg = from_reader(&mut stream)?;
+            let response: FileResponseMsg = read_from(&mut stream)?;
 
             let accepted = response.response.iter().filter_map(|&x| x);
             let num_accepted = accepted.clone().count();
@@ -194,7 +194,7 @@ fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
         }
 
         // receiving files
-        Command::Receive { code } => {
+        crate::Command::Receive { code } => {
             let code = PeerCode::parse(&code, true)?;
             let (contact_sharer, my_contact) =
                 ContactSharer::join_room(code.room_code, &mut server_connection)?;
@@ -212,18 +212,18 @@ fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
                 HOLE_PUNCH_TIMEOUT,
             )?;
 
-            let mut stream = encrypt_connection(stream, &shared_key, false)?;
+            let mut stream = encrypt_connection(stream, &shared_key)?;
 
             info!("Established authenticated encrypted connection with peer.");
 
             // receive file offer from peer
-            let offer: FileOfferMsg = from_reader(&mut stream)?;
+            let offer: FileOfferMsg = read_from(&mut stream)?;
 
             // ask user which files to receive
             let accepted = ask_receive(&offer.files)?;
 
             // respond to the file offer
-            to_writer(
+            write_to(
                 FileResponseMsg {
                     response: accepted.clone(),
                 },

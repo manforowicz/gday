@@ -1,186 +1,82 @@
-use crate::TMP_DOWNLOAD_PREFIX;
 use gday_encryption::EncryptedStream;
-use gday_file_offer_protocol::{FileMeta, FileMetaLocal};
+use gday_file_transfer::{FileMeta, FileMetaLocal, TransferReport};
 use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
-use std::fs::{File, OpenOptions};
-use std::io::{BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write};
-
-const FILE_BUFFER_SIZE: usize = 1_000_000;
-
-/// Wrap a [`std::net::TcpStream`] in a [`gday_encryption::EncryptedStream`].
-/// - The creator sends a random nonce, which the other peer receives and uses
-pub fn encrypt_connection<T: Read + Write>(
-    mut io_stream: T,
-    shared_key: &[u8; 32],
-    is_creator: bool,
-) -> std::io::Result<EncryptedStream<T>> {
-    // send and receive nonces over unencrypted TCP
-    let nonce = if is_creator {
-        let nonce: [u8; 7] = rand::random();
-        io_stream.write_all(&nonce)?;
-        io_stream.flush()?;
-        nonce
-    } else {
-        let mut nonce = [0_u8; 7];
-        io_stream.read_exact(&mut nonce)?;
-        nonce
-    };
-    Ok(EncryptedStream::new(io_stream, shared_key, &nonce))
-}
 
 /// Sequentially write the given files to this `writer`.
 pub fn send_files(
-    writer: &mut impl Write,
+    writer: &mut EncryptedStream<std::net::TcpStream>,
     files: &[(FileMetaLocal, Option<u64>)],
 ) -> Result<(), Error> {
-    // sum up total transfer size,
-    // for display on the progress bar
-    let size: u64 = files
-        .iter()
-        .map(|(offer, response)| {
-            if let Some(start) = response {
-                offer.len - start
-            } else {
-                0
-            }
-        })
-        .sum();
-    let progress = create_progress_bar(size);
-    let mut writer = progress.wrap_write(writer);
+    let progress_bar = create_progress_bar();
+    let mut current_file = String::from("Starting...");
 
-    // for all files
-    for (offer, response) in files {
-        if let Some(start) = response {
-            // set progress bar message to file path
-            let msg = offer.short_path.display();
-            progress.set_message(format!("sending {msg}"));
+    let update_progress = |report: &TransferReport| {
+        progress_bar.set_position(report.processed_bytes);
+        progress_bar.set_length(report.total_bytes);
+        if current_file.as_str() != report.current_file.to_string_lossy() {
+            current_file = report.current_file.to_string_lossy().to_string();
+            progress_bar.set_message(format!("Receiving {}", current_file));
+        }
+    };
 
-            let file = File::open(&offer.local_path)?;
-            if file.metadata()?.len() != offer.len {
-                return Err(Error::UnexpectedFileLen);
-            }
-
-            // copy the file into the writer
-            let mut file = BufReader::with_capacity(FILE_BUFFER_SIZE, file);
-
-            file.seek(SeekFrom::Start(*start))?;
-            std::io::copy(&mut file, &mut writer)?;
+    match gday_file_transfer::send_files(writer, files, Some(update_progress)) {
+        Ok(()) => {
+            progress_bar.finish_with_message("Transfer complete.");
+            Ok(())
+        }
+        Err(err) => {
+            progress_bar.abandon_with_message("Transfer failed.");
+            Err(err.into())
         }
     }
-
-    writer.flush()?;
-    progress.finish_with_message("Done sending!");
-
-    Ok(())
 }
 
 /// Sequentially save the given `files` from this `reader`.
 pub fn receive_files(
-    reader: &mut impl BufRead,
+    reader: &mut EncryptedStream<std::net::TcpStream>,
     files: &[(FileMeta, Option<u64>)],
 ) -> Result<(), Error> {
-    // sum up total transfer size
-    let size: u64 = files
-        .iter()
-        .map(|(offer, response)| {
-            if let Some(start) = response {
-                offer.len - start
-            } else {
-                0
-            }
-        })
-        .sum();
+    let progress_bar = create_progress_bar();
+    let mut current_file = String::from("Starting...");
 
-    let progress = create_progress_bar(size);
+    let update_progress = |report: &TransferReport| {
+        progress_bar.set_position(report.processed_bytes);
+        progress_bar.set_length(report.total_bytes);
+        if current_file.as_str() != report.current_file.to_string_lossy() {
+            current_file = report.current_file.to_string_lossy().to_string();
+            progress_bar.set_message(format!("Receiving {}", current_file));
+        }
+    };
 
-    // iterate over all the files
-    for (offer, response) in files {
-        // download whole file
-        if let Some(0) = response {
-            // set progress bar message to file path
-            let msg = offer.short_path.display();
-            progress.set_message(format!("receiving {msg}"));
-
-            // get this file's save path
-            let final_save_path = offer.get_unused_save_path()?;
-
-            // create a directory for this file if it's missing
-            if let Some(parent) = final_save_path.parent() {
-                std::fs::create_dir_all(parent)?;
-            }
-
-            let tmp_path = offer.get_prefixed_save_path(TMP_DOWNLOAD_PREFIX.into())?;
-
-            // create the temporary download file
-            let mut file = BufWriter::with_capacity(FILE_BUFFER_SIZE, File::create(&tmp_path)?);
-
-            // only take the length of the file from the reader
-            let mut reader = reader.take(offer.len);
-
-            // wrap the writer in progress bar
-            let mut writer = progress.wrap_write(&mut file);
-
-            // copy from the reader into the file
-            std::io::copy(&mut reader, &mut writer)?;
-
-            // rename the temporary download file to its final name
-            std::fs::rename(tmp_path, final_save_path)?;
-
-        // resume interrupted download
-        } else if let Some(start) = response {
-            // set progress bar message to file path
-            let msg = offer.short_path.display();
-            progress.set_message(format!("receiving {msg}"));
-
-            // open the partially downloaded file in append mode
-            let tmp_path = offer.get_prefixed_save_path(TMP_DOWNLOAD_PREFIX.into())?;
-            let file = OpenOptions::new().append(true).open(&tmp_path)?;
-            if file.metadata()?.len() != *start {
-                return Err(Error::UnexpectedFileLen);
-            }
-            let file = BufWriter::with_capacity(FILE_BUFFER_SIZE, file);
-
-            // only take the length of the remaining part of the file from the reader
-            let mut reader = reader.take(offer.len - start);
-
-            // wrap the writer in progress bar
-            let mut writer = progress.wrap_write(file);
-
-            // copy from the reader into the file
-            std::io::copy(&mut reader, &mut writer)?;
-
-            // rename the temporary download file to its final name
-            let save_path = offer.get_unused_save_path()?;
-            std::fs::rename(tmp_path, save_path)?;
+    match gday_file_transfer::receive_files(reader, files, Some(update_progress)) {
+        Ok(()) => {
+            progress_bar.finish_with_message("Transfer complete.");
+            Ok(())
+        }
+        Err(err) => {
+            progress_bar.abandon_with_message("Transfer failed.");
+            Err(err.into())
         }
     }
-
-    progress.finish_with_message("Done downloading!");
-
-    Ok(())
 }
 
 /// Create a stylded [`ProgressBar`].
-fn create_progress_bar(bytes: u64) -> ProgressBar {
+fn create_progress_bar() -> ProgressBar {
     let style = ProgressStyle::with_template(
         "{msg} [{wide_bar}] {bytes}/{total_bytes} | {bytes_per_sec} | eta: {eta}",
     )
     .expect("Progress bar style string was invalid.");
     let draw = ProgressDrawTarget::stderr_with_hz(2);
-    ProgressBar::with_draw_target(Some(bytes), draw)
+    ProgressBar::with_draw_target(None, draw)
         .with_style(style)
         .with_message("starting...")
 }
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    /// A local file changed length between checks.
-    #[error("A local file changed length between checks.")]
-    UnexpectedFileLen,
-
     /// Couldn't find an empty save path for a file
-    #[error("Couldn't find an empty save path: {0}")]
-    CouldntGetEmptySavePath(#[from] gday_file_offer_protocol::Error),
+    #[error("Error transfering files: {0}")]
+    FileTransferError(#[from] gday_file_transfer::Error),
 
     /// IO Error
     #[error("IO Error: {0}")]

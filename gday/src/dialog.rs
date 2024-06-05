@@ -1,4 +1,4 @@
-use gday_file_offer_protocol::{FileMeta, FileMetaLocal};
+use gday_file_transfer::{FileMeta, FileMetaLocal};
 use indicatif::HumanBytes;
 use owo_colors::OwoColorize;
 use std::{
@@ -8,14 +8,12 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::TMP_DOWNLOAD_PREFIX;
-
 /// Asks the user which of these offered `files` to accept.
 /// Returns a `Vec<Option<u64>>`, where each
 /// - `None` represents rejecting the file at this index,
 /// - `Some(0)` represents fully accepting the file at this index,
 /// - `Some(x)` represents resuming with the first `x` bytes skipped.
-pub fn ask_receive(files: &[FileMeta]) -> std::io::Result<Vec<Option<u64>>> {
+pub fn ask_receive(files: &[FileMeta]) -> Result<Vec<Option<u64>>, gday_file_transfer::Error> {
     let mut new_files = Vec::<Option<u64>>::with_capacity(files.len());
     let mut new_size = 0;
     let mut total_size = 0;
@@ -130,8 +128,8 @@ pub fn ask_send(paths: &[PathBuf]) -> std::io::Result<Vec<FileMetaLocal>> {
 /// Checks if there exists a file like `meta`
 /// whose download was interrupted.
 /// Iff there is an interrupted file, returns Some(size of interrupted file)
-fn interrupted_exists(meta: &FileMeta) -> std::io::Result<Option<u64>> {
-    let local_path = meta.get_prefixed_save_path(TMP_DOWNLOAD_PREFIX.into())?;
+fn interrupted_exists(meta: &FileMeta) -> Result<Option<u64>, gday_file_transfer::Error> {
+    let local_path = meta.get_partial_download_path()?;
 
     // check if the file can be opened
     if let Ok(file) = File::open(local_path) {

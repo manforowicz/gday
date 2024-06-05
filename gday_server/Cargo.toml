@@ -1,5 +1,5 @@
 [package]
-name = "gday_contact_exchange_server"
+name = "gday_server"
 version = "0.1.0"
 authors = ["Marcin Anforowicz"]
 edition = "2021"

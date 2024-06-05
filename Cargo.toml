@@ -3,9 +3,9 @@ resolver = "2"
 
 members = [
     "gday",
-    "gday_contact_exchange_server",
+    "gday_server",
     "gday_hole_punch",
     "gday_encryption",
     "gday_contact_exchange_protocol",
-    "gday_file_offer_protocol",
+    "gday_file_transfer",
 ]
