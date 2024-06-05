@@ -16,12 +16,14 @@
 
 mod contact_sharer;
 mod hole_puncher;
+mod peer_code;
 pub mod server_connector;
 
 pub use contact_sharer::ContactSharer;
 pub use gday_contact_exchange_protocol::DEFAULT_TCP_PORT;
 pub use gday_contact_exchange_protocol::DEFAULT_TLS_PORT;
 pub use hole_puncher::try_connect_to_peer;
+pub use peer_code::PeerCode;
 
 use gday_contact_exchange_protocol::ServerMsg;
 
@@ -99,4 +101,20 @@ pub enum Error {
     files over a relay to circumvent NATs, such as magic-wormhole."
     )]
     HolePunchTimeout,
+
+    /// Couldn't parse [`PeerCode`]
+    #[error("Couldn't parse your code: {0}. Check it for typos!")]
+    CouldntParse(#[from] std::num::ParseIntError),
+
+    /// Incorrect checksum when parsing [`PeerCode`]
+    #[error("Your code's checksum (last digit) is incorrect. Check it for typos!")]
+    IncorrectChecksum,
+
+    /// Couldn't parse [`PeerCode`]
+    #[error("Wrong number of segments in your code. Check it for typos!")]
+    WrongNumberOfSegments,
+
+    /// Missing required checksum in [`PeerCode`]
+    #[error("Your code is missing the required checksum digit. Check it for typos!")]
+    MissingChecksum,
 }

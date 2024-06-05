@@ -1,17 +1,22 @@
-use thiserror::Error;
+use serde::{Deserialize, Serialize};
 
-/// Represents the code that one peer must give another
-/// to start establishing contact.
+use crate::Error;
+
+/// Convinience struct for sharing info
+/// required for contact-exchange between two peers.
 ///
-/// Can be converted to and from [`String`] in hexadecimal of form:
-/// `"server_id.room_code.shared_secret.checksum"`.
-#[derive(PartialEq, Debug)]
+/// Use [`PeerCode::to_str()`] and [`PeerCode::parse()`]
+/// to convert to and from a short human-readable code.
+#[derive(PartialEq, Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct PeerCode {
-    /// The id of the gday server the peers will connect to
+    /// Pass to [`crate::server_connector::connect_to_server_id()`]
+    /// to connect to a gday contact exchange server.
     pub server_id: u64,
-    /// The room code that the peers will use
+    /// Pass to [`crate::ContactSharer`] to specify
+    /// which room in the server to exchange contacts in.
     pub room_code: u64,
-    /// A shared secret the peers will use to authenticate each other
+    /// Pass to [`crate::try_connect_to_peer()`] to authenticate
+    /// the peer when hole-punching.
     pub shared_secret: u64,
 }
 
@@ -78,22 +83,6 @@ impl PeerCode {
     fn get_checksum(&self) -> u64 {
         ((self.server_id % 17) + (self.room_code % 17) * 2 + (self.shared_secret % 17) * 3) % 17
     }
-}
-
-#[derive(Error, Debug)]
-#[non_exhaustive]
-pub enum Error {
-    #[error("Couldn't decode your code: {0}. Check it for typos!")]
-    CouldntParse(#[from] std::num::ParseIntError),
-
-    #[error("Your code's checksum (last digit) is incorrect. Check it for typos!")]
-    IncorrectChecksum,
-
-    #[error("Wrong number of segments in your code. Check it for typos!")]
-    WrongNumberOfSegments,
-
-    #[error("Your code is missing the required checksum digit. Check it for typos!")]
-    MissingChecksum,
 }
 
 #[cfg(test)]

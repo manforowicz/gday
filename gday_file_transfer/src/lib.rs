@@ -22,8 +22,9 @@ mod offer;
 mod tests;
 mod transfer;
 
+use std::collections::HashSet;
 use std::io::{Read, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use gday_encryption::EncryptedStream;
 use thiserror::Error;
@@ -53,6 +54,66 @@ pub fn encrypt_connection<T: Read + Write>(
         .for_each(|(x1, x2)| *x1 ^= *x2);
 
     Ok(EncryptedStream::new(io_stream, shared_key, &peer_seed))
+}
+
+/// Takes a set of `paths`, each of which may be a directory or file.
+/// Returns the [`FileMetaLocal`] of each file, including those in the given directories.
+pub fn get_paths_metadatas(paths: &[PathBuf]) -> std::io::Result<Vec<FileMetaLocal>> {
+    // using a set to prevent duplicates
+    let mut files = HashSet::new();
+
+    for path in paths {
+        // normalize and remove symlinks
+        let path = path.canonicalize()?;
+
+        // get the parent path
+        let top_path = &path.parent().unwrap_or(Path::new(""));
+
+        // add all files in this path to the files set
+        get_path_metadatas_helper(top_path, &path, &mut files)?;
+    }
+
+    // build a vec from the set, and return
+    Ok(Vec::from_iter(files))
+}
+
+/// - The [`FileMetaLocal::short_path`] will strip the prefix
+/// `top_path` from all paths. `top_path` must be a prefix of `path`.
+/// - `path` is the file or directory where recursive traversal begins.
+/// - `files` is a [`HashSet`] to which found files will be inserted.
+pub fn get_path_metadatas_helper(
+    top_path: &Path,
+    path: &Path,
+    files: &mut HashSet<FileMetaLocal>,
+) -> std::io::Result<()> {
+    if path.is_dir() {
+        // recursively serch subdirectories
+        for entry in path.read_dir()? {
+            get_path_metadatas_helper(top_path, &entry?.path(), files)?;
+        }
+    } else if path.is_file() {
+        // return an error if a file couldn't be opened.
+        std::fs::File::open(path)?;
+
+        // get the shortened path
+        let short_path = path
+            .strip_prefix(top_path)
+            .expect("Prefix couldn't be stripped?")
+            .to_path_buf();
+
+        // get the file's size
+        let size = path.metadata()?.len();
+
+        // insert this file metatada into set
+        let meta = FileMetaLocal {
+            local_path: path.to_path_buf(),
+            short_path,
+            len: size,
+        };
+        files.insert(meta);
+    }
+
+    Ok(())
 }
 
 /// Error with gday file transfer.

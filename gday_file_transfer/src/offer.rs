@@ -61,7 +61,7 @@ impl FileMeta {
         let plain_path = self.get_save_path()?;
 
         if !plain_path.exists() {
-            return Ok(plain_path)
+            return Ok(plain_path);
         }
 
         for i in 1..100 {
@@ -69,7 +69,7 @@ impl FileMeta {
             // with a different suffix
             let mut modified_path = plain_path.clone();
             let suffix = OsString::from(format!(" ({i})"));
-            add_suffix_to_file_stem(&mut modified_path, &suffix)?;
+            add_suffix_to_file_stem(&mut modified_path, &suffix);
 
             // if the `modified_path` doesn't exist,
             // then return it
@@ -93,12 +93,24 @@ impl FileMeta {
         Ok(path)
     }
 
-    /// Returns `true` iff [`Self::get_partial_download_path()`] already exists.
-    pub fn partial_download_exists(&self) -> Result<bool, Error> {
-        let download_path = self.get_partial_download_path()?;
+    /// Checks if [`Self::get_partial_download_path()`] exists
+    /// and has a length smaller than [`Self::len`].
+    /// If so, returns the length of the partially downloaded file.
+    /// Otherwise returns None.
+    pub fn partial_download_exists(&self) -> Result<Option<u64>, Error> {
+        let local_path = self.get_partial_download_path()?;
 
         // check if the file can be opened
-        Ok(std::fs::File::open(download_path).is_ok())
+        if let Ok(file) = std::fs::File::open(local_path) {
+            // check if its length is less than the meta length
+            if let Ok(local_meta) = file.metadata() {
+                let local_len = local_meta.len();
+                if local_len < self.len {
+                    return Ok(Some(local_len));
+                }
+            }
+        }
+        Ok(None)
     }
 }
 
@@ -182,7 +194,7 @@ pub fn read_from<T: DeserializeOwned>(reader: &mut EncryptedStream<impl Read>) -
 }
 
 /// Private helper function. Appends `suffix` to the file stem of `path`.
-fn add_suffix_to_file_stem(path: &mut PathBuf, suffix: &OsStr) -> std::io::Result<()> {
+fn add_suffix_to_file_stem(path: &mut PathBuf, suffix: &OsStr) {
     // isolate the file name
     let filename = path.file_name().expect("Path terminates in ..");
 
@@ -201,6 +213,4 @@ fn add_suffix_to_file_stem(path: &mut PathBuf, suffix: &OsStr) -> std::io::Resul
         filename.push(suffix);
         path.set_file_name(filename);
     }
-
-    Ok(())
 }

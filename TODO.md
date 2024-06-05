@@ -6,11 +6,18 @@ Not all of them are desirable or necessary.
 
 - Add some sort of end-to-end integration tests.
 
+- Automatically test interrupted transfer resumption.
+
 - Add explanation in readme, of how this differs from magic wormhole.
 
-- Figure out why gday freezes when server is unresponsive.
+- Figure out why gday freezes when server is unresponsive. Add a timeout.
 
 - Make additional command line options only show when there's a need for them.
+(choosing which files to download)
+
+- Add cargo audit to GitHub continuous integration.
+
+- Factor things out so that `gday` really only handles terminal UI stuff.
 
 ## Abandoned ideas
 
@@ -34,12 +41,3 @@ Not all of them are desirable or necessary.
   during hole-punching. That might please some NATs that lose state when TCP connection is closed.
   This is not really necessary, since I can just add a comment
   telling any library users to not drop ServerConnection when calling connect to peer.
-
-# Random notes
-
-For the bash demo:
-- `tmux`
-- `Ctrl+b %` to split screen.
-- `Ctrl+b o` to switch pane.
-- `export PS1="\033[1;92mpeer 1\n$ \033[0m"` to shorten bash prompt
-- `export PATH=<PATH TO GDAY'S DIRECTORY>:$PATH` to get `gday` command.

@@ -9,15 +9,15 @@
 #![warn(clippy::all)]
 
 mod dialog;
-mod peer_code;
 mod tests;
 mod transfer;
 
-use crate::{dialog::ask_receive, peer_code::PeerCode};
+use crate::dialog::ask_receive;
 use clap::{Parser, Subcommand};
 use gday_file_transfer::{
     encrypt_connection, read_from, write_to, FileMeta, FileMetaLocal, FileOfferMsg, FileResponseMsg,
 };
+use gday_hole_punch::PeerCode;
 use gday_hole_punch::{
     server_connector::{self, DEFAULT_SERVERS},
     ContactSharer,

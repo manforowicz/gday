@@ -6,7 +6,7 @@ use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
 pub fn send_files(
     writer: &mut EncryptedStream<std::net::TcpStream>,
     files: &[(FileMetaLocal, Option<u64>)],
-) -> Result<(), Error> {
+) -> Result<(), Box<dyn std::error::Error>> {
     let progress_bar = create_progress_bar();
     let mut current_file = String::from("Starting...");
 
@@ -35,7 +35,7 @@ pub fn send_files(
 pub fn receive_files(
     reader: &mut EncryptedStream<std::net::TcpStream>,
     files: &[(FileMeta, Option<u64>)],
-) -> Result<(), Error> {
+) -> Result<(), Box<dyn std::error::Error>> {
     let progress_bar = create_progress_bar();
     let mut current_file = String::from("Starting...");
 
@@ -70,15 +70,4 @@ fn create_progress_bar() -> ProgressBar {
     ProgressBar::with_draw_target(None, draw)
         .with_style(style)
         .with_message("starting...")
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum Error {
-    /// Couldn't find an empty save path for a file
-    #[error("Error transfering files: {0}")]
-    FileTransferError(#[from] gday_file_transfer::Error),
-
-    /// IO Error
-    #[error("IO Error: {0}")]
-    IO(#[from] std::io::Error),
 }
