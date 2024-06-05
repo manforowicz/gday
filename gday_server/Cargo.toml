@@ -10,8 +10,8 @@ license = "MIT"
 
 [dependencies]
 clap = { version = "4.5.4", features = ["derive"] }
-socket2 = "0.5.6"
-tokio = { version = "1.37.0", features = [
+socket2 = "0.5.7"
+tokio = { version = "1.38.0", features = [
     "rt-multi-thread",
     "macros",
     "net",
@@ -20,7 +20,7 @@ tokio = { version = "1.37.0", features = [
 ] }
 tokio-rustls = "0.26.0"
 gday_contact_exchange_protocol = { path = "../gday_contact_exchange_protocol" }
-thiserror = "1.0.58"
+thiserror = "1.0.61"
 log = "0.4.21"
 env_logger = "0.11.3"
-rustls-pemfile = "2.1.1"
+rustls-pemfile = "2.1.2"

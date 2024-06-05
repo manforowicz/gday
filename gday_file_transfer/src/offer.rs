@@ -60,20 +60,22 @@ impl FileMeta {
     pub fn get_unoccupied_save_path(&self) -> Result<PathBuf, Error> {
         let plain_path = self.get_save_path()?;
 
-        let mut modified_path = plain_path.clone();
+        if !plain_path.exists() {
+            return Ok(plain_path)
+        }
 
         for i in 1..100 {
+            // otherwise make a new `modified_path`
+            // with a different suffix
+            let mut modified_path = plain_path.clone();
+            let suffix = OsString::from(format!(" ({i})"));
+            add_suffix_to_file_stem(&mut modified_path, &suffix)?;
+
             // if the `modified_path` doesn't exist,
             // then return it
             if !modified_path.exists() {
                 return Ok(modified_path);
             }
-
-            // otherwise make a new `modified_path`
-            // with a different suffix
-            modified_path = plain_path.clone();
-            let suffix = OsString::from(format!(" ({i})"));
-            add_suffix_to_file_stem(&mut modified_path, &suffix)?;
         }
 
         Err(Error::FilenameOccupied(plain_path))

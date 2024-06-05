@@ -56,7 +56,7 @@ pub fn send_files(
         // if the other peer requested this file
         if let Some(start) = response {
             // report the file path
-            writer.progress.current_file = offer.short_path.clone();
+            writer.progress.current_file.clone_from(&offer.short_path);
 
             let mut file = File::open(&offer.local_path)?;
 
@@ -118,7 +118,7 @@ pub fn receive_files(
         }
 
         // set progress bar message to file path
-        reader.progress.current_file = offer.short_path.clone();
+        reader.progress.current_file.clone_from(&offer.short_path);
 
         // get the partial download path
         let tmp_path = offer.get_partial_download_path()?;
