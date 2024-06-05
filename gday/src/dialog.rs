@@ -3,10 +3,7 @@
 use gday_file_transfer::{FileMeta, FileMetaLocal};
 use indicatif::HumanBytes;
 use owo_colors::OwoColorize;
-use std::{
-    io::Write,
-    path::PathBuf,
-};
+use std::{io::Write, path::PathBuf};
 
 /// Asks the user which of these offered `files` to accept.
 /// Returns a `Vec<Option<u64>>`, where each

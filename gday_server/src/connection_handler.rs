@@ -1,7 +1,5 @@
 use crate::state::{self, State};
-use gday_contact_exchange_protocol::{
-    deserialize_from_async, serialize_into_async, ClientMsg, ServerMsg,
-};
+use gday_contact_exchange_protocol::{read_from_async, write_to_async, ClientMsg, ServerMsg};
 use log::{debug, warn};
 use std::net::SocketAddr;
 use tokio::{
@@ -62,24 +60,24 @@ async fn handle_requests(
         match result {
             Ok(()) => (),
             Err(HandleMessageError::State(state::Error::NoSuchRoomCode)) => {
-                serialize_into_async(ServerMsg::ErrorNoSuchRoomID, tls).await?;
+                write_to_async(ServerMsg::ErrorNoSuchRoomID, tls).await?;
             }
             Err(HandleMessageError::Receiver(_)) => {
-                serialize_into_async(ServerMsg::ErrorPeerTimedOut, tls).await?;
+                write_to_async(ServerMsg::ErrorPeerTimedOut, tls).await?;
             }
             Err(HandleMessageError::State(state::Error::RoomCodeTaken)) => {
-                serialize_into_async(ServerMsg::ErrorRoomTaken, tls).await?;
+                write_to_async(ServerMsg::ErrorRoomTaken, tls).await?;
             }
             Err(HandleMessageError::State(state::Error::TooManyRequests)) => {
-                serialize_into_async(ServerMsg::ErrorTooManyRequests, tls).await?;
+                write_to_async(ServerMsg::ErrorTooManyRequests, tls).await?;
                 return result;
             }
             Err(HandleMessageError::Protocol(_)) => {
-                serialize_into_async(ServerMsg::ErrorSyntax, tls).await?;
+                write_to_async(ServerMsg::ErrorSyntax, tls).await?;
                 return result;
             }
             Err(HandleMessageError::IO(_)) => {
-                serialize_into_async(ServerMsg::ErrorConnection, tls).await?;
+                write_to_async(ServerMsg::ErrorConnection, tls).await?;
                 return result;
             }
         }
@@ -92,7 +90,7 @@ async fn handle_message(
     origin: SocketAddr,
 ) -> Result<(), HandleMessageError> {
     // try to deserialize the message
-    let msg: ClientMsg = deserialize_from_async(tls).await?;
+    let msg: ClientMsg = read_from_async(tls).await?;
 
     // handle the message
     match msg {
@@ -101,7 +99,7 @@ async fn handle_message(
             state.create_room(room_code, origin.ip())?;
 
             // acknowledge that a room was created
-            serialize_into_async(ServerMsg::RoomCreated, tls).await?;
+            write_to_async(ServerMsg::RoomCreated, tls).await?;
         }
 
         ClientMsg::SendAddr {
@@ -118,7 +116,7 @@ async fn handle_message(
             }
 
             // acknowledge the receipt
-            serialize_into_async(ServerMsg::ReceivedAddr, tls).await?;
+            write_to_async(ServerMsg::ReceivedAddr, tls).await?;
         }
 
         ClientMsg::DoneSending {
@@ -128,13 +126,16 @@ async fn handle_message(
             let (client_contact, rx) = state.set_client_done(room_code, is_creator, origin.ip())?;
 
             // responds to the client with their own contact info
-            serialize_into_async(ServerMsg::ClientContact(client_contact), tls).await?;
+            write_to_async(ServerMsg::ClientContact(client_contact), tls).await?;
 
             // wait for the peer to be done sending as well
             let peer_contact = rx.await?;
 
             // send the peer's contact info to this client
-            serialize_into_async(ServerMsg::PeerContact(peer_contact), tls).await?;
+            write_to_async(ServerMsg::PeerContact(peer_contact), tls).await?;
+        }
+        _ => {
+            write_to_async(ServerMsg::ErrorSyntax, tls).await?;
         }
     }
     Ok(())

@@ -1,5 +1,5 @@
 use crate::{server_connector::ServerConnection, Error};
-use gday_contact_exchange_protocol::{from_reader, to_writer, ClientMsg, FullContact, ServerMsg};
+use gday_contact_exchange_protocol::{read_from, write_to, ClientMsg, FullContact, ServerMsg};
 
 /// Used to exchange socket addresses with a peer via a Gday server.
 pub struct ContactSharer<'a> {
@@ -26,8 +26,8 @@ impl<'a> ContactSharer<'a> {
 
         let messenger = &mut server_connection.streams()[0];
 
-        to_writer(ClientMsg::CreateRoom { room_code }, messenger)?;
-        let response: ServerMsg = from_reader(messenger)?;
+        write_to(ClientMsg::CreateRoom { room_code }, messenger)?;
+        let response: ServerMsg = read_from(messenger)?;
 
         if response != ServerMsg::RoomCreated {
             return Err(Error::UnexpectedServerReply(response));
@@ -83,8 +83,8 @@ impl<'a> ContactSharer<'a> {
                 is_creator: self.is_creator,
                 private_addr,
             };
-            to_writer(msg, stream)?;
-            let reply: ServerMsg = from_reader(stream)?;
+            write_to(msg, stream)?;
+            let reply: ServerMsg = read_from(stream)?;
             if reply != ServerMsg::ReceivedAddr {
                 return Err(Error::UnexpectedServerReply(reply));
             }
@@ -95,9 +95,9 @@ impl<'a> ContactSharer<'a> {
             is_creator: self.is_creator,
         };
 
-        to_writer(msg, streams[0])?;
+        write_to(msg, streams[0])?;
 
-        let reply: ServerMsg = from_reader(streams[0])?;
+        let reply: ServerMsg = read_from(streams[0])?;
 
         let ServerMsg::ClientContact(my_contact) = reply else {
             return Err(Error::UnexpectedServerReply(reply));
@@ -111,7 +111,7 @@ impl<'a> ContactSharer<'a> {
     /// determined by the server
     pub fn get_peer_contact(self) -> Result<FullContact, Error> {
         let stream = &mut self.connection.streams()[0];
-        let reply: ServerMsg = from_reader(stream)?;
+        let reply: ServerMsg = read_from(stream)?;
         let ServerMsg::PeerContact(peer) = reply else {
             return Err(Error::UnexpectedServerReply(reply));
         };

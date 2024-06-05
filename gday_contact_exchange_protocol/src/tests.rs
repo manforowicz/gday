@@ -7,20 +7,20 @@ fn sending_messages() {
     let mut bytes = std::collections::VecDeque::new();
 
     for msg in get_client_msg_examples() {
-        crate::to_writer(msg, &mut bytes).unwrap();
+        crate::write_to(msg, &mut bytes).unwrap();
     }
 
     for msg in get_client_msg_examples() {
-        let deserialized_msg: ClientMsg = crate::from_reader(&mut bytes).unwrap();
+        let deserialized_msg: ClientMsg = crate::read_from(&mut bytes).unwrap();
         assert_eq!(msg, deserialized_msg);
     }
 
     for msg in get_server_msg_examples() {
-        crate::to_writer(msg, &mut bytes).unwrap();
+        crate::write_to(msg, &mut bytes).unwrap();
     }
 
     for msg in get_server_msg_examples() {
-        let deserialized_msg: ServerMsg = crate::from_reader(&mut bytes).unwrap();
+        let deserialized_msg: ServerMsg = crate::read_from(&mut bytes).unwrap();
         assert_eq!(msg, deserialized_msg);
     }
 }
@@ -31,20 +31,20 @@ async fn sending_messages_async() {
     let (mut writer, mut reader) = tokio::io::duplex(1000);
 
     for msg in get_client_msg_examples() {
-        crate::serialize_into_async(msg, &mut writer).await.unwrap();
+        crate::write_to_async(msg, &mut writer).await.unwrap();
     }
 
     for msg in get_client_msg_examples() {
-        let deserialized_msg: ClientMsg = crate::deserialize_from_async(&mut reader).await.unwrap();
+        let deserialized_msg: ClientMsg = crate::read_from_async(&mut reader).await.unwrap();
         assert_eq!(msg, deserialized_msg);
     }
 
     for msg in get_server_msg_examples() {
-        crate::serialize_into_async(msg, &mut writer).await.unwrap();
+        crate::write_to_async(msg, &mut writer).await.unwrap();
     }
 
     for msg in get_server_msg_examples() {
-        let deserialized_msg: ServerMsg = crate::deserialize_from_async(&mut reader).await.unwrap();
+        let deserialized_msg: ServerMsg = crate::read_from_async(&mut reader).await.unwrap();
         assert_eq!(msg, deserialized_msg);
     }
 }

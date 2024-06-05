@@ -1,6 +1,11 @@
 //! This protocol lets two users exchange their public and (optionally) private socket addresses via a server.
-//! On it's own, this crate doesn't do anything other than define a shared protocol, and functions to
-//! send and receive messages of this protocol.
+//! 
+//! On it's own, this crate doesn't do anything other than define a shared protocol.
+//! In most cases, you should use one of the following crates:
+//! 
+//! - **gday**: A command line tool for sending files to peers.
+//! - **gday_hole_punch**: A library for establishing a peer-to-peer TCP connection.
+//! - **gday_server**: A server binary that facilitates this protocol.
 //!
 //! # Process
 //!
@@ -24,10 +29,11 @@
 //!     with [`ServerMsg::ClientContact`] which contains the [`FullContact`] of this peer.
 //!
 //! 7. Once both peers are ready, the server sends (on the same stream where [`ClientMsg::DoneSending`] came from)
-//!     each peer [`ServerMsg::PeerContact`] which contains the [`FullContact`] of the other peer..
+//!     each peer a [`ServerMsg::PeerContact`] which contains the [`FullContact`] of the other peer.
 //!
 //! 8. On their own, the peers use this info to connect directly to each other by using
 //!     [hole punching](https://en.wikipedia.org/wiki/Hole_punching_(networking)).
+//!     gday_hole_punch is a library that provides tools for hole punching.
 //!
 #![forbid(unsafe_code)]
 #![warn(clippy::all)]
@@ -52,6 +58,7 @@ pub const DEFAULT_TLS_PORT: u16 = 2311;
 
 /// A message from client to server.
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Clone, Copy)]
+#[non_exhaustive]
 pub enum ClientMsg {
     /// Request the server to create a new room.
     /// Server responds with [`ServerMsg::RoomCreated`] on success.
@@ -84,6 +91,7 @@ pub enum ClientMsg {
 
 /// A message from server to client.
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Clone, Copy)]
+#[non_exhaustive]
 pub enum ServerMsg {
     /// Responds to a [`ClientMsg::CreateRoom`] request.
     /// Indicates that a room with the given ID has been successfully created.
@@ -139,8 +147,8 @@ impl Display for ServerMsg {
         match self {
             Self::RoomCreated => write!(f, "Room in server created successfully."),
             Self::ReceivedAddr => write!(f, "Server received your address."),
-            Self::ClientContact(c) => write!(f, "Your contact is {c}."),
-            Self::PeerContact(c) => write!(f, "Your peer's contact is {c}."),
+            Self::ClientContact(c) => write!(f, "The server says your contact is {c}."),
+            Self::PeerContact(c) => write!(f, "The server says your peer's contact is {c}."),
             Self::ErrorRoomTaken => write!(
                 f,
                 "Can't create room with this id, because it was already created."
@@ -154,7 +162,7 @@ impl Display for ServerMsg {
                 "Can't join room with this id, because it hasn't been created."
             ),
             Self::ErrorTooManyRequests => write!(f, "Too many requests from this IP address."),
-            Self::ErrorSyntax => write!(f, "Couldn't parse message syntax from client."),
+            Self::ErrorSyntax => write!(f, "Server couldn't parse message syntax from client."),
             Self::ErrorConnection => write!(f, "Connection error to client."),
             Self::ErrorInternal => write!(f, "Internal server error."),
         }
@@ -192,15 +200,17 @@ impl std::fmt::Display for Contact {
 }
 
 /// The public and private/local endpoints of an client.
+/// 
 /// `public` is different from `private` when the entity is behind
 /// [NAT (network address translation)](https://en.wikipedia.org/wiki/Network_address_translation).
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Clone, Copy, Default)]
 pub struct FullContact {
     /// The peer's private contact in it's local network.
-    /// The server records this from `private_addr` [`ClientMsg::SendAddr`].
+    /// The server knows this from [`ClientMsg::SendAddr::private_addr`].
     pub private: Contact,
     /// The entity's public contact visible to the public internet.
-    /// The server records this by checking where a [`ClientMsg::SendAddr`] came from.
+    /// The server determines this by checking where
+    /// a [`ClientMsg::SendAddr`] message came from.
     pub public: Contact,
 }
 
@@ -213,8 +223,9 @@ impl std::fmt::Display for FullContact {
 }
 
 /// Write `msg` to `writer` using [`serde_json`].
+/// 
 /// Prefixes the message with 4 big-endian bytes that hold its length.
-pub fn to_writer(msg: impl Serialize, writer: &mut impl Write) -> Result<(), Error> {
+pub fn write_to(msg: impl Serialize, writer: &mut impl Write) -> Result<(), Error> {
     let vec = serde_json::to_vec(&msg)?;
     let len_byte = u32::try_from(vec.len())?;
     writer.write_all(&len_byte.to_be_bytes())?;
@@ -224,8 +235,9 @@ pub fn to_writer(msg: impl Serialize, writer: &mut impl Write) -> Result<(), Err
 }
 
 /// Read `msg` from `reader` using [`serde_json`].
+/// 
 /// Assumes the message is prefixed with 4 big-endian bytes that holds its length.
-pub fn from_reader<T: DeserializeOwned>(reader: &mut impl Read) -> Result<T, Error> {
+pub fn read_from<T: DeserializeOwned>(reader: &mut impl Read) -> Result<T, Error> {
     let mut len = [0_u8; 4];
     reader.read_exact(&mut len)?;
     let len = u32::from_be_bytes(len) as usize;
@@ -236,8 +248,9 @@ pub fn from_reader<T: DeserializeOwned>(reader: &mut impl Read) -> Result<T, Err
 }
 
 /// Asynchronously write `msg` to `writer` using [`serde_json`].
+/// 
 /// Prefixes the message with a 4 big-endian bytes that hold its length.
-pub async fn serialize_into_async(
+pub async fn write_to_async(
     msg: impl Serialize,
     writer: &mut (impl AsyncWrite + Unpin),
 ) -> Result<(), Error> {
@@ -250,8 +263,9 @@ pub async fn serialize_into_async(
 }
 
 /// Asynchronously read `msg` from `reader` using [`serde_json`].
+/// 
 /// Assumes the message is prefixed with 4 big-endian bytes that hold its length.
-pub async fn deserialize_from_async<T: DeserializeOwned>(
+pub async fn read_from_async<T: DeserializeOwned>(
     reader: &mut (impl AsyncRead + Unpin),
 ) -> Result<T, Error> {
     let mut len = [0_u8; 4];
@@ -263,16 +277,19 @@ pub async fn deserialize_from_async<T: DeserializeOwned>(
     Ok(serde_json::from_reader(&buf[..])?)
 }
 
-/// Message serialization/deserialization error
+/// Message serialization/deserialization error.
 #[derive(thiserror::Error, Debug)]
 #[non_exhaustive]
 pub enum Error {
-    #[error("JSON error encoding/decoding message: {0}")]
+    /// JSON error serializing or deserializing message.
+    #[error("JSON error: {0}")]
     JSON(#[from] serde_json::Error),
 
+    /// IO Error.
     #[error("IO Error: {0}")]
     IO(#[from] std::io::Error),
 
+    /// A message's length header limits it to 2^32 bytes.
     #[error("Can't send message longer than 2^32 bytes: {0}")]
     MsgTooLong(#[from] std::num::TryFromIntError),
 }

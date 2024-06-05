@@ -57,7 +57,12 @@ pub fn encrypt_connection<T: Read + Write>(
 }
 
 /// Takes a set of `paths`, each of which may be a directory or file.
-/// Returns the [`FileMetaLocal`] of each file, including those in the given directories.
+///
+/// Returns the [`FileMetaLocal`] of each file, including those in nested directories.
+/// Deduplicates any repeated files.
+///
+/// Each file's [`FileMeta::short_path`] will contain the path to the file,
+/// starting at the provided level, ignoring parent directories.
 pub fn get_paths_metadatas(paths: &[PathBuf]) -> std::io::Result<Vec<FileMetaLocal>> {
     // using a set to prevent duplicates
     let mut files = HashSet::new();
@@ -81,13 +86,13 @@ pub fn get_paths_metadatas(paths: &[PathBuf]) -> std::io::Result<Vec<FileMetaLoc
 /// `top_path` from all paths. `top_path` must be a prefix of `path`.
 /// - `path` is the file or directory where recursive traversal begins.
 /// - `files` is a [`HashSet`] to which found files will be inserted.
-pub fn get_path_metadatas_helper(
+fn get_path_metadatas_helper(
     top_path: &Path,
     path: &Path,
     files: &mut HashSet<FileMetaLocal>,
 ) -> std::io::Result<()> {
     if path.is_dir() {
-        // recursively serch subdirectories
+        // recursively traverse subdirectories
         for entry in path.read_dir()? {
             get_path_metadatas_helper(top_path, &entry?.path(), files)?;
         }
@@ -98,13 +103,13 @@ pub fn get_path_metadatas_helper(
         // get the shortened path
         let short_path = path
             .strip_prefix(top_path)
-            .expect("Prefix couldn't be stripped?")
+            .expect("`top_path` was not a prefix of `path`.")
             .to_path_buf();
 
         // get the file's size
         let size = path.metadata()?.len();
 
-        // insert this file metatada into set
+        // insert this file metadata into set
         let meta = FileMetaLocal {
             local_path: path.to_path_buf(),
             short_path,
@@ -116,23 +121,34 @@ pub fn get_path_metadatas_helper(
     Ok(())
 }
 
-/// Error with gday file transfer.
+/// `gday_file_transfer` error.
 #[derive(Error, Debug)]
 #[non_exhaustive]
 pub enum Error {
+    /// Error serializing or deserializing
+    /// [`FileOfferMsg`] or [`FileResponseMsg`] to JSON.
     #[error("JSON Error: {0}")]
     JSON(#[from] serde_json::Error),
 
+    /// IO Error
     #[error("IO Error: {0}")]
     IO(#[from] std::io::Error),
 
+    /// All 100 suitable filenames for this [`FileMeta`] are occupied.
+    ///
+    /// Comes from [`FileMeta::get_unoccupied_save_path()`]
+    /// or [`FileMeta::get_partial_download_path()`].
     #[error("100 files with base name '{0}' already exist. Aborting save.")]
     FilenameOccupied(PathBuf),
 
+    /// [`FileOfferMsg`] or [`FileResponseMsg`] was longer than 2^32
+    /// bytes when serialized.
+    ///
+    /// A message's length header limits it to 2^32 bytes.
     #[error("Can't serialize JSON message longer than 2^32 bytes")]
     MsgTooLong,
 
-    /// A local file changed length between checks.
+    /// A local file had an unexpected length.
     #[error("A local file changed length between checks.")]
     UnexpectedFileLen,
 }
