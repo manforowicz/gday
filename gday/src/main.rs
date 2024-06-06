@@ -159,14 +159,8 @@ fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
 
             info!("Established authenticated encrypted connection with peer.");
 
-            // get the [`FileMeta`] of the files the user wants to send
-            let files = local_files
-                .iter()
-                .map(|f| FileMeta::from(f.clone()))
-                .collect();
-
             // offer these files to the peer
-            write_to(FileOfferMsg { files }, &mut stream)?;
+            write_to(FileOfferMsg::from(&local_files), &mut stream)?;
 
             println!("Waiting for your mate to respond to your file offer.");
 

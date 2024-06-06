@@ -147,6 +147,18 @@ pub struct FileOfferMsg {
     pub files: Vec<FileMeta>,
 }
 
+impl<T: AsRef<[FileMetaLocal]>> From<T> for FileOfferMsg {
+    fn from(local_files: T) -> Self {
+        let files = local_files
+            .as_ref()
+            .iter()
+            .map(|f| FileMeta::from(f.clone()))
+            .collect();
+
+        Self { files }
+    }
+}
+
 /// The receiving peer should reply with this message to [`FileOfferMsg`].
 /// Specifies which of the offered files the other peer should send.
 ///

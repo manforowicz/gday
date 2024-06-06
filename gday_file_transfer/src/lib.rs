@@ -1,12 +1,11 @@
-//! This protocol lets one user offer to send some files,
-//! and the other user respond with the files it wants to receive.
+//! This protocol lets a peer offer and transfer files to another peer.
 //!
-//! On it's own, this crate doesn't do anything other than define a shared protocol, and functions to
-//! send and receive messages of this protocol.
+//! TODO: Update htis comment.
 //!
-//! # Process
+//! # Example steps
 //!
-//! Using this protocol goes something like this:
+//! 1. Peer A calls [`get_file_metas()`] to get a [`Vec<FileMetaLocal>`] of the files
+//! they want to send. TODO
 //!
 //! 1. Peer A sends [`FileOfferMsg`] to Peer B, containing a [`Vec`] of metadata about
 //!     files it offers to send.
@@ -63,7 +62,7 @@ pub fn encrypt_connection<T: Read + Write>(
 ///
 /// Each file's [`FileMeta::short_path`] will contain the path to the file,
 /// starting at the provided level, ignoring parent directories.
-pub fn get_paths_metadatas(paths: &[PathBuf]) -> std::io::Result<Vec<FileMetaLocal>> {
+pub fn get_file_metas(paths: &[PathBuf]) -> std::io::Result<Vec<FileMetaLocal>> {
     // using a set to prevent duplicates
     let mut files = HashSet::new();
 
@@ -75,7 +74,7 @@ pub fn get_paths_metadatas(paths: &[PathBuf]) -> std::io::Result<Vec<FileMetaLoc
         let top_path = &path.parent().unwrap_or(Path::new(""));
 
         // add all files in this path to the files set
-        get_path_metadatas_helper(top_path, &path, &mut files)?;
+        get_file_metas_helper(top_path, &path, &mut files)?;
     }
 
     // build a vec from the set, and return
@@ -86,7 +85,7 @@ pub fn get_paths_metadatas(paths: &[PathBuf]) -> std::io::Result<Vec<FileMetaLoc
 /// `top_path` from all paths. `top_path` must be a prefix of `path`.
 /// - `path` is the file or directory where recursive traversal begins.
 /// - `files` is a [`HashSet`] to which found files will be inserted.
-fn get_path_metadatas_helper(
+fn get_file_metas_helper(
     top_path: &Path,
     path: &Path,
     files: &mut HashSet<FileMetaLocal>,
@@ -94,7 +93,7 @@ fn get_path_metadatas_helper(
     if path.is_dir() {
         // recursively traverse subdirectories
         for entry in path.read_dir()? {
-            get_path_metadatas_helper(top_path, &entry?.path(), files)?;
+            get_file_metas_helper(top_path, &entry?.path(), files)?;
         }
     } else if path.is_file() {
         // return an error if a file couldn't be opened.

@@ -1,15 +1,13 @@
 //! This protocol lets two users exchange their public and (optionally) private socket addresses via a server.
-//! 
+//!
 //! On it's own, this crate doesn't do anything other than define a shared protocol.
 //! In most cases, you should use one of the following crates:
-//! 
+//!
 //! - **gday**: A command line tool for sending files to peers.
 //! - **gday_hole_punch**: A library for establishing a peer-to-peer TCP connection.
 //! - **gday_server**: A server binary that facilitates this protocol.
 //!
-//! # Process
-//!
-//! Using this protocol goes something like this:
+//! # Example steps
 //!
 //! 1. Peer A connects to a server via the internet
 //!     and requests a new room with `room_code` using [`ClientMsg::CreateRoom`].
@@ -200,7 +198,7 @@ impl std::fmt::Display for Contact {
 }
 
 /// The public and private/local endpoints of an client.
-/// 
+///
 /// `public` is different from `private` when the entity is behind
 /// [NAT (network address translation)](https://en.wikipedia.org/wiki/Network_address_translation).
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Clone, Copy, Default)]
@@ -223,7 +221,7 @@ impl std::fmt::Display for FullContact {
 }
 
 /// Write `msg` to `writer` using [`serde_json`].
-/// 
+///
 /// Prefixes the message with 4 big-endian bytes that hold its length.
 pub fn write_to(msg: impl Serialize, writer: &mut impl Write) -> Result<(), Error> {
     let vec = serde_json::to_vec(&msg)?;
@@ -235,7 +233,7 @@ pub fn write_to(msg: impl Serialize, writer: &mut impl Write) -> Result<(), Erro
 }
 
 /// Read `msg` from `reader` using [`serde_json`].
-/// 
+///
 /// Assumes the message is prefixed with 4 big-endian bytes that holds its length.
 pub fn read_from<T: DeserializeOwned>(reader: &mut impl Read) -> Result<T, Error> {
     let mut len = [0_u8; 4];
@@ -248,7 +246,7 @@ pub fn read_from<T: DeserializeOwned>(reader: &mut impl Read) -> Result<T, Error
 }
 
 /// Asynchronously write `msg` to `writer` using [`serde_json`].
-/// 
+///
 /// Prefixes the message with a 4 big-endian bytes that hold its length.
 pub async fn write_to_async(
     msg: impl Serialize,
@@ -263,7 +261,7 @@ pub async fn write_to_async(
 }
 
 /// Asynchronously read `msg` from `reader` using [`serde_json`].
-/// 
+///
 /// Assumes the message is prefixed with 4 big-endian bytes that hold its length.
 pub async fn read_from_async<T: DeserializeOwned>(
     reader: &mut (impl AsyncRead + Unpin),

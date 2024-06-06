@@ -93,7 +93,7 @@ pub fn ask_receive(files: &[FileMeta]) -> Result<Vec<Option<u64>>, gday_file_tra
 /// Returns the list of files these paths lead to.
 pub fn ask_send(paths: &[PathBuf]) -> std::io::Result<Vec<FileMetaLocal>> {
     // get the file metadatas for all these paths
-    let files = gday_file_transfer::get_paths_metadatas(paths)?;
+    let files = gday_file_transfer::get_file_metas(paths)?;
 
     // print all the file names and sizes
     println!("{} {}", files.len().bold(), "files to send:".bold());

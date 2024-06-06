@@ -19,6 +19,8 @@ Not all of them are desirable or necessary.
 
 - Factor things out so that `gday` really only handles terminal UI stuff.
 
+- Work in progress: Make file transfer response actually have file names in it.
+
 ## Abandoned ideas
 
 - Maybe add some versioning to the protocols?
