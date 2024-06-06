@@ -14,9 +14,7 @@ mod transfer;
 
 use crate::dialog::ask_receive;
 use clap::{Parser, Subcommand};
-use gday_file_transfer::{
-    encrypt_connection, read_from, write_to, FileMeta, FileMetaLocal, FileOfferMsg, FileResponseMsg,
-};
+use gday_file_transfer::{encrypt_connection, read_from, write_to, FileOfferMsg, FileResponseMsg};
 use gday_hole_punch::PeerCode;
 use gday_hole_punch::{
     server_connector::{self, DEFAULT_SERVERS},
@@ -28,7 +26,8 @@ use owo_colors::OwoColorize;
 use rand::Rng;
 use std::path::PathBuf;
 
-const HOLE_PUNCH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+/// How long to try hole punching before giving up.
+const HOLE_PUNCH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 
 #[derive(Parser, Debug)]
 #[command(author, version, about)]
@@ -160,7 +159,7 @@ fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
             info!("Established authenticated encrypted connection with peer.");
 
             // offer these files to the peer
-            write_to(FileOfferMsg::from(&local_files), &mut stream)?;
+            write_to(FileOfferMsg::from(local_files.clone()), &mut stream)?;
 
             println!("Waiting for your mate to respond to your file offer.");
 
@@ -181,9 +180,7 @@ fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
                 if resumptions != 0 {
                     println!("Resuming transfer of {resumptions} previously interrupted file(s).");
                 }
-                let pairs: Vec<(FileMetaLocal, Option<u64>)> =
-                    local_files.into_iter().zip(response.response).collect();
-                transfer::send_files(&mut stream, &pairs)?;
+                transfer::send_files(local_files, response, &mut stream)?;
             }
         }
 
@@ -213,23 +210,17 @@ fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
             // receive file offer from peer
             let offer: FileOfferMsg = read_from(&mut stream)?;
 
-            // ask user which files to receive
-            let accepted = ask_receive(&offer.files)?;
+            let response = FileResponseMsg {
+                response: ask_receive(&offer.files)?,
+            };
 
             // respond to the file offer
-            write_to(
-                FileResponseMsg {
-                    response: accepted.clone(),
-                },
-                &mut stream,
-            )?;
+            write_to(&response, &mut stream)?;
 
-            if accepted.iter().all(|x| x.is_none()) {
+            if response.response.iter().all(|x| x.is_none()) {
                 println!("No files will be downloaded.");
             } else {
-                let pairs: Vec<(FileMeta, Option<u64>)> =
-                    offer.files.into_iter().zip(accepted).collect();
-                transfer::receive_files(&mut stream, &pairs)?;
+                transfer::receive_files(offer, response, &mut stream)?;
             }
         }
     }

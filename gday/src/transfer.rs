@@ -1,11 +1,12 @@
 use gday_encryption::EncryptedStream;
-use gday_file_transfer::{FileMeta, FileMetaLocal, TransferReport};
+use gday_file_transfer::{FileMetaLocal, FileOfferMsg, FileResponseMsg, TransferReport};
 use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
 
 /// Sequentially write the given files to this `writer`.
 pub fn send_files(
+    offer: Vec<FileMetaLocal>,
+    response: FileResponseMsg,
     writer: &mut EncryptedStream<std::net::TcpStream>,
-    files: &[(FileMetaLocal, Option<u64>)],
 ) -> Result<(), Box<dyn std::error::Error>> {
     let progress_bar = create_progress_bar();
     let mut current_file = String::from("Starting...");
@@ -19,7 +20,7 @@ pub fn send_files(
         }
     };
 
-    match gday_file_transfer::send_files(writer, files, Some(update_progress)) {
+    match gday_file_transfer::send_files(offer, response, writer, Some(update_progress)) {
         Ok(()) => {
             progress_bar.finish_with_message("Transfer complete.");
             Ok(())
@@ -33,8 +34,9 @@ pub fn send_files(
 
 /// Sequentially save the given `files` from this `reader`.
 pub fn receive_files(
+    offer: FileOfferMsg,
+    response: FileResponseMsg,
     reader: &mut EncryptedStream<std::net::TcpStream>,
-    files: &[(FileMeta, Option<u64>)],
 ) -> Result<(), Box<dyn std::error::Error>> {
     let progress_bar = create_progress_bar();
     let mut current_file = String::from("Starting...");
@@ -48,7 +50,7 @@ pub fn receive_files(
         }
     };
 
-    match gday_file_transfer::receive_files(reader, files, Some(update_progress)) {
+    match gday_file_transfer::receive_files(offer, response, reader, Some(update_progress)) {
         Ok(()) => {
             progress_bar.finish_with_message("Transfer complete.");
             Ok(())

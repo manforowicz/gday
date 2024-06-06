@@ -30,11 +30,11 @@ use tokio_rustls::{
 #[derive(Parser, Debug)]
 #[command(author, version, about)]
 struct Args {
-    /// PEM-encoded private TLS server key
+    /// PEM file of private TLS server key
     #[arg(short, long, required_unless_present("unencrypted"))]
     key: Option<PathBuf>,
 
-    /// PEM-encoded signed TLS server certificate
+    /// PEM file of signed TLS server certificate
     #[arg(short, long, required_unless_present("unencrypted"))]
     certificate: Option<PathBuf>,
 
@@ -48,7 +48,7 @@ struct Args {
     address: Option<String>,
 
     /// Number of seconds before a new room is deleted
-    #[arg(short, long, default_value = "300")]
+    #[arg(short, long, default_value = "600")]
     timeout: u64,
 
     /// Max number of requests an IP address can
@@ -88,10 +88,19 @@ async fn main() {
     };
 
     // create the shared global state object
-    let state = State::new(args.request_limit, args.timeout);
+    let state = State::new(
+        args.request_limit,
+        std::time::Duration::from_secs(args.timeout),
+    );
 
-    info!("Listening on {addr}.");
-    info!("Is encrypted?: {}", !args.unencrypted);
+    // get local addr to print
+    let local_addr = tcp_listener.local_addr().unwrap_or_else(|err| {
+        error!("Couldn't determine local address: {err}");
+        exit(1)
+    });
+
+    info!("Listening on '{local_addr}'.",);
+    info!("Is encrypted?: {}", tls_acceptor.is_some());
     info!("Server started.");
 
     loop {
@@ -128,12 +137,14 @@ async fn get_tcp_listener(addr: impl ToSocketAddrs + Display) -> TcpListener {
     });
 
     // sets the keepalive to 10 minutes
-    let socket = SockRef::from(&listener);
     let tcp_keepalive = TcpKeepalive::new()
-        .with_time(Duration::from_secs(540))
-        .with_interval(Duration::from_secs(6))
-        .with_retries(10);
-    let _ = socket.set_tcp_keepalive(&tcp_keepalive);
+        .with_time(Duration::from_secs(600))
+        .with_interval(Duration::from_secs(10))
+        .with_retries(3);
+    let socket = SockRef::from(&listener);
+    socket
+        .set_tcp_keepalive(&tcp_keepalive)
+        .unwrap_or_else(|err| error!("Couldn't set TCP keepalive: {err}"));
 
     listener
 }
@@ -149,13 +160,14 @@ fn get_tls_acceptor(key_path: &Path, cert_path: &Path) -> TlsAcceptor {
         error!("Couldn't open key file '{key_path:?}': {err}");
         exit(1)
     }));
+
     let key = rustls_pemfile::private_key(&mut key)
         .unwrap_or_else(|err| {
             error!("Couldn't parse key file '{key_path:?}': {err}");
             exit(1)
         })
         .unwrap_or_else(|| {
-            error!("Couldn't parse key file '{key_path:?}'");
+            error!("No private keys found in file '{key_path:?}'");
             exit(1)
         });
 
@@ -165,8 +177,8 @@ fn get_tls_acceptor(key_path: &Path, cert_path: &Path) -> TlsAcceptor {
         exit(1)
     }));
 
-    let certs: Result<Vec<CertificateDer<'static>>, _> = rustls_pemfile::certs(&mut cert).collect();
-    let certs = certs.unwrap_or_else(|err| {
+    let cert: Result<Vec<CertificateDer<'static>>, _> = rustls_pemfile::certs(&mut cert).collect();
+    let cert = cert.unwrap_or_else(|err| {
         error!("Couldn't parse certificate file '{cert_path:?}': {err}");
         exit(1)
     });
@@ -174,7 +186,7 @@ fn get_tls_acceptor(key_path: &Path, cert_path: &Path) -> TlsAcceptor {
     // try creating tls config
     let tls_config = rustls::ServerConfig::builder()
         .with_no_client_auth()
-        .with_single_cert(certs, key)
+        .with_single_cert(cert, key)
         .unwrap_or_else(|err| {
             error!("Couldn't configure TLS: {err}");
             exit(1)

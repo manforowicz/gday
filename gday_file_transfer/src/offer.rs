@@ -147,13 +147,9 @@ pub struct FileOfferMsg {
     pub files: Vec<FileMeta>,
 }
 
-impl<T: AsRef<[FileMetaLocal]>> From<T> for FileOfferMsg {
-    fn from(local_files: T) -> Self {
-        let files = local_files
-            .as_ref()
-            .iter()
-            .map(|f| FileMeta::from(f.clone()))
-            .collect();
+impl From<Vec<FileMetaLocal>> for FileOfferMsg {
+    fn from(local_files: Vec<FileMetaLocal>) -> Self {
+        let files = local_files.into_iter().map(FileMeta::from).collect();
 
         Self { files }
     }

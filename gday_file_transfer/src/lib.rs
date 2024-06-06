@@ -5,7 +5,7 @@
 //! # Example steps
 //!
 //! 1. Peer A calls [`get_file_metas()`] to get a [`Vec<FileMetaLocal>`] of the files
-//! they want to send. TODO
+//! they want to send. They then call [`FileOfferMsg::from`]
 //!
 //! 1. Peer A sends [`FileOfferMsg`] to Peer B, containing a [`Vec`] of metadata about
 //!     files it offers to send.
@@ -32,7 +32,9 @@ pub use crate::offer::{
     read_from, write_to, FileMeta, FileMetaLocal, FileOfferMsg, FileResponseMsg,
 };
 
-pub use crate::transfer::{receive_files, send_files, TransferReport};
+pub use crate::transfer::{
+    receive_files, receive_these_files, send_files, send_these_files, TransferReport,
+};
 
 /// Wrap an IO stream in a [`gday_encryption::EncryptedStream`].
 pub fn encrypt_connection<T: Read + Write>(
@@ -150,4 +152,8 @@ pub enum Error {
     /// A local file had an unexpected length.
     #[error("A local file changed length between checks.")]
     UnexpectedFileLen,
+
+    /// Requested start index greater than length of file
+    #[error("Requested start index greater than length of file.")]
+    InvalidStartIndex,
 }

@@ -11,14 +11,16 @@ use tokio::sync::oneshot;
 /// Information about a client in a [`Room`].
 #[derive(Default, Debug)]
 struct Client {
-    /// The known private and public socket addresses of this client
+    /// The known contact info of this client
     contact: FullContact,
-    /// - `None` if the client is still sending their contact info
-    /// - `Some` if the client is done sending their contact info.
+    /// - `None` if the other peer isn't done and
+    ///     isn't ready to receive this peer's contacts.
+    /// - `Some` if the other peer is done and
+    ///     ready to receive this peer's contacts.
     ///
-    /// Once the other peer is also done, this channel sends
-    /// the other peer's contact info.
-    peer_contact: Option<oneshot::Sender<FullContact>>,
+    /// Once this peer is done, and `contact_sender` isn't `None`,
+    /// this sender sends [`Self::contact`].
+    contact_sender: Option<oneshot::Sender<FullContact>>,
 }
 
 /// A room holds 2 [Client]s that want to exchange their contact info
@@ -51,6 +53,9 @@ impl Room {
 }
 
 /// A reference to the server's shared state.
+///
+/// Note: Throughout all the functions, only one lock
+/// is acquired at any given time. This is to prevent deadlock.
 #[derive(Clone, Debug)]
 pub struct State {
     /// Maps room_id to rooms
@@ -64,12 +69,12 @@ pub struct State {
     max_requests_per_minute: Arc<u32>,
 
     /// Seconds before a newly created room is deleted
-    room_timeout: Arc<u64>,
+    room_timeout: Arc<std::time::Duration>,
 }
 
 impl State {
-    /// Creates a new `State` with the given config settings
-    pub fn new(max_requests_per_minute: u32, room_timeout: u64) -> Self {
+    /// Creates a new [`State`] with the given config settings
+    pub fn new(max_requests_per_minute: u32, room_timeout: std::time::Duration) -> Self {
         let this = Self {
             rooms: Arc::default(),
             request_counts: Arc::default(),
@@ -78,13 +83,12 @@ impl State {
         };
 
         // spawn a backround thread that clears `request_counts` every minute
-        let cloned_self = this.clone();
+        let request_counts = this.request_counts.clone();
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(60));
             loop {
                 interval.tick().await;
-                cloned_self
-                    .request_counts
+                request_counts
                     .lock()
                     .expect("Couldn't acquire state lock.")
                     .clear();
@@ -101,21 +105,22 @@ impl State {
     pub fn create_room(&mut self, room_code: u64, origin: IpAddr) -> Result<u64, Error> {
         self.increment_request_count(origin)?;
 
-        let mut rooms = self.rooms.lock().expect("Couldn't acquire state lock.");
+        {
+            let mut rooms = self.rooms.lock().expect("Couldn't acquire state lock.");
 
-        // return error if this room code has been taken
-        if rooms.contains_key(&room_code) {
-            return Err(Error::RoomCodeTaken);
+            // return error if this room code has been taken
+            if rooms.contains_key(&room_code) {
+                return Err(Error::RoomCodeTaken);
+            }
+            rooms.insert(room_code, Room::default());
         }
-        rooms.insert(room_code, Room::default());
 
-        // create a thread that will remove this room after the timeout
-        let timeout = Duration::from_secs(*self.room_timeout);
-        let cloned_self = self.clone();
+        // spawn a thread that will remove this room after the timeout
+        let timeout = *self.room_timeout;
+        let rooms = self.rooms.clone();
         tokio::spawn(async move {
             tokio::time::sleep(timeout).await;
-            cloned_self
-                .rooms
+            rooms
                 .lock()
                 .expect("Couldn't acquire state lock.")
                 .remove(&room_code);
@@ -139,6 +144,7 @@ impl State {
     ) -> Result<(), Error> {
         self.increment_request_count(origin)?;
 
+        // get a mutable reference to the client in question.
         let mut rooms = self.rooms.lock().expect("Couldn't acquire state lock.");
         let room = rooms.get_mut(&room_code).ok_or(Error::NoSuchRoomCode)?;
         let full_contact = &mut room.get_client_mut(is_creator).contact;
@@ -149,12 +155,13 @@ impl State {
             &mut full_contact.private
         };
 
+        // update the client's contact from `addr`
         match endpoint {
-            SocketAddr::V6(addr) => {
-                contact.v6 = Some(addr);
-            }
             SocketAddr::V4(addr) => {
                 contact.v4 = Some(addr);
+            }
+            SocketAddr::V6(addr) => {
+                contact.v6 = Some(addr);
             }
         };
 
@@ -180,22 +187,29 @@ impl State {
 
         let (tx, rx) = oneshot::channel();
 
-        room.get_client_mut(is_creator).peer_contact = Some(tx);
+        // Give the peer a contact sender.
+        // Once the peer gets `set_client_done()` called,
+        // they will send their own contact info via this sender.
+        let peer = room.get_client_mut(!is_creator);
+        peer.contact_sender = Some(tx);
 
-        let client_info = room.get_client(is_creator).contact;
-        let peer_info = room.get_client(!is_creator).contact;
+        let client_contact = room.get_client(is_creator).contact;
+        let peer_contact = room.get_client(!is_creator).contact;
 
-        // if both peers are waiting for each others' contact info
-        if room.get_client(is_creator).peer_contact.is_some()
-            && room.get_client(!is_creator).peer_contact.is_some()
-        {
-            if let Some(client_sender) = room.get_client_mut(is_creator).peer_contact.take() {
-                if let Some(peer_sender) = room.get_client_mut(!is_creator).peer_contact.take() {
+        // if this client has a contact sender, that means
+        // the peer must have given it to us. That means the peer
+        // is also ready to exchange contacts.
+        if room.get_client(is_creator).contact_sender.is_some() {
+            // note: both of these `if let` will always pass
+            if let Some(client_sender) = room.get_client_mut(is_creator).contact_sender.take() {
+                if let Some(peer_sender) = room.get_client_mut(!is_creator).contact_sender.take() {
                     // exchange their info
-                    // don't care about error, since nothing critical happens
-                    // if the receiver has been dropped.
-                    let _ = client_sender.send(peer_info);
-                    let _ = peer_sender.send(client_info);
+                    client_sender
+                        .send(client_contact)
+                        .expect("Unrecoverable: RX dropped!");
+                    peer_sender
+                        .send(peer_contact)
+                        .expect("Unrecoverable: RX dropped!");
 
                     // remove their room
                     rooms.remove(&room_code);
@@ -203,7 +217,7 @@ impl State {
             }
         }
 
-        Ok((client_info, rx))
+        Ok((client_contact, rx))
     }
 
     /// Increments the request count of this IP address.

@@ -2,7 +2,7 @@ use gday_encryption::EncryptedStream;
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufWriter, Read, Seek, SeekFrom, Write};
 
-use crate::{Error, FileMeta, FileMetaLocal};
+use crate::{Error, FileMeta, FileMetaLocal, FileOfferMsg, FileResponseMsg};
 
 const FILE_BUFFER_SIZE: usize = 1_000_000;
 
@@ -16,6 +16,37 @@ pub struct TransferReport {
     pub current_file: std::path::PathBuf,
 }
 
+pub fn send_files(
+    offer: Vec<FileMetaLocal>,
+    response: FileResponseMsg,
+    writer: &mut EncryptedStream<impl Write>,
+    progress_callback: Option<impl FnMut(&TransferReport)>,
+) -> Result<(), Error> {
+    let files: Vec<(FileMetaLocal, u64)> = offer
+        .into_iter()
+        .zip(response.response)
+        .filter_map(|(file, response)| response.map(|response| (file, response)))
+        .collect();
+
+    send_these_files(&files, writer, progress_callback)
+}
+
+pub fn receive_files(
+    offer: FileOfferMsg,
+    response: FileResponseMsg,
+    reader: &mut EncryptedStream<impl Read>,
+    progress_callback: Option<impl FnMut(&TransferReport)>,
+) -> Result<(), Error> {
+    let files: Vec<(FileMeta, u64)> = offer
+        .files
+        .into_iter()
+        .zip(response.response)
+        .filter_map(|(file, response)| response.map(|response| (file, response)))
+        .collect();
+
+    receive_these_files(&files, reader, progress_callback)
+}
+
 /// Sequentially write the requested parts of `files` to `writer`.
 ///
 /// `files` is a slice of tuples:
@@ -26,22 +57,19 @@ pub struct TransferReport {
 /// - `&str` - `short_path` of the file currently being sent.
 /// - `u64` - The number of bytes written so far.
 /// - `u64` - The total number of bytes to write.
-pub fn send_files(
+pub fn send_these_files(
+    files: &[(FileMetaLocal, u64)],
     writer: &mut EncryptedStream<impl Write>,
-    files: &[(FileMetaLocal, Option<u64>)],
     progress_callback: Option<impl FnMut(&TransferReport)>,
 ) -> Result<(), Error> {
     // sum up total transfer size
-    let total_bytes: u64 = files
-        .iter()
-        .map(|(offer, response)| {
-            if let Some(start) = response {
-                offer.len.saturating_sub(*start)
-            } else {
-                0
-            }
-        })
-        .sum();
+    let mut total_bytes = 0;
+    for (file, start) in files {
+        total_bytes += file
+            .len
+            .checked_sub(*start)
+            .ok_or(Error::InvalidStartIndex)?;
+    }
 
     // Wrap the writer to report progress over `progress_tx`
     let mut writer = ProgressWrapper::new(
@@ -52,26 +80,23 @@ pub fn send_files(
     );
 
     // iterate over all the files
-    for (offer, response) in files {
-        // if the other peer requested this file
-        if let Some(start) = response {
-            // report the file path
-            writer.progress.current_file.clone_from(&offer.short_path);
+    for (offer, start) in files {
+        // report the file path
+        writer.progress.current_file.clone_from(&offer.short_path);
 
-            let mut file = File::open(&offer.local_path)?;
+        let mut file = File::open(&offer.local_path)?;
 
-            // confirm file length matches metadata length
-            if file.metadata()?.len() != offer.len {
-                return Err(Error::UnexpectedFileLen);
-            }
-
-            // copy the file into the writer
-            file.seek(SeekFrom::Start(*start))?;
-            std::io::copy(&mut file, &mut writer)?;
-
-            // report the number of processed files
-            writer.progress.processed_files += 1;
+        // confirm file length matches metadata length
+        if file.metadata()?.len() != offer.len {
+            return Err(Error::UnexpectedFileLen);
         }
+
+        // copy the file into the writer
+        file.seek(SeekFrom::Start(*start))?;
+        std::io::copy(&mut file, &mut writer)?;
+
+        // report the number of processed files
+        writer.progress.processed_files += 1;
     }
 
     writer.flush()?;
@@ -89,34 +114,26 @@ pub fn send_files(
 /// - `&str` - `short_path` of the file currently being sent.
 /// - `u64` - The number of bytes read so far.
 /// - `u64` - The total number of bytes to read.
-pub fn receive_files(
+pub fn receive_these_files(
+    files: &[(FileMeta, u64)],
     reader: &mut EncryptedStream<impl Read>,
-    files: &[(FileMeta, Option<u64>)],
     progress_callback: Option<impl FnMut(&TransferReport)>,
 ) -> Result<(), Error> {
     // sum up total transfer size
-    let total_bytes: u64 = files
-        .iter()
-        .map(|(offer, response)| {
-            if let Some(start) = response {
-                offer.len.saturating_sub(*start)
-            } else {
-                0
-            }
-        })
-        .sum();
+    let mut total_bytes = 0;
+    for (file, start) in files {
+        total_bytes += file
+            .len
+            .checked_sub(*start)
+            .ok_or(Error::InvalidStartIndex)?;
+    }
 
     // Wrap the reader to report progress over `progress_tx`
     let mut reader =
         ProgressWrapper::new(reader, total_bytes, files.len() as u64, progress_callback);
 
     // iterate over all the files
-    for (offer, response) in files {
-        // skip this file if not requested
-        if response.is_none() {
-            continue;
-        }
-
+    for (offer, start) in files {
         // set progress bar message to file path
         reader.progress.current_file.clone_from(&offer.short_path);
 
@@ -124,7 +141,7 @@ pub fn receive_files(
         let tmp_path = offer.get_partial_download_path()?;
 
         // download whole file
-        if let Some(0) = response {
+        if *start == 0 {
             // create a directory and TMP file
             if let Some(parent) = tmp_path.parent() {
                 std::fs::create_dir_all(parent)?;
@@ -142,7 +159,7 @@ pub fn receive_files(
             std::io::copy(&mut reader, &mut file)?;
 
         // resume interrupted download
-        } else if let Some(start) = response {
+        } else {
             // open the partially downloaded file in append mode
             let file = OpenOptions::new().append(true).open(&tmp_path)?;
             if file.metadata()?.len() != *start {
