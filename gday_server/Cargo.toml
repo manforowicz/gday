@@ -2,6 +2,7 @@
 name = "gday_server"
 version = "0.1.1"
 description = "A server that lets 2 peers exchange their private and public addresses via the gday contact exchange protocol."
+homepage = "https://github.com/manforowicz/gday/gday_server/"
 
 # Inherit these keys from workspace toml
 authors.workspace = true

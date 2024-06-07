@@ -2,6 +2,7 @@
 name = "gday_encryption"
 version = "0.1.1"
 description = "A simple ChaCha20Poly1305 encryption wrapper around an IO stream."
+homepage = "https://github.com/manforowicz/gday/gday_encryption/"
 
 # Inherit these keys from workspace toml
 authors.workspace = true

@@ -2,6 +2,7 @@
 name = "gday_hole_punch"
 version = "0.1.1"
 description = "Establish an authenticated peer-to-peer internet connection using TCP hole-punching."
+homepage = "https://github.com/manforowicz/gday/gday_hole_punch/"
 
 # Inherit these keys from workspace toml
 authors.workspace = true

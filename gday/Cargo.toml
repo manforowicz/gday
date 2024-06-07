@@ -2,6 +2,7 @@
 name = "gday"
 version = "0.1.1"
 description = "Command line tool to send files easily, securely, and directly, without a relay or port forwarding."
+homepage = "https://github.com/manforowicz/gday/gday/"
 
 # Inherit these keys from workspace toml
 authors.workspace = true
