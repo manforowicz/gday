@@ -85,13 +85,16 @@ impl ServerStream {
     /// So that this socket can be reused for
     /// hole-punching.
     fn enable_reuse(&self) {
-        let stream = match self {
+        let stream: &TcpStream = match self {
             Self::TCP(stream) => stream,
             Self::TLS(stream) => stream.get_ref(),
         };
 
         let sock = SockRef::from(stream);
         let _ = sock.set_reuse_address(true);
+
+        // socket2 only supports this method on these systems
+        #[cfg(all(unix, not(any(target_os = "solaris", target_os = "illumos"))))]
         let _ = sock.set_reuse_port(true);
     }
 }
