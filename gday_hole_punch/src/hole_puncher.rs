@@ -228,12 +228,14 @@ fn get_local_socket(local_addr: SocketAddr) -> std::io::Result<TcpSocket> {
     let sock = SockRef::from(&socket);
 
     let _ = sock.set_reuse_address(true);
+
+    // socket2 only supports this method on these systems
+    #[cfg(all(unix, not(any(target_os = "solaris", target_os = "illumos"))))]
     let _ = sock.set_reuse_port(true);
 
     let keepalive = TcpKeepalive::new()
-        .with_time(Duration::from_secs(5))
-        .with_interval(Duration::from_secs(2))
-        .with_retries(5);
+        .with_time(Duration::from_secs(60))
+        .with_interval(Duration::from_secs(10));
     let _ = sock.set_tcp_keepalive(&keepalive);
 
     socket.bind(local_addr)?;

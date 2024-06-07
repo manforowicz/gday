@@ -139,8 +139,7 @@ async fn get_tcp_listener(addr: impl ToSocketAddrs + Display) -> TcpListener {
     // sets the keepalive to 10 minutes
     let tcp_keepalive = TcpKeepalive::new()
         .with_time(Duration::from_secs(600))
-        .with_interval(Duration::from_secs(10))
-        .with_retries(3);
+        .with_interval(Duration::from_secs(10));
     let socket = SockRef::from(&listener);
     socket
         .set_tcp_keepalive(&tcp_keepalive)

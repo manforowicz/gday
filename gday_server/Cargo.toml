@@ -1,17 +1,20 @@
 [package]
 name = "gday_server"
 version = "0.1.1"
-authors = ["Marcin Anforowicz"]
-edition = "2021"
 description = "A server that lets 2 peers exchange their private and public addresses via the gday contact exchange protocol."
-license = "MIT"
-repository = "https://github.com/manforowicz/gday/"
+homepage = "https://github.com/manforowicz/gday/gday_server/"
+
+# Inherit these keys from workspace toml
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 clap = { version = "4.5.4", features = ["derive"] }
-socket2 = "0.5.7"
+socket2 = { version = "0.5.7", features = ["all"] }
 tokio = { version = "1.38.0", features = [
     "rt-multi-thread",
     "macros",
@@ -19,7 +22,7 @@ tokio = { version = "1.38.0", features = [
     "time",
     "sync",
 ] }
-tokio-rustls = "0.26.0"
+tokio-rustls = { version = "0.26.0", features = ["ring", "logging", "tls12"], default-features = false }
 gday_contact_exchange_protocol = { path = "../gday_contact_exchange_protocol" }
 thiserror = "1.0.61"
 log = "0.4.21"
