@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <csr-read-only-do-not-edit/>
 
- - 22 commits contributed to the release over the course of 77 calendar days.
+ - 23 commits contributed to the release over the course of 77 calendar days.
  - 0 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
 
@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <details><summary>view details</summary>
 
  * **Uncategorized**
+    - Added a changelog ([`8b9d93e`](https://github.com/manforowicz/gday/commit/8b9d93e89289841c04d6be54c37cf98703715bf7))
     - Merge pull request #4 from manforowicz/example-pr ([`f567a95`](https://github.com/manforowicz/gday/commit/f567a95de7c7bcff59a46ee083bfc4b50acf1b60))
     - Improved cargo toml descriptions ([`c8bd985`](https://github.com/manforowicz/gday/commit/c8bd985db86b72b7ba3bd3602a6af1d6cf0d24d7))
     - Merge pull request #3 from manforowicz/example-pr ([`7d2937d`](https://github.com/manforowicz/gday/commit/7d2937df44f24992783c731778ac7353f0177e78))
