@@ -1,3 +1,5 @@
+Note: this crate is still in early-development, so expect breaking changes.
+
 # `gday_contact_exchange_protocol`
 ![Crates.io Version](https://img.shields.io/crates/v/gday_contact_exchange_protocol) ![docs.rs](https://img.shields.io/docsrs/gday_contact_exchange_protocol)
 

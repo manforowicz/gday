@@ -1,48 +1,61 @@
-# Gday Project
+# gday
 
-**WORK IN PROGRESS - THIS PROJECT IS NOT READY YET**
+**Note: this project is still in early-development, so expect breaking changes.**
 
-Send files directly to anyone.
-
-## Example
+A command line tool for sending files.
 
 <pre>
 <b style="color:lime;">peer_1:</b> gday send msg.txt image.jpg
-<i>*Asks for confirmation*</i>
+<i>&lt;Asks for confirmation&gt;</i>
 Tell your mate to run "gday receive <b>1.188T.W3H.E</b>".
 <b>Transfer complete.</b>
 </pre>
 
 <pre>
 <b style="color:lime;">peer_2:</b> gday receive <b>1.188T.W3H.E</b>
-<i>*Asks for confirmation*</i>
+<i>&lt;Asks for confirmation&gt;</i>
 <b>Transfer complete.</b>
 </pre>
 
 [![asciicast](https://asciinema.org/a/662397.svg)](https://asciinema.org/a/662397)
 
+## Installation
+
+### Executable
+
+1. Go to [releases](https://github.com/manforowicz/gday/releases)
+and download the correct file for your platform.
+2. Extract the executable 
+(on Linux, try: `tar xf <file>`).
+3. Run the executable: `./<path to executable>/gday`
+
+### Cargo
+
+If you have `cargo`, run `cargo install gday`.
+
+### Brew
+
+If you have `brew`, run `brew install manforowicz/tap/gday`.
+
 ## Features
-
-- Uses [TCP Hole Punching](https://bford.info/pub/net/p2pnat/)
-with the help of a [gday_contact_exchange_server](/gday_contact_exchange_server/)
-to establish a direct peer-to-peer connection,
-even between different private networks.
-Note: This may not work on networks with very restrictive [NATs](https://en.wikipedia.org/wiki/Network_address_translation).
-
-- Since the transfer is always direct,
-  you can send huge amounts of data without affecting any relay servers.
-
+- File transfer is always direct, without relays.
+A server is only used to help the devices find each other.
 - Doesn't require port forwarding.
-
+- Files encrypted with streaming
+[ChaCha20Poly1305](https://en.wikipedia.org/wiki/ChaCha20-Poly1305).
 - Automatically tries both IPv4 and IPv6.
-
-- Uses password authenticated key exchange ([SPAKE2](https://datatracker.ietf.org/doc/rfc9382/))
+- Immune to malicious servers trying to impersonate your peer.
+Uses password authenticated key exchange
+([SPAKE2](https://datatracker.ietf.org/doc/rfc9382/))
 to derive a strong encryption key from a weak shared password.
 
-- Authenticated encryption using [ChaCha20Poly1305](https://en.wikipedia.org/wiki/ChaCha20-Poly1305).
-
-Want to send files easily, securely, and directly, without a relay or port forwarding?
-Then go to the [gday page](gday/README.md).
+## How it works
+Uses [TCP Hole Punching](https://bford.info/pub/net/p2pnat/)
+with the help of a server
+to establish a direct peer-to-peer connection,
+even between different private networks.
+Note: This may not work on networks with very restrictive
+[NATs](https://en.wikipedia.org/wiki/Network_address_translation).
 
 ## Usage
 ```
@@ -70,13 +83,12 @@ I'm very grateful to their creators and contributors.
 <table>
     <tr>
         <th></th>
-        <th>Always direct (no relays)</th>
+        <th>Always direct (no relay)</th>
         <th>Can work beyond LAN, through most <a href="https://en.wikipedia.org/wiki/Network_address_translation">NATs</a></th>
-        <th>Works through restrictive <a href="https://en.wikipedia.org/wiki/Network_address_translation">NATs</a></th>
-        <th>Works without port forwarding or opening</th>
+        <th>Works through very strict <a href="https://en.wikipedia.org/wiki/Network_address_translation">NATs</a></th>
+        <th>No port forwarding</th>
         <th>Encrypted</th>
         <th>Can resume interrupted transfers</th>
-        <th>Free & open source</th>
     </tr>
     <tr>
         <td><strong><a href="https://github.com/manforowicz/gday">gday</a></strong></td>
@@ -86,12 +98,10 @@ I'm very grateful to their creators and contributors.
         <td>✅</td>
         <td>✅</td>
         <td>✅</td>
-        <td>✅</td>
     </tr>
     <tr>
         <td><a href="https://github.com/magic-wormhole/magic-wormhole">magic-wormhole</a></td>
         <td>❌</td>
-        <td>✅</td>
         <td>✅</td>
         <td>✅</td>
         <td>✅</td>
@@ -106,7 +116,15 @@ I'm very grateful to their creators and contributors.
         <td>✅</td>
         <td>✅</td>
         <td>✅</td>
+    </tr>
+        <tr>
+        <td><a href="https://github.com/psantosl/p2pcopy">p2pcopy</a></td>
         <td>✅</td>
+        <td>✅</td>
+        <td>❌</td>
+        <td>✅</td>
+        <td>❌</td>
+        <td>❌</td>
     </tr>
     <tr>
         <td><a href="https://github.com/nirvik/iWant">iwant</a></td>
@@ -116,17 +134,6 @@ I'm very grateful to their creators and contributors.
         <td>✅</td>
         <td>❌</td>
         <td>❌</td>
-        <td>✅</td>
-    </tr>
-    <tr>
-        <td><a href="https://github.com/psantosl/p2pcopy">p2pcopy</a></td>
-        <td>✅</td>
-        <td>✅</td>
-        <td>❌</td>
-        <td>✅</td>
-        <td>❌</td>
-        <td>❌</td>
-        <td>✅</td>
     </tr>
     <tr>
         <td><a href="https://github.com/nils-werner/zget">zget</a></td>
@@ -136,7 +143,6 @@ I'm very grateful to their creators and contributors.
         <td>✅</td>
         <td>❌</td>
         <td>❌</td>
-        <td>✅</td>
     </tr>
     <tr>
         <td><a href="https://github.com/cowbell/sharedrop">sharedrop</a></td>
@@ -146,7 +152,6 @@ I'm very grateful to their creators and contributors.
         <td>✅</td>
         <td>✅</td>
         <td>❌</td>
-        <td>✅</td>
     </tr>
     <tr>
         <td><a href="https://github.com/kern/filepizza">filepizza</a></td>
@@ -156,37 +161,24 @@ I'm very grateful to their creators and contributors.
         <td>✅</td>
         <td>✅</td>
         <td>❌</td>
-        <td>✅</td>
     </tr>
     <tr>
-        <td><a href="https://github.com/zerotier/toss">toss</a></td>
+        <td>Personal <a href="https://en.wikipedia.org/wiki/Secure_Shell">SSH</a> or <a href="https://en.wikipedia.org/wiki/HTTPS">HTTPS</a></td>
+        <td>✅</td>
+        <td>✅</td>
         <td>✅</td>
         <td>❌</td>
-        <td>❌</td>
         <td>✅</td>
         <td>❌</td>
-        <td>❌</td>
-        <td>✅</td>
     </tr>
     <tr>
-        <td>Personal <a href="https://en.wikipedia.org/wiki/Secure_Shell">SSH</a> or <a href="https://en.wikipedia.org/wiki/HTTPS">HTTPS</a> server</td>
-        <td>✅</td>
-        <td>✅</td>
-        <td>✅</td>
-        <td>❌</td>
-        <td>✅</td>
-        <td>❌</td>
-        <td>✅</td>
-    </tr>
-    <tr>
-        <td>Personal <a href="https://en.wikipedia.org/wiki/File_Transfer_Protocol">FTP</a> server</td>
+        <td>Personal <a href="https://en.wikipedia.org/wiki/File_Transfer_Protocol">FTP</a></td>
         <td>✅</td>
         <td>✅</td>
         <td>✅</td>
         <td>❌</td>
         <td>❌</td>
         <td>❌</td>
-        <td>✅</td>
     </tr>
     <tr>
         <td>Dropbox, Google Drive, etc.</td>
@@ -195,7 +187,6 @@ I'm very grateful to their creators and contributors.
         <td>✅</td>
         <td>✅</td>
         <td>✅</td>
-        <td>❌</td>
         <td>❌</td>
     </tr>
     <tr>
@@ -206,11 +197,10 @@ I'm very grateful to their creators and contributors.
         <td>✅</td>
         <td>✅</td>
         <td>❌</td>
-        <td>❓</td>
     </tr>
 </table>
 
-Open an issue on GitHub to add more projects.
+Open an [issue](https://github.com/manforowicz/gday/issues) on GitHub to add more projects.
 
 ## In this repository
 
@@ -220,9 +210,6 @@ Open an issue on GitHub to add more projects.
 - [gday_encryption](/gday_encryption/) - Encrypts an IO stream.
 - [gday_contact_exchange_protocol](/gday_contact_exchange_protocol/) - Protocol for two peers to share their socket
 addresses via a server.
-- [gday_file_offer_protocol](/gday_file_offer_protocol/) - Protocol for peers to offer to send each other files.
+- [gday_file_transfer](/gday_file_offer_protocol/) - Protocol for transferring files over a direct connection.s
 
 ![gday crate dependency graph](/images/dependency_graph.svg)
-
-## Motivation
-![xkcd about sending files](/images/file_transfer.png)

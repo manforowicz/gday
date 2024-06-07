@@ -1,3 +1,5 @@
+//! Note: this crate is still in early-development, so expect breaking changes.
+//!
 //! Lets peers behind [NAT (network address translation)](https://en.wikipedia.org/wiki/Network_address_translation)
 //! try to establish a direct authenticated TCP connection.
 //!

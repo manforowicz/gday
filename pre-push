@@ -1,0 +1,34 @@
+#!/bin/sh
+
+# This is a git hook that checks the code using cargo
+# before allowing a git push.
+
+# Put this script in .git/hooks/pre-push
+# for it to work as a git hook.
+
+# cargo test
+if ! cargo test; then
+    echo "Error with 'cargo fmt --check'."
+    exit 1
+fi
+
+# cargo clippy
+if ! cargo clippy; then
+    echo "Error with 'cargo clippy'."
+    exit 1
+fi
+
+# cargo doc --no-deps
+if ! cargo doc --no-deps; then
+    echo "Error with 'cargo doc --no-deps'."
+    exit 1
+fi
+
+# cargo fmt --check
+if ! cargo fmt --check; then
+    echo "Error with 'cargo fmt --check'."
+    exit 1
+fi
+
+# If all checks pass, allow the push
+exit 0
