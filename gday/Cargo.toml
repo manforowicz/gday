@@ -1,7 +1,7 @@
 [package]
 name = "gday"
 version = "0.1.1"
-description = "Command line tool to send files easily, securely, and directly, without a relay or port forwarding."
+description = "Command line tool to send files directly and securely, without a relay or port forwarding."
 homepage = "https://github.com/manforowicz/gday/gday/"
 
 # Inherit these keys from workspace toml
@@ -13,8 +13,7 @@ repository.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.86"
-clap = { version = "4.5.4", features = ["derive"] }
+clap = { version = "4.5.6", features = ["derive"] }
 env_logger = "0.11.3"
 gday_encryption = { version = "0.1.1", path = "../gday_encryption" }
 gday_file_transfer = { version = "0.1.1", path = "../gday_file_transfer" }
@@ -23,7 +22,6 @@ indicatif = "0.17.8"
 log = "0.4.21"
 os_str_bytes = "7.0.0"
 owo-colors = "4.0.0"
-postcard = "1.0.8"
 rand = "0.8.5"
 serde = { version = "1.0.203", features = ["serde_derive"] }
 thiserror = "1.0.61"

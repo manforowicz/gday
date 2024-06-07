@@ -1,3 +1,5 @@
+//! Note: this crate is still in early-development, so expect breaking changes.
+//!
 //! `gday` is a command line line tool for peers to send each other files.
 //! Features:
 //! - Never uses relays. Instead, uses a gday_contact_exchange_server to share socket

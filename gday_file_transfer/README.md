@@ -1,3 +1,5 @@
+Note: this crate is still in early-development, so expect breaking changes.
+
 # `gday_file_offer_protocol`
 ![Crates.io Version](https://img.shields.io/crates/v/gday_file_offer_protocol) ![docs.rs](https://img.shields.io/docsrs/gday_file_offer_protocol)
 

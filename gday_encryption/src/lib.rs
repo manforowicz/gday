@@ -1,3 +1,5 @@
+//! Note: this crate is still in early-development, so expect breaking changes.
+//!
 //! A simple encrypted wrapper around an IO stream.
 //! Uses [`chacha20poly1305`] with the [`chacha20poly1305::aead::stream`].
 #![forbid(unsafe_code)]

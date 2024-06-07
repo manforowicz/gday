@@ -1,3 +1,5 @@
+//! Note: this crate is still in early-development, so expect breaking changes.
+//!
 //! This protocol lets two users exchange their public and (optionally) private socket addresses via a server.
 //!
 //! On it's own, this crate doesn't do anything other than define a shared protocol.

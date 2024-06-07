@@ -1,3 +1,5 @@
+//! Note: this crate is still in early-development, so expect breaking changes.
+//!
 //! This protocol lets a peer offer and transfer files to another peer.
 //!
 //! TODO: Update htis comment.
