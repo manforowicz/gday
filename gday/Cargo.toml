@@ -15,9 +15,9 @@ repository.workspace = true
 [dependencies]
 clap = { version = "4.5.6", features = ["derive"] }
 env_logger = "0.11.3"
-gday_encryption = { version = "0.1.1", path = "../gday_encryption" }
-gday_file_transfer = { version = "0.1.1", path = "../gday_file_transfer" }
-gday_hole_punch = { version = "0.1.1", path = "../gday_hole_punch" }
+gday_encryption = { version = "^0.1.1", path = "../gday_encryption" }
+gday_file_transfer = { version = "^0.1.1", path = "../gday_file_transfer" }
+gday_hole_punch = { version = "^0.1.1", path = "../gday_hole_punch" }
 indicatif = "0.17.8"
 log = "0.4.21"
 os_str_bytes = "7.0.0"

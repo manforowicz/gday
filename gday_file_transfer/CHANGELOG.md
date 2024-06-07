@@ -5,13 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## 0.1.1 (2024-06-07)
 
 ### Commit Statistics
 
 <csr-read-only-do-not-edit/>
 
- - 15 commits contributed to the release over the course of 2 calendar days.
+ - 16 commits contributed to the release over the course of 2 calendar days.
  - 0 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
 
@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <details><summary>view details</summary>
 
  * **Uncategorized**
+    - Trying to figure out changelog setup with cargo-smart-release ([`15e8238`](https://github.com/manforowicz/gday/commit/15e8238958f74b93e55b540fd7a7831329c63fca))
     - Updated changelogs ([`b97e152`](https://github.com/manforowicz/gday/commit/b97e1520337064ade45f2bb9a5acdcac6fc84c6a))
     - Added a changelog ([`8b9d93e`](https://github.com/manforowicz/gday/commit/8b9d93e89289841c04d6be54c37cf98703715bf7))
     - Merge pull request #4 from manforowicz/example-pr ([`f567a95`](https://github.com/manforowicz/gday/commit/f567a95de7c7bcff59a46ee083bfc4b50acf1b60))
