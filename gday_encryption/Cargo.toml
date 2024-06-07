@@ -5,6 +5,7 @@ authors = ["Marcin Anforowicz"]
 edition = "2021"
 description = "A simple ChaCha20Poly1305 encryption wrapper around an IO stream."
 license = "MIT"
+repository = "https://github.com/manforowicz/gday/"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

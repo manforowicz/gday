@@ -5,6 +5,13 @@ authors = ["Marcin Anforowicz"]
 edition = "2021"
 description = "Command line tool to send files easily, securely, and directly, without a relay or port forwarding."
 license = "MIT"
+repository = "https://github.com/manforowicz/gday/"
+
+[package.metadata.wix]
+upgrade-guid = "FCAEFC4D-05CD-4DCB-B03B-8A166EDF4E86"
+path-guid = "CB3BA61F-1F31-4F17-9778-D5BBAA9697DF"
+license = false
+eula = false
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]

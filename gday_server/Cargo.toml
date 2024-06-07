@@ -5,6 +5,13 @@ authors = ["Marcin Anforowicz"]
 edition = "2021"
 description = "A server that lets 2 peers exchange their private and public addresses via the gday contact exchange protocol."
 license = "MIT"
+repository = "https://github.com/manforowicz/gday/"
+
+[package.metadata.wix]
+upgrade-guid = "C41E4AFE-47F3-4089-8040-B2FFF4135772"
+path-guid = "6EC3598B-2B5A-47EF-854A-401AB20270D2"
+license = false
+eula = false
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
