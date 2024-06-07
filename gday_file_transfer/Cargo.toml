@@ -1,6 +1,6 @@
 [package]
 name = "gday_file_transfer"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Marcin Anforowicz"]
 edition = "2021"
 description = "A minimal protocol to securely transfer files over an IO stream. Used by gday."
@@ -10,7 +10,7 @@ repository = "https://github.com/manforowicz/gday/"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-gday_encryption = { version = "0.1.0", path = "../gday_encryption" }
+gday_encryption = { version = "0.1.1", path = "../gday_encryption" }
 os_str_bytes = "7.0.0"
 rand = "0.8.5"
 serde = { version = "1.0.203", features = ["derive"] }
