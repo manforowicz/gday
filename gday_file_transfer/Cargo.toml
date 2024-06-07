@@ -1,11 +1,13 @@
 [package]
 name = "gday_file_transfer"
 version = "0.1.1"
-authors = ["Marcin Anforowicz"]
-edition = "2021"
 description = "A minimal protocol to securely transfer files over an IO stream. Used by gday."
-license = "MIT"
-repository = "https://github.com/manforowicz/gday/"
+
+# Inherit these keys from workspace toml
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

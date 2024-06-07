@@ -1,11 +1,13 @@
 [package]
 name = "gday_hole_punch"
 version = "0.1.1"
-authors = ["Marcin Anforowicz"]
-edition = "2021"
 description = "Establish an authenticated peer-to-peer internet connection using TCP hole-punching."
-license = "MIT"
-repository = "https://github.com/manforowicz/gday/"
+
+# Inherit these keys from workspace toml
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -14,7 +16,7 @@ blake3 = "1.5.1"
 gday_contact_exchange_protocol = { version = "0.1.1", path = "../gday_contact_exchange_protocol" }
 log = "0.4.21"
 rand = "0.8.5"
-rustls = "0.23.9"
+rustls = { version = "0.23.9", features = ["ring", "log", "logging", "std", "tls12"], default-features = false }
 serde = "1.0.203"
 socket2 = "0.5.7"
 spake2 = { version = "0.4.0", features = ["std"] }

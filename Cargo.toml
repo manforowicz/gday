@@ -10,23 +10,12 @@ members = [
     "gday_file_transfer",
 ]
 
-# Config for 'cargo dist'
-# specifying build dependencies for aws-lc-sys
-[workspace.metadata.dist.dependencies.homebrew]
-llvm = '*'
-cmake = '*'
-
-
-[workspace.metadata.dist.dependencies.apt]
-clang = '*'
-build-essential = '*'
-cmake = '*'
-
-
-[workspace.metadata.dist.dependencies.chocolatey]
-clang = '*'
-cmake = '*'
-nasm = '*'
+# Keys that workspace packages will inherit
+[workspace.package]
+authors = ["Marcin Anforowicz"]
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/manforowicz/gday/"
 
 # Config for 'cargo dist'
 [workspace.metadata.dist]
@@ -39,7 +28,7 @@ installers = []
 # Target platforms to build apps for (Rust target-triple syntax)
 targets = ["aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu", "x86_64-pc-windows-msvc"]
 # Publish jobs to run in CI
-pr-run-mode = "plan"
+pr-run-mode = "upload"
 # Whether to install an updater program
 install-updater = false
 

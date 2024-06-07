@@ -1,11 +1,13 @@
 [package]
 name = "gday_contact_exchange_protocol"
 version = "0.1.1"
-authors = ["Marcin Anforowicz"]
-edition = "2021"
 description = "Protocol that peers can use to exchange their public and private socket addresses via a server."
-license = "MIT"
-repository = "https://github.com/manforowicz/gday/"
+
+# Inherit these keys from workspace toml
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
