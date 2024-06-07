@@ -15,19 +15,18 @@ members = [
 [workspace.metadata.dist.dependencies.homebrew]
 llvm = '*'
 cmake = '*'
-go = '*'
 
 
 [workspace.metadata.dist.dependencies.apt]
 clang = '*'
+build-essential = '*'
 cmake = '*'
-golang = '*'
 
 
 [workspace.metadata.dist.dependencies.chocolatey]
 clang = '*'
 cmake = '*'
-go = '*'
+nasm = '*'
 
 # Config for 'cargo dist'
 [workspace.metadata.dist]
