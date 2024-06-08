@@ -1,0 +1,53 @@
+# systemd service that runs a gday_server
+#
+# Save as:
+# '/etc/systemd/system/gday_server.service'
+#
+# Reload the dameon:
+# 'sudo systemctl daemon-reload'
+# 
+# Enable the service so that it starts on boot:
+# 'sudo systemctl enable gday_server'
+#
+# Start the service right now:
+# 'sudo systemctl start gday_server'
+#
+# Verify the status of the service:
+# 'sudo systemctl status gday_server'
+#
+# View service logs (-u specifies service, -f follows log in real time)
+# 'sudo journalctl -u gday_server -f'
+#
+# View stderr and stdout log files in real time:
+# 'tail -f ~/gday_server/stdout.log'
+
+
+[Unit]
+# Service description
+Description=gday_server
+
+# Start this service after network is ready
+After=network.target
+
+
+[Service]
+
+# Command to execute
+ExecStart=/home/ubuntu/gday_server/gday_server --key /etc/letsencrypt/live/gday.manforowicz.com/privkey.pem --certificate /etc/letsencrypt/live/gday.manforowicz.com/fullchain.pem
+
+# Auto-restart the service if it crashes
+Restart=always
+
+# How long to wait between restarts
+RestartSec=20
+
+# Run the service as root, so it can access the certificates
+User=root
+
+# Pipe stdout and stderr into custom log files
+StandardOutput=append:/home/ubuntu/gday_server/stdout.log
+StandardError=append:/home/ubuntu/gday_server/stderr.log
+
+
+[Install]
+WantedBy=multi-user.target
