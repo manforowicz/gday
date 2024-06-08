@@ -10,7 +10,7 @@
 //! [gday_file_transfer](https://crates.io/crates/gday_file_transfer) chose this library
 //! because [rustls](https://docs.rs/rustls/latest/rustls) didn't support
 //! peer-to-peer connections with a shared key.
-//! 
+//!
 #![forbid(unsafe_code)]
 #![warn(clippy::all)]
 

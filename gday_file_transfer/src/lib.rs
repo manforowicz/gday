@@ -10,7 +10,7 @@
 //!
 //! 2. Peer A calls [`get_file_metas()`] to get a [`Vec`] of [`FileMetaLocal`]
 //! containing metadata about the files they'd like to send.
-//! 
+//!
 //! 3. Peer A calls [`FileOfferMsg::from()`] on the `Vec<FileMetaLocal>`, to get
 //! a serializable [`FileOfferMsg`].
 //!
