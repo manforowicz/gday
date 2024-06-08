@@ -1,6 +1,6 @@
-# gday
+Note: this project is still in early-development, so expect breaking changes.
 
-**Note: this project is still in early-development, so expect breaking changes.**
+# gday
 
 A command line tool for sending files.
 
@@ -77,8 +77,7 @@ Options:
 
 ## Similar Projects
 
-I took inspiration from these great projects.
-I'm very grateful to their creators and contributors.
+I took inspiration from these amazing projects!
 
 <table>
     <tr>
@@ -206,10 +205,10 @@ Open an [issue](https://github.com/manforowicz/gday/issues) on GitHub to add mor
 
 - [gday](/gday/) - Command line tool for sending files.
 - [gday_server](/gday_server/) - Server that lets two peers share their socket addresses.
-- [gday_hole_punch](/gday_hole_punch/) - Tries to establish a peer-to-peer TCP connection.
-- [gday_encryption](/gday_encryption/) - Encrypts an IO stream.
-- [gday_contact_exchange_protocol](/gday_contact_exchange_protocol/) - Protocol for two peers to share their socket
+- [gday_hole_punch](/gday_hole_punch/) - Library for establishing peer-to-peer TCP connection.
+- [gday_file_transfer](/gday_file_offer_protocol/) - Library for transferring files over a direct connection.
+- [gday_contact_exchange_protocol](/gday_contact_exchange_protocol/) - Library that specifies a protocol for two peers to share their socket
 addresses via a server.
-- [gday_file_transfer](/gday_file_offer_protocol/) - Protocol for transferring files over a direct connection.s
+- [gday_encryption](/gday_encryption/) - Library for encrypting an IO stream.
 
 ![gday crate dependency graph](/images/dependency_graph.svg)

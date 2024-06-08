@@ -34,6 +34,11 @@ publish-jobs = ["homebrew"]
 # Publish jobs to run in CI
 pr-run-mode = "plan"
 
+# Marcin's additional cargo dist config
+
+# Switch from .tar.gz to .tar.xz
+unix-archive = ".tar.gz"
+
 # The profile that 'cargo dist' will build with
 [profile.dist]
 inherits = "release"

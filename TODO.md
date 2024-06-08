@@ -10,16 +10,9 @@ Not all of them are desirable or necessary.
 
 - Add explanation in readme, of how this differs from magic wormhole.
 
-- Figure out why gday freezes when server is unresponsive. Add a timeout.
+- Make gday timeout if the server is unresponsive.
 
-- Make additional command line options only show when there's a need for them.
-(choosing which files to download)
-
-- Add cargo audit to GitHub continuous integration.
-
-- Factor things out so that `gday` really only handles terminal UI stuff.
-
-- Work in progress: Make file transfer response actually have file names in it.
+- Make command line messages of gday more helpful.
 
 ## Abandoned ideas
 
@@ -43,3 +36,6 @@ Not all of them are desirable or necessary.
   during hole-punching. That might please some NATs that lose state when TCP connection is closed.
   This is not really necessary, since I can just add a comment
   telling any library users to not drop ServerConnection when calling connect to peer.
+
+- Make file transfer response msg list file names, instead of going by index?
+  I don't really see the advantage to doing this.

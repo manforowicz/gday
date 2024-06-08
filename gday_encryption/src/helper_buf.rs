@@ -22,6 +22,7 @@ impl HelperBuf {
     }
 
     /// Increments the left cursor by `num_bytes` bytes.
+    ///
     /// - Effectively "removes" the first `num_bytes`.
     /// - Panics if `num_bytes` > `self.len()`.
     pub fn consume(&mut self, num_bytes: usize) {
@@ -109,13 +110,13 @@ impl DerefMut for HelperBuf {
 
 impl AsRef<[u8]> for HelperBuf {
     fn as_ref(&self) -> &[u8] {
-        self
+        &self.inner[self.l_cursor..self.r_cursor]
     }
 }
 
 impl AsMut<[u8]> for HelperBuf {
     fn as_mut(&mut self) -> &mut [u8] {
-        self
+        &mut self.inner[self.l_cursor..self.r_cursor]
     }
 }
 
@@ -123,7 +124,7 @@ impl AsMut<[u8]> for HelperBuf {
 pub struct HelperBufPart<'a> {
     /// The [`HelperBuf`] this struct references.
     parent: &'a mut HelperBuf,
-    /// The index in `parent` where this view begins.
+    /// The index in [`Self::parent`] where this view begins.
     start_i: usize,
 }
 
@@ -168,13 +169,13 @@ impl<'a> DerefMut for HelperBufPart<'a> {
 
 impl<'a> AsRef<[u8]> for HelperBufPart<'a> {
     fn as_ref(&self) -> &[u8] {
-        self
+        &self.parent.inner[self.start_i..self.parent.r_cursor]
     }
 }
 
 impl<'a> AsMut<[u8]> for HelperBufPart<'a> {
     fn as_mut(&mut self) -> &mut [u8] {
-        self
+        &mut self.parent.inner[self.start_i..self.parent.r_cursor]
     }
 }
 

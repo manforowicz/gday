@@ -4,13 +4,13 @@
 //! try to establish a direct authenticated TCP connection.
 //!
 //! Uses [TCP hole punching](https://en.wikipedia.org/wiki/TCP_hole_punching)
-//! and a helper **gday_contact_exchange_server** to do this.
+//! and a helper [gday_server](https://crates.io/crates/gday_server) to do this.
 //!
-//! This library is used by **gday**, a command line tool for sending files.
+//! This library is used by [gday](https://crates.io/crates/gday), a command line tool for sending files.
 //!
 //! # Example steps
 //!
-//! 1. Peer A connects to a **gday_contact_exchange_server** using
+//! 1. Peer A connects to a [gday_server](https://crates.io/crates/gday_server) using
 //! a function such as [`server_connector::connect_to_random_server()`].
 //!
 //! 2. Peer A creates a room in the server using [`ContactSharer::create_room()`] with a random room code.

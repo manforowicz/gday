@@ -1,12 +1,4 @@
-//! Note: this crate is still in early-development, so expect breaking changes.
-//!
-//! `gday` is a command line line tool for peers to send each other files.
-//! Features:
-//! - Never uses relays. Instead, uses a gday_contact_exchange_server to share socket
-//!     addresses with peer, and then performs
-//!     [Hole Punching](https://en.wikipedia.org/wiki/TCP_hole_punching)
-//!     to establish a direct connection. Note that this may fail when one of the peers
-//!     is behind a strict [NAT](https://en.wikipedia.org/wiki/Network_address_translation).
+//! Command line tool to securely send files (without a relay or port forwarding).
 #![forbid(unsafe_code)]
 #![warn(clippy::all)]
 
@@ -31,6 +23,9 @@ use std::path::PathBuf;
 /// How long to try hole punching before giving up.
 const HOLE_PUNCH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 
+/// How long to try connecting to a server before giving up.
+const SERVER_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
 #[derive(Parser, Debug)]
 #[command(author, version, about)]
 struct Args {
@@ -41,11 +36,11 @@ struct Args {
     #[arg(short, long)]
     server: Option<String>,
 
-    /// Which server port to connect to.
+    /// Connect to a custom server port.
     #[arg(short, long, requires("server"))]
     port: Option<u16>,
 
-    /// Use unencrypted TCP instead of TLS to the custom server.
+    /// Use raw TCP without TLS.
     #[arg(short, long, requires("server"))]
     unencrypted: bool,
 
@@ -56,7 +51,7 @@ struct Args {
 
 #[derive(Subcommand, Debug)]
 enum Command {
-    /// Send files
+    /// Send these files and/or directories.
     Send {
         /// Custom shared code of form "server_id.room_code.shared_secret" (base 16).
         ///
@@ -66,11 +61,11 @@ enum Command {
         #[arg(short, long)]
         code: Option<String>,
 
-        /// TODO: Comment
+        #[arg(required = true, num_args = 1..)]
         paths: Vec<PathBuf>,
     },
 
-    /// Receive files. Input the code your peer told you.
+    /// Receive files. Input the code your peer gave you.
     Receive { code: String },
 }
 
@@ -106,19 +101,21 @@ fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
     // otherwise pick a random default server
     let (mut server_connection, server_id) = if let Some(domain_name) = args.server {
         (
-            server_connector::connect_to_domain_name(&domain_name, port, !args.unencrypted)?,
+            server_connector::connect_to_domain_name(
+                &domain_name,
+                port,
+                !args.unencrypted,
+                SERVER_TIMEOUT,
+            )?,
             0,
         )
     } else {
-        server_connector::connect_to_random_server(DEFAULT_SERVERS)?
+        server_connector::connect_to_random_server(DEFAULT_SERVERS, SERVER_TIMEOUT)?
     };
 
     match args.operation {
         // sending files
         crate::Command::Send { paths, code } => {
-            // confirm the user wants to send these files
-            let local_files = dialog::ask_send(&paths)?;
-
             // generate random `room_code` and `shared_secret`
             // if the user didn't provide custom ones
             let peer_code = if let Some(code) = code {
@@ -132,6 +129,12 @@ fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
                     shared_secret,
                 }
             };
+
+            // get metadata about the files to transfer
+            let local_files = gday_file_transfer::get_file_metas(&paths)?;
+
+            // confirm the user wants to send these files
+            dialog::ask_send(&local_files)?;
 
             // create a room in the server
             let (contact_sharer, my_contact) =
@@ -168,9 +171,11 @@ fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
             // receive file offer from peer
             let response: FileResponseMsg = read_from(&mut stream)?;
 
-            let accepted = response.response.iter().filter_map(|&x| x);
-            let num_accepted = accepted.clone().count();
-            let resumptions = accepted.filter(|&x| x != 0).count();
+            // Total number of files accepted
+            let num_accepted = response.get_total_num_accepted();
+
+            // How many of those files are being resumed
+            let resumptions = response.get_num_partially_accepted();
 
             println!(
                 "Your mate accepted {}/{} files",
@@ -219,7 +224,7 @@ fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
             // respond to the file offer
             write_to(&response, &mut stream)?;
 
-            if response.response.iter().all(|x| x.is_none()) {
+            if response.get_total_num_accepted() == 0 {
                 println!("No files will be downloaded.");
             } else {
                 transfer::receive_files(offer, response, &mut stream)?;

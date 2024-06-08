@@ -1,8 +1,9 @@
 [package]
 name = "gday_hole_punch"
 version = "0.1.1"
-description = "Establish an authenticated peer-to-peer connection using TCP hole-punching."
-homepage = "https://github.com/manforowicz/gday/gday_hole_punch/"
+description = "Securely connect to a peer using TCP hole-punching."
+homepage = "https://github.com/manforowicz/gday/tree/main/gday_hole_punch"
+categories = ["network-programming"]
 
 # Inherit these keys from workspace toml
 authors.workspace = true

@@ -1,4 +1,3 @@
-use gday_encryption::EncryptedStream;
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufWriter, Read, Seek, SeekFrom, Write};
 
@@ -16,10 +15,22 @@ pub struct TransferReport {
     pub current_file: std::path::PathBuf,
 }
 
+/// Transfers the requested files to `writer`.
+///
+/// - `offer` is the `Vec` of [`FileMetaLocal`] offered to the peer.
+/// - `response` is the peer's [`FileResponseMsg`].
+/// - `progress_callback` is an optional function that gets frequently
+/// called with [`TransferReport`] to report progress. Calling this function
+/// should be a cheap operation to avoid a performance penalty.
+///
+/// Transfers the files in order, sequentially, back-to-back.
+///
+/// Returns an error if can't access a file in a [`FileMetaLocal`], or
+/// encounters a network error.
 pub fn send_files(
     offer: Vec<FileMetaLocal>,
     response: FileResponseMsg,
-    writer: &mut EncryptedStream<impl Write>,
+    writer: &mut impl Write,
     progress_callback: Option<impl FnMut(&TransferReport)>,
 ) -> Result<(), Error> {
     let files: Vec<(FileMetaLocal, u64)> = offer
@@ -31,10 +42,21 @@ pub fn send_files(
     send_these_files(&files, writer, progress_callback)
 }
 
+/// Receives the requested files from `reader`.
+///
+/// - `offer` is the [`FileOfferMsg`] offered by the peer.
+/// - `response` is your corresponding [`FileResponseMsg`].
+/// - `progress_callback` is an optional function that gets frequently
+/// called with [`TransferReport`] to report progress. Calling this function
+/// should be a cheap operation to avoid a performance penalty.
+///
+/// Receives the files in order, sequentially, back-to-back.
+///
+/// Returns an error if encounters a file or network error.
 pub fn receive_files(
     offer: FileOfferMsg,
     response: FileResponseMsg,
-    reader: &mut EncryptedStream<impl Read>,
+    reader: &mut impl Read,
     progress_callback: Option<impl FnMut(&TransferReport)>,
 ) -> Result<(), Error> {
     let files: Vec<(FileMeta, u64)> = offer
@@ -47,19 +69,23 @@ pub fn receive_files(
     receive_these_files(&files, reader, progress_callback)
 }
 
-/// Sequentially write the requested parts of `files` to `writer`.
+/// Transfers specific files to `writer`.
 ///
-/// `files` is a slice of tuples:
-/// (my offered file: [`FileMetaLocal`], peer's response: [`Option<u64>`])
+/// Unlike [`send_files()`], this function takes an array of tuples.
+/// Each tuple stores a [`FileMetaLocal`], and the index of the first byte
+/// of that file to send.
 ///
-/// `progress_callback` gets repeatedly called when writing to report progress.
-/// These arguments are passed to it:
-/// - `&str` - `short_path` of the file currently being sent.
-/// - `u64` - The number of bytes written so far.
-/// - `u64` - The total number of bytes to write.
+/// `progress_callback` is an optional function that gets frequently
+/// called with [`TransferReport`] to report progress. Calling this function
+/// should be a cheap operation to avoid a performance penalty.
+///
+/// Transfers the files in order, sequentially, back-to-back.
+///
+/// Returns an error if can't access a file in a [`FileMetaLocal`], or
+/// encounters a network error.
 pub fn send_these_files(
     files: &[(FileMetaLocal, u64)],
-    writer: &mut EncryptedStream<impl Write>,
+    writer: &mut impl Write,
     progress_callback: Option<impl FnMut(&TransferReport)>,
 ) -> Result<(), Error> {
     // sum up total transfer size
@@ -104,19 +130,22 @@ pub fn send_these_files(
     Ok(())
 }
 
-/// Sequentially save the requested `files` from `reader`.
+/// Receives specific files to `writer`.
 ///
-/// `files` is a slice of tuples:
-/// (file offer I received: [`FileMetaLocal`], my response: [`Option<u64>`])
+/// Unlike [`receive_files()`], this function takes an array of tuples.
+/// Each tuple stores a [`FileMeta`], and the index of the first byte
+/// of the file that the peer will send.
 ///
-/// `progress_callback` gets repeatedly called when writing to report progress.
-/// These arguments are passed to it:
-/// - `&str` - `short_path` of the file currently being sent.
-/// - `u64` - The number of bytes read so far.
-/// - `u64` - The total number of bytes to read.
+/// `progress_callback` is an optional function that gets frequently
+/// called with [`TransferReport`] to report progress. Calling this function
+/// should be a cheap operation to avoid a performance penalty.
+///
+/// Receives the files in order, sequentially, back-to-back.
+///
+/// Returns an error if encounters a file or network error.
 pub fn receive_these_files(
     files: &[(FileMeta, u64)],
-    reader: &mut EncryptedStream<impl Read>,
+    reader: &mut impl Read,
     progress_callback: Option<impl FnMut(&TransferReport)>,
 ) -> Result<(), Error> {
     // sum up total transfer size
@@ -183,14 +212,8 @@ pub fn receive_these_files(
     Ok(())
 }
 
-/// Wraps an IO stream. Calls a callback function
-/// with the number of bytes read/written out of a total.
-///
-/// `progress_callback` gets repeatedly called when writing to report progress.
-/// These arguments are passed to it:
-/// - `&str` - `short_path` of the file currently being sent.
-/// - `u64` - The number of bytes read so far.
-/// - `u64` - The total number of bytes to read.
+/// Wraps an IO stream. Calls `progress_callback` on each
+/// read/write to report progress.
 struct ProgressWrapper<T, F: FnMut(&TransferReport)> {
     /// The callback function called to report progress
     progress_callback: Option<F>,

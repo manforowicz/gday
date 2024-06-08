@@ -1,8 +1,9 @@
 [package]
 name = "gday"
 version = "0.1.1"
-description = "Command line tool to send files directly and securely, without a relay or port forwarding."
-homepage = "https://github.com/manforowicz/gday/gday/"
+description = "Command line tool to securely send files (without a relay or port forwarding)."
+homepage = "https://github.com/manforowicz/gday/tree/main/gday"
+categories = ["command-line-utilities", "network-programming", "filesystem"]
 
 # Inherit these keys from workspace toml
 authors.workspace = true
@@ -20,8 +21,5 @@ gday_file_transfer = { version = "^0.1.1", path = "../gday_file_transfer" }
 gday_hole_punch = { version = "^0.1.1", path = "../gday_hole_punch" }
 indicatif = "0.17.8"
 log = "0.4.21"
-os_str_bytes = "7.0.0"
 owo-colors = "4.0.0"
 rand = "0.8.5"
-serde = { version = "1.0.203", features = ["serde_derive"] }
-thiserror = "1.0.61"

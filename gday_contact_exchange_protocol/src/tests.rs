@@ -1,28 +1,42 @@
 #![cfg(test)]
+use std::io::Write;
+
+use tokio::io::AsyncWriteExt;
+
 use crate::{ClientMsg, Contact, FullContact, ServerMsg};
 
 /// Test serializing and deserializing messages.
 #[test]
 fn sending_messages() {
-    let mut bytes = std::collections::VecDeque::new();
+    let mut pipe = std::collections::VecDeque::new();
 
     for msg in get_client_msg_examples() {
-        crate::write_to(msg, &mut bytes).unwrap();
+        crate::write_to(msg, &mut pipe).unwrap();
     }
 
     for msg in get_client_msg_examples() {
-        let deserialized_msg: ClientMsg = crate::read_from(&mut bytes).unwrap();
+        let deserialized_msg: ClientMsg = crate::read_from(&mut pipe).unwrap();
         assert_eq!(msg, deserialized_msg);
     }
 
     for msg in get_server_msg_examples() {
-        crate::write_to(msg, &mut bytes).unwrap();
+        crate::write_to(msg, &mut pipe).unwrap();
     }
 
     for msg in get_server_msg_examples() {
-        let deserialized_msg: ServerMsg = crate::read_from(&mut bytes).unwrap();
+        let deserialized_msg: ServerMsg = crate::read_from(&mut pipe).unwrap();
         assert_eq!(msg, deserialized_msg);
     }
+}
+
+#[test]
+fn error_on_invalid_json() {
+    let mut pipe = std::collections::VecDeque::new();
+
+    // gibberish json
+    pipe.write_all(&[0, 0, 0, 5, 52, 45, 77, 123, 12]).unwrap();
+    let result: Result<ServerMsg, crate::Error> = crate::read_from(&mut pipe);
+    assert!(matches!(result, Err(crate::Error::JSON(_))));
 }
 
 /// Test serializing and deserializing messages asynchronously.
@@ -47,6 +61,18 @@ async fn sending_messages_async() {
         let deserialized_msg: ServerMsg = crate::read_from_async(&mut reader).await.unwrap();
         assert_eq!(msg, deserialized_msg);
     }
+}
+
+#[tokio::test]
+async fn error_on_invalid_json_async() {
+    let (mut writer, mut reader) = tokio::io::duplex(1000);
+    // gibberish json
+    writer
+        .write_all(&[0, 0, 0, 5, 52, 45, 77, 123, 12])
+        .await
+        .unwrap();
+    let result: Result<ServerMsg, crate::Error> = crate::read_from_async(&mut reader).await;
+    assert!(matches!(result, Err(crate::Error::JSON(_))));
 }
 
 /// Get a [`Vec`] of example [`ClientMsg`]s.
@@ -92,7 +118,7 @@ fn get_server_msg_examples() -> Vec<ServerMsg> {
         }),
         ServerMsg::ErrorRoomTaken,
         ServerMsg::ErrorPeerTimedOut,
-        ServerMsg::ErrorNoSuchRoomID,
+        ServerMsg::ErrorNoSuchRoomCode,
         ServerMsg::ErrorTooManyRequests,
         ServerMsg::ErrorSyntax,
         ServerMsg::ErrorConnection,

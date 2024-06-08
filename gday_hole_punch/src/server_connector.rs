@@ -14,8 +14,10 @@ use std::{
     time::Duration,
 };
 
-/// The default list of default public Gday servers.
-/// - Submit an issue on Gday's GitHub if you'd like to add your own.
+/// List of default public Gday servers.
+///
+/// Having many server options helps make Gday decentralized!
+/// - Submit an issue on Gday's GitHub if you'd like to add your own!
 /// - All of these only serve encrypted TLS and listen on port 2311.
 pub const DEFAULT_SERVERS: &[ServerInfo] = &[ServerInfo {
     domain_name: "gday.manforowicz.com",
@@ -24,24 +26,35 @@ pub const DEFAULT_SERVERS: &[ServerInfo] = &[ServerInfo {
 }];
 
 /// Information about a single Gday server.
+///
+/// A public gday server should only serve
+/// encrypted TLS and listen on port 2311.
+#[derive(Debug, Clone)]
 pub struct ServerInfo {
-    /// The domain name of the server.
+    /// The DNS name of the server.
     pub domain_name: &'static str,
-    /// The ID of the server. Helpful when telling the other peer which
-    /// server to connect to.
+    /// The unique ID of the server.
     ///
+    /// Helpful when telling the other peer whichserver to connect to.
     /// Should NOT be zero, since peers can use that value to represent
     /// a custom server.
     pub id: u64,
     /// Only servers with `prefer` are considered when choosing a random
     /// server to connect to.
     ///
-    /// New servers shouldn't be preferred, to ensure compatibility with
+    /// However, all servers are considered when connecting to an `id`
+    /// given by a peer.
+    ///
+    /// Very new servers shouldn't be preferred, to ensure compatibility with
     /// peers that don't yet know about them.
     pub prefer: bool,
 }
 
+/// A connection to a server.
+///
+/// Either `TCP` or `TLS`.
 #[allow(clippy::large_enum_variant)]
+#[derive(Debug)]
 pub enum ServerStream {
     TCP(TcpStream),
     TLS(rustls::StreamOwned<rustls::ClientConnection, TcpStream>),
@@ -83,7 +96,7 @@ impl ServerStream {
 
     /// Enables SO_REUSEADDR and SO_REUSEPORT
     /// So that this socket can be reused for
-    /// hole-punching.
+    /// hole punching.
     fn enable_reuse(&self) {
         let stream: &TcpStream = match self {
             Self::TCP(stream) => stream,
@@ -99,7 +112,7 @@ impl ServerStream {
     }
 }
 
-/// Can hold both a IPv4 and IPv6 [`ServerStream`] to a Gday server.
+/// Can hold both an IPv4 and IPv6 [`ServerStream`] to a Gday server.
 pub struct ServerConnection {
     pub v4: Option<ServerStream>,
     pub v6: Option<ServerStream>,
@@ -135,7 +148,7 @@ impl ServerConnection {
         Ok(())
     }
 
-    /// Returns a [`Vec`] of all the [`TLSStream`]s in this connection.
+    /// Returns a [`Vec`] of all the [`ServerStream`]s in this connection.
     /// Will return IPV6 followed by IPV4
     pub(super) fn streams(&mut self) -> Vec<&mut ServerStream> {
         let mut streams = Vec::new();
@@ -153,45 +166,55 @@ impl ServerConnection {
 }
 
 /// In random order, sequentially try connecting to the given `servers`.
-/// (connects to port [`DEFAULT_TLS_PORT`] (2311) via TLS)
+///
+/// Ignores servers that don't have `prefer == true`.
+/// Connects to port [`DEFAULT_TLS_PORT`] (2311) via TLS.
+/// Tries the next server after `timeout` time.
 ///
 /// Returns
 /// - The [`ServerConnection`] of the first successful connection.
 /// - The `id` of the server that [`ServerConnection`] connected to.
 ///
 /// Returns an error if all connection attempts failed.
-pub fn connect_to_random_server(servers: &[ServerInfo]) -> Result<(ServerConnection, u64), Error> {
+pub fn connect_to_random_server(
+    servers: &[ServerInfo],
+    timeout: Duration,
+) -> Result<(ServerConnection, u64), Error> {
     let preferred: Vec<&ServerInfo> = servers.iter().filter(|s| s.prefer).collect();
     let preferred_names: Vec<&str> = preferred.iter().map(|s| s.domain_name).collect();
-    let (conn, i) = connect_to_random_domain_name(&preferred_names)?;
+    let (conn, i) = connect_to_random_domain_name(&preferred_names, timeout)?;
     Ok((conn, preferred[i].id))
 }
 
 /// Try connecting to the server with this `server_id` and returning a [`ServerConnection`].
-/// (connects to port [`DEFAULT_TLS_PORT`] (2311) via TLS)
+/// Connects to port [`DEFAULT_TLS_PORT`] (2311) via TLS.
+/// Gives up after `timeout` time.
 ///
 /// Returns an error if `servers` contains no server with id `server_id` or connecting
 /// to the server fails.
 pub fn connect_to_server_id(
     servers: &[ServerInfo],
     server_id: u64,
+    timeout: Duration,
 ) -> Result<ServerConnection, Error> {
     let Some(server) = servers.iter().find(|server| server.id == server_id) else {
         return Err(Error::ServerIDNotFound(server_id));
     };
-    connect_to_domain_name(server.domain_name, DEFAULT_TLS_PORT, true)
+    connect_to_domain_name(server.domain_name, DEFAULT_TLS_PORT, true, timeout)
 }
 
 /// In random order, sequentially tries connecting to the given `domain_names`.
-/// (connects to port [`DEFAULT_TLS_PORT`] (2311) via TLS)
+/// Connects to port [`DEFAULT_TLS_PORT`] (2311) via TLS.
+/// Tries the next server after `timeout` time.
 ///
 /// Returns
 /// - The [`ServerConnection`] of the first successful connection.
 /// - The index of the address in `addresses` that the [`ServerConnection`] connected to.
 ///
-/// Returns an error if all connection attempts failed.
+/// Returns an error only if all connection attempts failed.
 pub fn connect_to_random_domain_name(
     domain_names: &[&str],
+    timeout: Duration,
 ) -> Result<(ServerConnection, usize), Error> {
     let mut indices: Vec<usize> = (0..domain_names.len()).collect();
     indices.shuffle(&mut rand::thread_rng());
@@ -200,7 +223,7 @@ pub fn connect_to_random_domain_name(
 
     for i in indices {
         let server = domain_names[i];
-        let streams = match connect_to_domain_name(server, DEFAULT_TLS_PORT, true) {
+        let streams = match connect_to_domain_name(server, DEFAULT_TLS_PORT, true, timeout) {
             Ok(streams) => streams,
             Err(err) => {
                 recent_error = err;
@@ -213,10 +236,9 @@ pub fn connect_to_random_domain_name(
     Err(recent_error)
 }
 
-const SERVER_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
-
 /// Tries connecting to this `domain_name` and `port`, on both IPv4 and IPv6.
-/// - Gives up connecting to each TCP address after 5 seconds.
+///
+/// - Gives up connecting to each TCP address after `timeout` time.
 /// - Returns an error if each attempted failed.
 /// - Uses TLS if `encrypt` is true, otherwise uses unencrypted TCP.
 /// - Returns an error for any issues with TLS.
@@ -225,16 +247,17 @@ pub fn connect_to_domain_name(
     domain_name: &str,
     port: u16,
     encrypt: bool,
+    timeout: Duration,
 ) -> Result<ServerConnection, Error> {
     let address = format!("{domain_name}:{port}");
     debug!("Connecting to server '{address}`");
     let addrs = address.to_socket_addrs()?;
 
     let addr_v4: Option<SocketAddr> = addrs.clone().find(|a| a.is_ipv4());
-    let tcp_v4 = addr_v4.map(|addr| TcpStream::connect_timeout(&addr, SERVER_CONNECT_TIMEOUT));
+    let tcp_v4 = addr_v4.map(|addr| TcpStream::connect_timeout(&addr, timeout));
 
     let addr_v6: Option<SocketAddr> = addrs.clone().find(|a| a.is_ipv6());
-    let tcp_v6 = addr_v6.map(|addr| TcpStream::connect_timeout(&addr, SERVER_CONNECT_TIMEOUT));
+    let tcp_v6 = addr_v6.map(|addr| TcpStream::connect_timeout(&addr, timeout));
 
     // return an error if couldn't establish any connections
     if !matches!(tcp_v4, Some(Ok(_))) && !matches!(tcp_v6, Some(Ok(_))) {

@@ -2,38 +2,44 @@
 //!
 //! This protocol lets two users exchange their public and (optionally) private socket addresses via a server.
 //!
-//! On it's own, this crate doesn't do anything other than define a shared protocol.
+//! On it's own, this library doesn't do anything other than define a shared protocol.
 //! In most cases, you should use one of the following crates:
 //!
-//! - **gday**: A command line tool for sending files to peers.
-//! - **gday_hole_punch**: A library for establishing a peer-to-peer TCP connection.
-//! - **gday_server**: A server binary that facilitates this protocol.
+//! - [**gday**](https://crates.io/crates/gday):
+//!     A command line tool for sending files to peers.
+//! - [**gday_hole_punch**](https://docs.rs/gday_hole_punch/):
+//!     A library for establishing a peer-to-peer TCP connection.
+//! - [**gday_server**](https://docs.rs/gday_server/):
+//!     A server binary that facilitates this protocol.
 //!
 //! # Example steps
 //!
-//! 1. Peer A connects to a server via the internet
-//!     and requests a new room with `room_code` using [`ClientMsg::CreateRoom`].
+//! 1. Peer A connects to a server via TCP (port [`DEFAULT_TCP_PORT`]) or
+//!     TLS (port [`DEFAULT_TLS_PORT`]).
+//!     
+//! 2. Peer A requests a new room with a random `room_code` using [`ClientMsg::CreateRoom`].
 //!
-//! 2. The server replies to peer A with [`ServerMsg::RoomCreated`] or [`ServerMsg::ErrorRoomTaken`]
+//! 3. The server replies to peer A with [`ServerMsg::RoomCreated`] or [`ServerMsg::ErrorRoomTaken`]
 //!     depending on if this `room_code` is in use.
 //!
-//! 3. Peer A externally tells peer B their `room_code` (by phone call, text message, carrier pigeon, etc.).
+//! 4. Peer A externally tells peer B their `room_code` (by phone call, text message, carrier pigeon, etc.).
 //!
-//! 4. Both peers send this `room_code` and optionally their local/private socket addresses to the server
-//!     via [`ClientMsg::SendAddr`] messages. The server determines their public addresses from the internet connections.
+//! 5. Both peers send this `room_code` and optionally their local/private
+//!     socket addresses to the server via [`ClientMsg::SendAddr`] messages.
+//!     The server determines their public addresses from their internet connections.
 //!     The server replies with [`ServerMsg::ReceivedAddr`] after each of these messages.
 //!
-//! 5. Both peers send [`ClientMsg::DoneSending`] once they are ready to receive the contact info of each other.
+//! 6. Both peers send [`ClientMsg::DoneSending`] once they are ready to receive the contact info of each other.
 //!
-//! 6. The server immediately replies to [`ClientMsg::DoneSending`]
+//! 7. The server immediately replies to [`ClientMsg::DoneSending`]
 //!     with [`ServerMsg::ClientContact`] which contains the [`FullContact`] of this peer.
 //!
-//! 7. Once both peers are ready, the server sends (on the same stream where [`ClientMsg::DoneSending`] came from)
+//! 8. Once both peers are ready, the server sends (on the same stream where [`ClientMsg::DoneSending`] came from)
 //!     each peer a [`ServerMsg::PeerContact`] which contains the [`FullContact`] of the other peer.
 //!
-//! 8. On their own, the peers use this info to connect directly to each other by using
+//! 9. On their own, the peers use this info to connect directly to each other by using
 //!     [hole punching](https://en.wikipedia.org/wiki/Hole_punching_(networking)).
-//!     gday_hole_punch is a library that provides tools for hole punching.
+//!     [gday_hole_punch](https://docs.rs/gday_hole_punch/) is a library that provides tools for hole punching.
 //!
 #![forbid(unsafe_code)]
 #![warn(clippy::all)]
@@ -111,7 +117,7 @@ pub enum ServerMsg {
     PeerContact(FullContact),
 
     /// Responds to a [`ClientMsg::CreateRoom`] if the given
-    /// room_id is currently taken.
+    /// `room_code` is currently taken.
     ErrorRoomTaken,
 
     /// If only one client sends [`ClientMsg::DoneSending`] before the room
@@ -119,16 +125,16 @@ pub enum ServerMsg {
     /// [`ServerMsg::PeerContact`]
     ErrorPeerTimedOut,
 
-    /// The server responds with this if the `room_id` of a [`ClientMsg`]
+    /// The server responds with this if the `room_code` of a [`ClientMsg`]
     /// doesn't exist, either because this room timed out, or never existed.
-    ErrorNoSuchRoomID,
+    ErrorNoSuchRoomCode,
 
     /// Rejects a request if an IP address made too many requests.
     /// The server then closes the connection.
     ErrorTooManyRequests,
 
     /// The server responds with this if it receives a [`ClientMsg`]
-    /// with any sort of improper syntax. The server then closes the connection.
+    /// it doesn't understand. The server then closes the connection.
     ErrorSyntax,
 
     /// The server responds with this if it has any sort of connection error.
@@ -157,7 +163,7 @@ impl Display for ServerMsg {
                 f,
                 "Timed out while waiting for peer to finish sending their address."
             ),
-            Self::ErrorNoSuchRoomID => write!(
+            Self::ErrorNoSuchRoomCode => write!(
                 f,
                 "Can't join room with this id, because it hasn't been created."
             ),
@@ -234,19 +240,6 @@ pub fn write_to(msg: impl Serialize, writer: &mut impl Write) -> Result<(), Erro
     Ok(())
 }
 
-/// Read `msg` from `reader` using [`serde_json`].
-///
-/// Assumes the message is prefixed with 4 big-endian bytes that holds its length.
-pub fn read_from<T: DeserializeOwned>(reader: &mut impl Read) -> Result<T, Error> {
-    let mut len = [0_u8; 4];
-    reader.read_exact(&mut len)?;
-    let len = u32::from_be_bytes(len) as usize;
-
-    let mut buf = vec![0; len];
-    reader.read_exact(&mut buf)?;
-    Ok(serde_json::from_reader(&buf[..])?)
-}
-
 /// Asynchronously write `msg` to `writer` using [`serde_json`].
 ///
 /// Prefixes the message with a 4 big-endian bytes that hold its length.
@@ -260,6 +253,19 @@ pub async fn write_to_async(
     writer.write_all(&vec).await?;
     writer.flush().await?;
     Ok(())
+}
+
+/// Read `msg` from `reader` using [`serde_json`].
+///
+/// Assumes the message is prefixed with 4 big-endian bytes that holds its length.
+pub fn read_from<T: DeserializeOwned>(reader: &mut impl Read) -> Result<T, Error> {
+    let mut len = [0_u8; 4];
+    reader.read_exact(&mut len)?;
+    let len = u32::from_be_bytes(len) as usize;
+
+    let mut buf = vec![0; len];
+    reader.read_exact(&mut buf)?;
+    Ok(serde_json::from_reader(&buf[..])?)
 }
 
 /// Asynchronously read `msg` from `reader` using [`serde_json`].

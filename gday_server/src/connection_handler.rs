@@ -60,7 +60,7 @@ async fn handle_requests(
         match result {
             Ok(()) => (),
             Err(HandleMessageError::State(state::Error::NoSuchRoomCode)) => {
-                write_to_async(ServerMsg::ErrorNoSuchRoomID, stream).await?;
+                write_to_async(ServerMsg::ErrorNoSuchRoomCode, stream).await?;
             }
             Err(HandleMessageError::Receiver(_)) => {
                 write_to_async(ServerMsg::ErrorPeerTimedOut, stream).await?;

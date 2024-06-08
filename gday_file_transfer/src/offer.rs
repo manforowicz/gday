@@ -1,5 +1,4 @@
 use crate::Error;
-use gday_encryption::EncryptedStream;
 use os_str_bytes::OsStrBytesExt;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{
@@ -173,12 +172,26 @@ pub struct FileResponseMsg {
     pub response: Vec<Option<u64>>,
 }
 
+impl FileResponseMsg {
+    /// Returns the number of non-rejected files.
+    /// Returns the number of fully and partially accepted files.
+    pub fn get_total_num_accepted(&self) -> usize {
+        self.response.iter().filter_map(|f| *f).count()
+    }
+
+    /// Returns only the total number of partially accepted files.
+    pub fn get_num_partially_accepted(&self) -> usize {
+        self.response
+            .iter()
+            .filter_map(|f| *f)
+            .filter(|&x| x != 0)
+            .count()
+    }
+}
+
 /// Write `msg` to `writer` using [`serde_json`].
 /// Prefixes the message with 4 big-endian bytes that hold its length.
-pub fn write_to(
-    msg: impl Serialize,
-    writer: &mut EncryptedStream<impl Write>,
-) -> Result<(), Error> {
+pub fn write_to(msg: impl Serialize, writer: &mut impl Write) -> Result<(), Error> {
     let vec = serde_json::to_vec(&msg)?;
     let Ok(len_byte) = u32::try_from(vec.len()) else {
         return Err(Error::MsgTooLong);
@@ -191,7 +204,7 @@ pub fn write_to(
 
 /// Read `msg` from `reader` using [`serde_json`].
 /// Assumes the message is prefixed with 4 big-endian bytes that hold its length.
-pub fn read_from<T: DeserializeOwned>(reader: &mut EncryptedStream<impl Read>) -> Result<T, Error> {
+pub fn read_from<T: DeserializeOwned>(reader: &mut impl Read) -> Result<T, Error> {
     let mut len = [0_u8; 4];
     reader.read_exact(&mut len)?;
     let len = u32::from_be_bytes(len) as usize;

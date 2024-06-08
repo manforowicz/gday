@@ -1,7 +1,16 @@
-//! Note: this crate is still in early-development, so expect breaking changes.
+//! This library provides a simple encrypted wrapper around an IO stream.
+//! Uses a streaming [chacha20poly1305](https://docs.rs/chacha20poly1305/latest/chacha20poly1305/) cipher.
 //!
-//! A simple encrypted wrapper around an IO stream.
-//! Uses [`chacha20poly1305`] with the [`chacha20poly1305::aead::stream`].
+//! This library is used by [gday_file_transfer](https://crates.io/crates/gday_file_transfer),
+//! which is used by [gday](https://crates.io/crates/gday).
+//!
+//! In general, I recommend using the well-established
+//! [rustls](https://docs.rs/rustls/latest/rustls) for encryption.
+//!
+//! [gday_file_transfer](https://crates.io/crates/gday_file_transfer) chose this library
+//! because [rustls](https://docs.rs/rustls/latest/rustls) didn't support
+//! peer-to-peer connections with a shared key.
+//! 
 #![forbid(unsafe_code)]
 #![warn(clippy::all)]
 
@@ -15,6 +24,8 @@ use chacha20poly1305::ChaCha20Poly1305;
 use helper_buf::HelperBuf;
 use std::io::{BufRead, ErrorKind, Read, Write};
 
+/// How many bytes larger an encrypted chunk is
+/// from an unencrypted chunk.
 const TAG_SIZE: usize = 16;
 
 /// A simple encrypted wrapper around an IO stream.
@@ -38,7 +49,7 @@ pub struct EncryptedStream<T> {
     /// Data that has been decrypted from `received`
     decrypted: HelperBuf,
 
-    /// Data to be sent. Encrypted when flushing.
+    /// Data to be sent. Encrypted only when flushing.
     /// - Invariant: the first 2 bytes are always
     /// reserved for the length header
     to_send: HelperBuf,
@@ -102,7 +113,7 @@ impl<T: Write> Write for EncryptedStream<T> {
             .expect("unreachable");
 
         // if `to_send` is full, flush it
-        if self.to_send.spare_capacity().len() == TAG_SIZE {
+        if self.to_send.spare_capacity().len() - TAG_SIZE == 0 {
             self.flush_write_buf()?;
         }
         Ok(bytes_taken)
@@ -117,7 +128,7 @@ impl<T: Write> Write for EncryptedStream<T> {
 impl<T: Read> EncryptedStream<T> {
     /// Reads and decrypts at least 1 new chunk into `self.decrypted`,
     /// unless reached EOF.
-    /// - Must only be called when `self.decrypted` is empty,
+    /// - Invariant: must only be called when `self.decrypted` is empty,
     ///     so that it has space to decrypt into.
     fn inner_read(&mut self) -> std::io::Result<()> {
         debug_assert!(self.decrypted.is_empty());
@@ -131,8 +142,15 @@ impl<T: Read> EncryptedStream<T> {
         while self.received.len() < 2 {
             let read_buf = self.received.spare_capacity();
             let bytes_read = self.inner.read(read_buf)?;
-            if bytes_read == 0 {
-                return Ok(()); // EOF
+            if bytes_read == 0 && self.received.is_empty() {
+                // EOF at chunk boundary
+                return Ok(());
+            } else if bytes_read == 0 && !self.received.is_empty() {
+                // Unexpected EOF within chunk
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::UnexpectedEof,
+                    "Unexpected EOF while receiving encrypted chunk.",
+                ));
             }
             self.received.increase_len(bytes_read);
         }
@@ -188,6 +206,7 @@ impl<T: Read> EncryptedStream<T> {
 }
 
 impl<T: Write> EncryptedStream<T> {
+    /// Encrypts and fully flushes [`Self::to_send`].
     fn flush_write_buf(&mut self) -> std::io::Result<()> {
         // encrypt in place
         let mut msg = self.to_send.split_off_aead_buf(2);

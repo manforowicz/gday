@@ -1,15 +1,16 @@
-Note: this crate is still in early-development, so expect breaking changes.
-
 # `gday_encryption`
-![Crates.io Version](https://img.shields.io/crates/v/gday_encryption) ![docs.rs](https://img.shields.io/docsrs/gday_encryption)
+[![Crates.io Version](https://img.shields.io/crates/v/gday_encryption)](https://crates.io/crates/gday_encryption)
+[![docs.rs](https://img.shields.io/docsrs/gday_encryption)](https://docs.rs/gday_encryption/)
 
-Want to send files easily, securely, and directly, without a relay or port forwarding?
-Then go to the [gday page](/gday/README.md).
+This library provides a simple encrypted wrapper around an IO stream.
+Uses a streaming [chacha20poly1305](https://docs.rs/chacha20poly1305/latest/chacha20poly1305/) cipher.
 
-WARNING! This library has not been officially audited for security.
+This library is used by [gday_file_transfer](https://crates.io/crates/gday_file_transfer),
+which is used by [gday](https://crates.io/crates/gday).
 
-This library provides a ChaCha20Poly1305-encrypted wrapper around any IO stream.
+In general, I recommend using the well-established
+[rustls](https://docs.rs/rustls/latest/rustls) for encryption.
 
-This library is used by [`gday`](/gday/) when transferring files.
-TLS wasn't used because there aren't any Rust TLS libraries with good peer-to-peer support.
-
+[gday_file_transfer](https://crates.io/crates/gday_file_transfer) chose this library
+because [rustls](https://docs.rs/rustls/latest/rustls) didn't support
+peer-to-peer connections with a shared key.

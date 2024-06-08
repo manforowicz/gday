@@ -3,18 +3,14 @@
 use gday_file_transfer::{FileMeta, FileMetaLocal};
 use indicatif::HumanBytes;
 use owo_colors::OwoColorize;
-use std::{io::Write, path::PathBuf};
+use std::io::Write;
 
-/// Recursively finds all the files at the provided paths and
-/// asks the user to confirm they want to send them, otherwise exits.
-/// Returns the list of files these paths lead to.
-pub fn ask_send(paths: &[PathBuf]) -> std::io::Result<Vec<FileMetaLocal>> {
-    // get the file metadatas for all these paths
-    let files = gday_file_transfer::get_file_metas(paths)?;
-
+/// Confirms that the user wants to send these files.
+/// If not, exits the program.
+pub fn ask_send(files: &[FileMetaLocal]) -> std::io::Result<()> {
     // print all the file names and sizes
     println!("{} {}", files.len().bold(), "files to send:".bold());
-    for file in &files {
+    for file in files {
         println!("{} ({})", file.short_path.display(), HumanBytes(file.len));
     }
     println!();
@@ -30,7 +26,7 @@ pub fn ask_send(paths: &[PathBuf]) -> std::io::Result<Vec<FileMetaLocal>> {
 
     // act on user choice
     if "yes".starts_with(&input) {
-        Ok(files)
+        Ok(())
     } else {
         println!("Cancelled.");
         std::process::exit(0);
@@ -38,6 +34,7 @@ pub fn ask_send(paths: &[PathBuf]) -> std::io::Result<Vec<FileMetaLocal>> {
 }
 
 /// Asks the user which of these offered `files` to accept.
+///
 /// Returns a `Vec<Option<u64>>`, where each
 /// - `None` represents rejecting the file at this index,
 /// - `Some(0)` represents fully accepting the file at this index,
@@ -52,7 +49,7 @@ pub fn ask_receive(files: &[FileMeta]) -> Result<Vec<Option<u64>>, gday_file_tra
 
     // A response accepting files that are not already fully saved
     let mut new_files = Vec::<Option<u64>>::with_capacity(files.len());
-    // The size of files in the offer not already saved
+    // The total size that `new_files` would download.
     let mut new_size = 0;
 
     // Print all the offered files.
@@ -117,9 +114,8 @@ pub fn ask_receive(files: &[FileMeta]) -> Result<Vec<Option<u64>>, gday_file_tra
     println!("3. Cancel.");
     print!("{} ", "Choose an option (1, 2, or 3):".bold());
     std::io::stdout().flush()?;
-    let input = get_lowercase_input()?;
 
-    match input.as_str() {
+    match get_lowercase_input()?.as_str() {
         // all files
         "1" => Ok(vec![Some(0); files.len()]),
         // new/interrupted files
@@ -129,7 +125,7 @@ pub fn ask_receive(files: &[FileMeta]) -> Result<Vec<Option<u64>>, gday_file_tra
     }
 }
 
-/// Reads a trimmed ascii-lowercase line of input from the user
+/// Reads a trimmed ascii-lowercase line of input from the user.
 fn get_lowercase_input() -> std::io::Result<String> {
     let mut response = String::new();
     std::io::stdin().read_line(&mut response)?;

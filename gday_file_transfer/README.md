@@ -1,12 +1,35 @@
 Note: this crate is still in early-development, so expect breaking changes.
 
-# `gday_file_offer_protocol`
-![Crates.io Version](https://img.shields.io/crates/v/gday_file_offer_protocol) ![docs.rs](https://img.shields.io/docsrs/gday_file_offer_protocol)
+# `gday_file_transfer`
+[![Crates.io Version](https://img.shields.io/crates/v/gday_file_transfer)](https://crates.io/crates/gday_file_transfer)
+[![docs.rs](https://img.shields.io/docsrs/gday_file_transfer)](https://docs.rs/gday_file_transfer/)
 
-Want to send files easily, securely, and directly, without a relay or port forwarding?
-Then go to the [gday page](/gday/README.md).
+This library lets you securely offer and transfer files to another peer,
+assuming you already have a TCP connection established.
 
-This library defines a protocol that lets user agree which files to transfer.
-This library provides functions to send and receive messages of this protocol.
+This library is used by [gday](https://crates.io/crates/gday), a command line
+tool for sending files.
 
-This library is used by [`gday`](/gday/).
+# Example steps
+
+1. The peers use `encrypt_connection()` to wrap their TCP connection
+in an encrypted stream.
+
+2. Peer A calls `get_file_metas()` to get a `Vec` of `FileMetaLocal`
+containing metadata about the files they'd like to send.
+
+3. Peer A calls `FileOfferMsg::from()` on the `Vec<FileMetaLocal>`, to get
+a serializable `FileOfferMsg`.
+
+4. Peer A sends `FileOfferMsg` to Peer B using `write_to()`.
+
+5. Peer B sends `FileResponseMsg` to Peer A, containing a corresponding
+`Vec` of `Option<u64>` indicating how much of each offered file to send.
+Each `None` rejects the offered file at the corresponding index.
+Each `Some(0)` accepts the entire file at the corresponding index.
+Each `Some(k)` requests only the part of the file starting at the `k`th byte
+to be sent.
+
+6. Peer A calls `send_files()`.
+
+7. Peer B calls `receive_files()`.
