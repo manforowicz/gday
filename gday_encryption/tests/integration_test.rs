@@ -1,7 +1,11 @@
+#![forbid(unsafe_code)]
+#![warn(clippy::all)]
 use std::{
     collections::VecDeque,
     io::{Read, Write},
 };
+
+use gday_encryption::EncryptedStream;
 
 use rand::{rngs::StdRng, RngCore, SeedableRng};
 
@@ -36,7 +40,7 @@ fn test_small_messages() {
     rng.fill_bytes(&mut nonce);
     rng.fill_bytes(&mut key);
     let mut pipe = VecDeque::new();
-    let mut stream = crate::EncryptedStream::new(&mut pipe, &key, &nonce);
+    let mut stream = EncryptedStream::new(&mut pipe, &key, &nonce);
 
     for &msg in TEST_DATA {
         // write the message
@@ -65,7 +69,7 @@ fn test_large_messages() {
     rng.fill_bytes(&mut nonce);
     rng.fill_bytes(&mut key);
     let mut pipe = VecDeque::new();
-    let mut stream = crate::EncryptedStream::new(&mut pipe, &key, &nonce);
+    let mut stream = EncryptedStream::new(&mut pipe, &key, &nonce);
 
     let mut msg = vec![123; 200_000];
 
@@ -92,14 +96,14 @@ fn test_unexpected_eof() {
     let nonce: [u8; 7] = [42; 7];
     let key: [u8; 32] = [123; 32];
     let mut pipe = VecDeque::new();
-    let mut writer = crate::EncryptedStream::new(&mut pipe, &key, &nonce);
+    let mut writer = EncryptedStream::new(&mut pipe, &key, &nonce);
 
     let msg = b"fjsdka;8u39fsdkaf";
 
     writer.write_all(msg).unwrap();
     writer.flush().unwrap();
     pipe.pop_back().unwrap();
-    let mut reader = crate::EncryptedStream::new(&mut pipe, &key, &nonce);
+    let mut reader = EncryptedStream::new(&mut pipe, &key, &nonce);
     let mut buf = vec![0; msg.len()];
     let result = reader.read_exact(&mut buf);
     assert!(result.is_err());

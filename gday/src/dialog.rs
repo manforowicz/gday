@@ -3,7 +3,7 @@
 use gday_file_transfer::{FileMeta, FileMetaLocal};
 use indicatif::HumanBytes;
 use owo_colors::OwoColorize;
-use std::io::Write;
+use std::{io::Write, path::Path};
 
 /// Confirms that the user wants to send these files.
 ///
@@ -37,11 +37,16 @@ pub fn confirm_send(files: &[FileMetaLocal]) -> std::io::Result<bool> {
 
 /// Asks the user which of these offered `files` to accept.
 ///
+/// `save_dir` is the directory where the files will later be saved.
+///
 /// Returns a `Vec<Option<u64>>`, where each
 /// - `None` represents rejecting the file at this index,
 /// - `Some(0)` represents fully accepting the file at this index,
 /// - `Some(x)` represents resuming with the first `x` bytes skipped.
-pub fn ask_receive(files: &[FileMeta]) -> Result<Vec<Option<u64>>, gday_file_transfer::Error> {
+pub fn ask_receive(
+    files: &[FileMeta],
+    save_dir: &Path,
+) -> Result<Vec<Option<u64>>, gday_file_transfer::Error> {
     println!("{}", "Your mate wants to send you:".bold(),);
 
     // A response accepting files that are not already fully saved
@@ -59,12 +64,12 @@ pub fn ask_receive(files: &[FileMeta]) -> Result<Vec<Option<u64>>, gday_file_tra
         print!("{} ({})", file.short_path.display(), HumanBytes(file.len));
 
         // file was already downloaded
-        if file.already_exists()? {
+        if file.already_exists(save_dir)? {
             print!(" {}", "ALREADY EXISTS".green().bold());
             new_files.push(None);
 
         // an interrupted download exists
-        } else if let Some(local_len) = file.partial_download_exists()? {
+        } else if let Some(local_len) = file.partial_download_exists(save_dir)? {
             let remaining_len = file.len - local_len;
 
             print!(

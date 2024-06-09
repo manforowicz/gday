@@ -33,9 +33,13 @@ pub fn send_files(
 }
 
 /// Sequentially save the given `files` from this `reader`.
+///
+/// `save_dir` is the directory where the files
+/// will be saved.
 pub fn receive_files(
     offer: FileOfferMsg,
     response: FileResponseMsg,
+    save_dir: &std::path::Path,
     reader: &mut EncryptedStream<std::net::TcpStream>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let progress_bar = create_progress_bar();
@@ -50,7 +54,10 @@ pub fn receive_files(
         }
     };
 
-    match gday_file_transfer::receive_files(offer, response, reader, Some(update_progress)) {
+    let result =
+        gday_file_transfer::receive_files(offer, response, save_dir, reader, Some(update_progress));
+
+    match result {
         Ok(()) => {
             progress_bar.finish_with_message("Transfer complete.");
             Ok(())

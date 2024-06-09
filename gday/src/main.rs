@@ -8,7 +8,8 @@ mod transfer;
 
 use crate::dialog::ask_receive;
 use clap::{Parser, Subcommand};
-use gday_file_transfer::{encrypt_connection, read_from, write_to, FileOfferMsg, FileResponseMsg};
+use gday_encryption::EncryptedStream;
+use gday_file_transfer::{read_from, write_to, FileOfferMsg, FileResponseMsg};
 use gday_hole_punch::PeerCode;
 use gday_hole_punch::{
     server_connector::{self, DEFAULT_SERVERS},
@@ -51,7 +52,7 @@ struct Args {
 
 #[derive(Subcommand, Debug)]
 enum Command {
-    /// Send these files and/or directories.
+    /// Send files and/or directories.
     Send {
         /// Custom shared code of form "server_id.room_code.shared_secret" (base 16).
         ///
@@ -61,12 +62,21 @@ enum Command {
         #[arg(short, long)]
         code: Option<String>,
 
+        /// Files and/or directories to send.
         #[arg(required = true, num_args = 1..)]
         paths: Vec<PathBuf>,
     },
 
-    /// Receive files. Input the code your peer gave you.
-    Receive { code: String },
+    /// Receive files.
+    Receive {
+        /// Directory where to save the files.
+        /// By default, saves them in the current directory.
+        #[arg(short, long)]
+        path: Option<PathBuf>,
+
+        /// The code that your peer gave you.
+        code: String,
+    },
 }
 
 fn main() {
@@ -162,7 +172,7 @@ fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
                 HOLE_PUNCH_TIMEOUT,
             )?;
 
-            let mut stream = encrypt_connection(stream, &shared_key)?;
+            let mut stream = EncryptedStream::encrypt_connection(stream, &shared_key)?;
 
             info!("Established authenticated encrypted connection with peer.");
 
@@ -195,7 +205,12 @@ fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
         }
 
         // receiving files
-        crate::Command::Receive { code } => {
+        crate::Command::Receive { path, code } => {
+            let save_path = match path {
+                Some(path) => path,
+                None => std::env::current_dir()?,
+            };
+
             let code = PeerCode::parse(&code, true)?;
             let (contact_sharer, my_contact) =
                 ContactSharer::join_room(code.room_code, &mut server_connection)?;
@@ -213,7 +228,7 @@ fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
                 HOLE_PUNCH_TIMEOUT,
             )?;
 
-            let mut stream = encrypt_connection(stream, &shared_key)?;
+            let mut stream = EncryptedStream::encrypt_connection(stream, &shared_key)?;
 
             info!("Established authenticated encrypted connection with peer.");
 
@@ -221,7 +236,7 @@ fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
             let offer: FileOfferMsg = read_from(&mut stream)?;
 
             let response = FileResponseMsg {
-                response: ask_receive(&offer.files)?,
+                response: ask_receive(&offer.files, &save_path)?,
             };
 
             // respond to the file offer
@@ -230,7 +245,7 @@ fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
             if response.get_total_num_accepted() == 0 {
                 println!("No files will be downloaded.");
             } else {
-                transfer::receive_files(offer, response, &mut stream)?;
+                transfer::receive_files(offer, response, &save_path, &mut stream)?;
             }
         }
     }

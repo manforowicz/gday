@@ -7,6 +7,7 @@
 
 mod connection_handler;
 mod state;
+
 mod tests;
 
 use clap::Parser;

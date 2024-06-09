@@ -1,9 +1,11 @@
-#![cfg(test)]
 use std::io::Write;
 
 use tokio::io::AsyncWriteExt;
 
-use crate::{ClientMsg, Contact, FullContact, ServerMsg};
+use gday_contact_exchange_protocol::{
+    read_from, read_from_async, write_to, write_to_async, ClientMsg, Contact, Error, FullContact,
+    ServerMsg,
+};
 
 /// Test serializing and deserializing messages.
 #[test]
@@ -11,20 +13,20 @@ fn sending_messages() {
     let mut pipe = std::collections::VecDeque::new();
 
     for msg in get_client_msg_examples() {
-        crate::write_to(msg, &mut pipe).unwrap();
+        write_to(msg, &mut pipe).unwrap();
     }
 
     for msg in get_client_msg_examples() {
-        let deserialized_msg: ClientMsg = crate::read_from(&mut pipe).unwrap();
+        let deserialized_msg: ClientMsg = read_from(&mut pipe).unwrap();
         assert_eq!(msg, deserialized_msg);
     }
 
     for msg in get_server_msg_examples() {
-        crate::write_to(msg, &mut pipe).unwrap();
+        write_to(msg, &mut pipe).unwrap();
     }
 
     for msg in get_server_msg_examples() {
-        let deserialized_msg: ServerMsg = crate::read_from(&mut pipe).unwrap();
+        let deserialized_msg: ServerMsg = read_from(&mut pipe).unwrap();
         assert_eq!(msg, deserialized_msg);
     }
 }
@@ -35,8 +37,8 @@ fn error_on_invalid_json() {
 
     // gibberish json
     pipe.write_all(&[0, 0, 0, 5, 52, 45, 77, 123, 12]).unwrap();
-    let result: Result<ServerMsg, crate::Error> = crate::read_from(&mut pipe);
-    assert!(matches!(result, Err(crate::Error::JSON(_))));
+    let result: Result<ServerMsg, Error> = read_from(&mut pipe);
+    assert!(matches!(result, Err(Error::JSON(_))));
 }
 
 /// Test serializing and deserializing messages asynchronously.
@@ -45,20 +47,20 @@ async fn sending_messages_async() {
     let (mut writer, mut reader) = tokio::io::duplex(1000);
 
     for msg in get_client_msg_examples() {
-        crate::write_to_async(msg, &mut writer).await.unwrap();
+        write_to_async(msg, &mut writer).await.unwrap();
     }
 
     for msg in get_client_msg_examples() {
-        let deserialized_msg: ClientMsg = crate::read_from_async(&mut reader).await.unwrap();
+        let deserialized_msg: ClientMsg = read_from_async(&mut reader).await.unwrap();
         assert_eq!(msg, deserialized_msg);
     }
 
     for msg in get_server_msg_examples() {
-        crate::write_to_async(msg, &mut writer).await.unwrap();
+        write_to_async(msg, &mut writer).await.unwrap();
     }
 
     for msg in get_server_msg_examples() {
-        let deserialized_msg: ServerMsg = crate::read_from_async(&mut reader).await.unwrap();
+        let deserialized_msg: ServerMsg = read_from_async(&mut reader).await.unwrap();
         assert_eq!(msg, deserialized_msg);
     }
 }
@@ -71,8 +73,8 @@ async fn error_on_invalid_json_async() {
         .write_all(&[0, 0, 0, 5, 52, 45, 77, 123, 12])
         .await
         .unwrap();
-    let result: Result<ServerMsg, crate::Error> = crate::read_from_async(&mut reader).await;
-    assert!(matches!(result, Err(crate::Error::JSON(_))));
+    let result: Result<ServerMsg, Error> = read_from_async(&mut reader).await;
+    assert!(matches!(result, Err(Error::JSON(_))));
 }
 
 /// Get a [`Vec`] of example [`ClientMsg`]s.

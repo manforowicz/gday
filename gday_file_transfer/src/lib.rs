@@ -1,12 +1,12 @@
 //! Note: this crate is still in early-development, so expect breaking changes.
 //!
-//! This library lets you securely offer and transfer files to another peer,
+//! This library lets you offer and transfer files to another peer,
 //! assuming you already have a TCP connection established.
 //!
 //! # Example steps
 //!
-//! 1. The peers use [`encrypt_connection()`] to wrap their TCP connection
-//! in an encrypted stream.
+//! 1. Both peers encrypt their connection, using a crate
+//! such as [gday_encryption](https://docs.rs/gday_encryption/).
 //!
 //! 2. Peer A calls [`get_file_metas()`] to get a [`Vec`] of [`FileMetaLocal`]
 //! containing metadata about the files they'd like to send.
@@ -30,112 +30,20 @@
 #![forbid(unsafe_code)]
 #![warn(clippy::all)]
 
+mod file_meta;
 mod offer;
-mod tests;
 mod transfer;
 
-use std::collections::HashSet;
-use std::io::{Read, Write};
-use std::path::{Path, PathBuf};
-
-use gday_encryption::EncryptedStream;
+use std::path::PathBuf;
 use thiserror::Error;
 
-pub use crate::offer::{
-    read_from, write_to, FileMeta, FileMetaLocal, FileOfferMsg, FileResponseMsg,
-};
+pub use crate::file_meta::{get_file_metas, FileMeta, FileMetaLocal};
+
+pub use crate::offer::{read_from, write_to, FileOfferMsg, FileResponseMsg};
 
 pub use crate::transfer::{
     receive_files, receive_these_files, send_files, send_these_files, TransferReport,
 };
-
-/// Wrap an IO stream in a [`gday_encryption::EncryptedStream`].
-/// Both peers muse use the same `shared_key`, or the
-/// stream will be gibberish.
-pub fn encrypt_connection<T: Read + Write>(
-    mut io_stream: T,
-    shared_key: &[u8; 32],
-) -> std::io::Result<EncryptedStream<T>> {
-    // Exchange random seeds with peer.
-    let my_seed: [u8; 7] = rand::random();
-    io_stream.write_all(&my_seed)?;
-    io_stream.flush()?;
-    let mut peer_seed = [0; 7];
-    io_stream.read_exact(&mut peer_seed)?;
-
-    // The nonce is the XOR of the random seeds.
-    peer_seed
-        .iter_mut()
-        .zip(my_seed.iter())
-        .for_each(|(x1, x2)| *x1 ^= *x2);
-
-    Ok(EncryptedStream::new(io_stream, shared_key, &peer_seed))
-}
-
-/// Takes a set of `paths`, each of which may be a directory or file.
-///
-/// Returns the [`FileMetaLocal`] of each file, including those in nested directories.
-/// Deduplicates any repeated files.
-///
-/// Each file's [`FileMeta::short_path`] will contain the path to the file,
-/// starting at the provided level, ignoring parent directories.
-pub fn get_file_metas(paths: &[PathBuf]) -> std::io::Result<Vec<FileMetaLocal>> {
-    // using a set to prevent duplicates
-    let mut files = HashSet::new();
-
-    for path in paths {
-        // normalize and remove symlinks
-        let path = path.canonicalize()?;
-
-        // get the parent path
-        let top_path = &path.parent().unwrap_or(Path::new(""));
-
-        // add all files in this path to the files set
-        get_file_metas_helper(top_path, &path, &mut files)?;
-    }
-
-    // build a vec from the set, and return
-    Ok(Vec::from_iter(files))
-}
-
-/// - The [`FileMetaLocal::short_path`] will strip the prefix
-/// `top_path` from all paths. `top_path` must be a prefix of `path`.
-/// - `path` is the file or directory where recursive traversal begins.
-/// - `files` is a [`HashSet`] to which found files will be inserted.
-fn get_file_metas_helper(
-    top_path: &Path,
-    path: &Path,
-    files: &mut HashSet<FileMetaLocal>,
-) -> std::io::Result<()> {
-    if path.is_dir() {
-        // recursively traverse subdirectories
-        for entry in path.read_dir()? {
-            get_file_metas_helper(top_path, &entry?.path(), files)?;
-        }
-    } else if path.is_file() {
-        // return an error if a file couldn't be opened.
-        std::fs::File::open(path)?;
-
-        // get the shortened path
-        let short_path = path
-            .strip_prefix(top_path)
-            .expect("`top_path` was not a prefix of `path`.")
-            .to_path_buf();
-
-        // get the file's size
-        let size = path.metadata()?.len();
-
-        // insert this file metadata into set
-        let meta = FileMetaLocal {
-            local_path: path.to_path_buf(),
-            short_path,
-            len: size,
-        };
-        files.insert(meta);
-    }
-
-    Ok(())
-}
 
 /// `gday_file_transfer` error.
 #[derive(Error, Debug)]
@@ -171,4 +79,15 @@ pub enum Error {
     /// Requested start index greater than length of file
     #[error("Requested start index greater than length of file.")]
     InvalidStartIndex,
+
+    /// One path is a prefix of another. Local paths to send can't be nested within each other!
+    #[error(
+        "'{0}' is prefix of '{1}'. \
+        Local paths to send can't be duplicated or nested within each other!"
+    )]
+    PathIsPrefix(PathBuf, PathBuf),
+
+    // Two folders or files have same name. This would make the offered metadata ambiguous.
+    #[error("Two folders or files have same name: '{0:?}'. This would make the offered metadata ambiguous.")]
+    PathsHaveSameName(std::ffi::OsString),
 }

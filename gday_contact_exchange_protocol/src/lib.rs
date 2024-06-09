@@ -44,8 +44,6 @@
 #![forbid(unsafe_code)]
 #![warn(clippy::all)]
 
-mod tests;
-
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{
     fmt::Display,

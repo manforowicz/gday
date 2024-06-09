@@ -27,7 +27,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: Update rutup
+      - name: Update rustup
         run: rustup update stable && rustup default stable
 
       - name: Build

@@ -1,5 +1,6 @@
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufWriter, Read, Seek, SeekFrom, Write};
+use std::path::Path;
 
 use crate::{Error, FileMeta, FileMetaLocal, FileOfferMsg, FileResponseMsg};
 
@@ -46,16 +47,18 @@ pub fn send_files(
 ///
 /// - `offer` is the [`FileOfferMsg`] offered by the peer.
 /// - `response` is your corresponding [`FileResponseMsg`].
+/// - `save_path` is the directory where all the files should be saved.
+/// - `reader` is the IO stream on which the files will be received.
+/// The files must be sent in order, sequentially, back-to-back.
 /// - `progress_callback` is an optional function that gets frequently
 /// called with [`TransferReport`] to report progress. Calling this function
 /// should be a cheap operation to avoid a performance penalty.
-///
-/// Receives the files in order, sequentially, back-to-back.
 ///
 /// Returns an error if encounters a file or network error.
 pub fn receive_files(
     offer: FileOfferMsg,
     response: FileResponseMsg,
+    save_path: &Path,
     reader: &mut impl Read,
     progress_callback: Option<impl FnMut(&TransferReport)>,
 ) -> Result<(), Error> {
@@ -66,7 +69,7 @@ pub fn receive_files(
         .filter_map(|(file, response)| response.map(|response| (file, response)))
         .collect();
 
-    receive_these_files(&files, reader, progress_callback)
+    receive_these_files(&files, save_path, reader, progress_callback)
 }
 
 /// Transfers specific files to `writer`.
@@ -136,6 +139,9 @@ pub fn send_these_files(
 /// Each tuple stores a [`FileMeta`], and the index of the first byte
 /// of the file that the peer will send.
 ///
+/// `save_path` is the directory where all the received
+/// files should be saved.
+///
 /// `progress_callback` is an optional function that gets frequently
 /// called with [`TransferReport`] to report progress. Calling this function
 /// should be a cheap operation to avoid a performance penalty.
@@ -145,6 +151,7 @@ pub fn send_these_files(
 /// Returns an error if encounters a file or network error.
 pub fn receive_these_files(
     files: &[(FileMeta, u64)],
+    save_path: &Path,
     reader: &mut impl Read,
     progress_callback: Option<impl FnMut(&TransferReport)>,
 ) -> Result<(), Error> {
@@ -167,7 +174,7 @@ pub fn receive_these_files(
         reader.progress.current_file.clone_from(&offer.short_path);
 
         // get the partial download path
-        let tmp_path = offer.get_partial_download_path()?;
+        let tmp_path = offer.get_partial_download_path(save_path)?;
 
         // download whole file
         if *start == 0 {
@@ -206,7 +213,7 @@ pub fn receive_these_files(
             std::io::copy(&mut reader, &mut file)?;
         }
         reader.progress.processed_files += 1;
-        std::fs::rename(tmp_path, offer.get_unoccupied_save_path()?)?;
+        std::fs::rename(tmp_path, offer.get_unoccupied_save_path(save_path)?)?;
     }
 
     Ok(())

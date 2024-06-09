@@ -15,8 +15,6 @@
 #![warn(clippy::all)]
 
 mod helper_buf;
-#[cfg(test)]
-mod test;
 
 use chacha20poly1305::aead::stream::{DecryptorBE32, EncryptorBE32};
 use chacha20poly1305::aead::Buffer;
@@ -56,10 +54,13 @@ pub struct EncryptedStream<T> {
 }
 
 impl<T> EncryptedStream<T> {
-    /// Wraps `io_stream` in an `EncryptedStream`.
-    /// - The sender and receiver must have the same `key` and `nonce`.
-    /// - The `key` must be a secure cryptographically random secret.
+    /// Wraps `io_stream` in an [`EncryptedStream`].
+    ///
+    /// - Both peers must have the same `key` and `nonce`.
+    /// - The `key` must be a cryptographically random secret.
     /// - The `nonce` shouldn't be reused, but doesn't need to be secret.
+    ///
+    /// - See [`Self::encrypt_connection()`] if you'd like an auto-generated nonce.
     pub fn new(io_stream: T, key: &[u8; 32], nonce: &[u8; 7]) -> Self {
         let mut to_send = HelperBuf::with_capacity(u16::MAX as usize + 2);
         // add 2 bytes for length header to uphold invariant
@@ -73,6 +74,35 @@ impl<T> EncryptedStream<T> {
             decrypted: HelperBuf::with_capacity(u16::MAX as usize + 2),
             to_send,
         }
+    }
+}
+
+impl<T: Read + Write> EncryptedStream<T> {
+    /// Establish an [`EncryptedStream`] between two peers with an auto-generated nonce.
+    ///
+    /// - Both peers must have the same `key`.
+    /// - The `key` must be a cryptographically random secret.
+    ///
+    /// This function sends random bytes to the peer, and receives some from the peer.
+    /// The nonce is set to the XOR of the two byte strings.
+    /// Both peers must call this function for this to work.
+    ///
+    /// - See [`Self::new()`] if you'd like to provide your own nonce.
+    pub fn encrypt_connection(mut io_stream: T, shared_key: &[u8; 32]) -> std::io::Result<Self> {
+        // Exchange random seeds with peer.
+        let my_seed: [u8; 7] = rand::random();
+        io_stream.write_all(&my_seed)?;
+        io_stream.flush()?;
+        let mut peer_seed = [0; 7];
+        io_stream.read_exact(&mut peer_seed)?;
+
+        // The nonce is the XOR of the random seeds.
+        peer_seed
+            .iter_mut()
+            .zip(my_seed.iter())
+            .for_each(|(x1, x2)| *x1 ^= *x2);
+
+        Ok(Self::new(io_stream, shared_key, &peer_seed))
     }
 }
 

@@ -4,7 +4,7 @@ Note: this crate is still in early-development, so expect breaking changes.
 [![Crates.io Version](https://img.shields.io/crates/v/gday_file_transfer)](https://crates.io/crates/gday_file_transfer)
 [![docs.rs](https://img.shields.io/docsrs/gday_file_transfer)](https://docs.rs/gday_file_transfer/)
 
-This library lets you securely offer and transfer files to another peer,
+This library lets you offer and transfer files to another peer,
 assuming you already have a TCP connection established.
 
 This library is used by [gday](https://crates.io/crates/gday), a command line
@@ -12,8 +12,8 @@ tool for sending files.
 
 # Example steps
 
-1. The peers use `encrypt_connection()` to wrap their TCP connection
-in an encrypted stream.
+1. The peers encrypt their connection,
+using a crate such as [gday_encryption](https://docs.rs/gday_encryption/).
 
 2. Peer A calls `get_file_metas()` to get a `Vec` of `FileMetaLocal`
 containing metadata about the files they'd like to send.
