@@ -3,7 +3,7 @@
 
 use crate::Error;
 use gday_contact_exchange_protocol::DEFAULT_TLS_PORT;
-use log::{debug, error};
+use log::{debug, warn};
 use rand::seq::SliceRandom;
 use socket2::SockRef;
 use std::io::{Read, Write};
@@ -35,7 +35,7 @@ pub struct ServerInfo {
     pub domain_name: &'static str,
     /// The unique ID of the server.
     ///
-    /// Helpful when telling the other peer whichserver to connect to.
+    /// Helpful when telling the other peer which server to connect to.
     /// Should NOT be zero, since peers can use that value to represent
     /// a custom server.
     pub id: u64,
@@ -95,7 +95,7 @@ impl ServerStream {
     }
 
     /// Enables SO_REUSEADDR and SO_REUSEPORT
-    /// So that this socket can be reused for
+    /// so that this socket can be reused for
     /// hole punching.
     fn enable_reuse(&self) {
         let stream: &TcpStream = match self {
@@ -113,27 +113,28 @@ impl ServerStream {
 }
 
 /// Can hold both an IPv4 and IPv6 [`ServerStream`] to a Gday server.
+#[derive(Debug)]
 pub struct ServerConnection {
     pub v4: Option<ServerStream>,
     pub v6: Option<ServerStream>,
 }
 
-/// Some private helper functions used by [`ContactSharer`]
+// some private helper functions used by ContactSharer
 impl ServerConnection {
     /// Enables `SO_REUSEADDR` and `SO_REUSEPORT` so that the ports of
-    /// these streams can be reused for hole punching.
+    /// these sockets can be reused for hole punching.
     ///
     /// Returns an error if both streams are `None`.
     /// Returns an error if a `v4` is passed where `v6` should, or vice versa.
     pub(super) fn configure(&self) -> Result<(), Error> {
         if self.v4.is_none() && self.v6.is_none() {
-            return Err(Error::NoStreamsProvided);
+            panic!("ServerConnection had None for both v4 and v6 streams.");
         }
 
         if let Some(stream) = &self.v4 {
             let addr = stream.local_addr()?;
             if !matches!(addr, V4(_)) {
-                return Err(Error::ExpectedIPv4);
+                panic!("ServerConnection had IPv6 stream where IPv4 stream was expected.");
             };
             stream.enable_reuse();
         }
@@ -141,7 +142,7 @@ impl ServerConnection {
         if let Some(stream) = &self.v6 {
             let addr = stream.local_addr()?;
             if !matches!(addr, V6(_)) {
-                return Err(Error::ExpectedIPv6);
+                panic!("ServerConnection had IPv4 stream where IPv6 stream was expected.");
             };
             stream.enable_reuse();
         }
@@ -149,7 +150,7 @@ impl ServerConnection {
     }
 
     /// Returns a [`Vec`] of all the [`ServerStream`]s in this connection.
-    /// Will return IPV6 followed by IPV4
+    /// Will return `v6` followed by `v4`
     pub(super) fn streams(&mut self) -> Vec<&mut ServerStream> {
         let mut streams = Vec::new();
 
@@ -227,7 +228,7 @@ pub fn connect_to_random_domain_name(
             Ok(streams) => streams,
             Err(err) => {
                 recent_error = err;
-                error!("Couldn't connect to \"{server}:{DEFAULT_TLS_PORT}\": {recent_error}");
+                warn!("Couldn't connect to \"{server}:{DEFAULT_TLS_PORT}\": {recent_error}");
                 continue;
             }
         };
@@ -251,11 +252,16 @@ pub fn connect_to_domain_name(
 ) -> Result<ServerConnection, Error> {
     let address = format!("{domain_name}:{port}");
     debug!("Connecting to server '{address}`");
+
+    // do a DNS lookup to get socket addresses for
+    // this domain name
     let addrs = address.to_socket_addrs()?;
 
+    // try connecting to the first IPv4 address
     let addr_v4: Option<SocketAddr> = addrs.clone().find(|a| a.is_ipv4());
     let tcp_v4 = addr_v4.map(|addr| TcpStream::connect_timeout(&addr, timeout));
 
+    // try connecting to the first IPv6 addresss
     let addr_v6: Option<SocketAddr> = addrs.clone().find(|a| a.is_ipv6());
     let tcp_v6 = addr_v6.map(|addr| TcpStream::connect_timeout(&addr, timeout));
 
@@ -266,7 +272,7 @@ pub fn connect_to_domain_name(
         } else if let Some(Err(err_v6)) = tcp_v6 {
             return Err(Error::IO(err_v6));
         } else {
-            return Err(Error::CouldntResolveAddress(domain_name.to_string()));
+            return Err(Error::CouldntResolveServer(domain_name.to_string()));
         }
     }
 

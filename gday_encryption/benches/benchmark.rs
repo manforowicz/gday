@@ -22,8 +22,11 @@ pub fn encryption_bench(c: &mut Criterion) {
 
     c.bench_function("EncryptedStream write 200,000 bytes", |b| {
         b.iter(|| {
-            let mut encryptor: EncryptedStream<&mut [u8]> =
-                EncryptedStream::new(&mut encrypted_data[..], &key, &nonce);
+            let mut encryptor: EncryptedStream<&mut [u8]> = EncryptedStream::new(
+                black_box(&mut encrypted_data[..]),
+                black_box(&key),
+                black_box(&nonce),
+            );
             EncryptedStream::write_all(black_box(&mut encryptor), black_box(&random_data)).unwrap();
             EncryptedStream::flush(black_box(&mut encryptor)).unwrap();
         })
@@ -53,7 +56,11 @@ pub fn decryption_bench(c: &mut Criterion) {
 
     c.bench_function("EncryptedStream read 200,000 bytes", |b| {
         b.iter(|| {
-            let mut decryptor = EncryptedStream::new(&encrypted_data[..], &key, &nonce);
+            let mut decryptor = EncryptedStream::new(
+                black_box(&encrypted_data[..]),
+                black_box(&key),
+                black_box(&nonce),
+            );
             EncryptedStream::read_exact(black_box(&mut decryptor), black_box(&mut read_data))
                 .unwrap()
         })

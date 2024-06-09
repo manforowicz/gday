@@ -3,6 +3,8 @@ use std::{
     io::{Read, Write},
 };
 
+use rand::{rngs::StdRng, RngCore, SeedableRng};
+
 const TEST_DATA: &[&[u8]] = &[
     b"abc5423gsgdds43",
     b"def432gfd2354",
@@ -25,16 +27,27 @@ const TEST_DATA: &[&[u8]] = &[
 /// Test sending and receiving many small messages.
 #[test]
 fn test_small_messages() {
-    let nonce: [u8; 7] = [42; 7];
-    let key: [u8; 32] = [123; 32];
+    // generate pseudorandom data from a seed
+    let mut rng = StdRng::seed_from_u64(5);
+
+    // set up a pipe
+    let mut nonce: [u8; 7] = [0; 7];
+    let mut key: [u8; 32] = [0; 32];
+    rng.fill_bytes(&mut nonce);
+    rng.fill_bytes(&mut key);
     let mut pipe = VecDeque::new();
     let mut stream = crate::EncryptedStream::new(&mut pipe, &key, &nonce);
 
     for &msg in TEST_DATA {
+        // write the message
         stream.write_all(msg).unwrap();
         stream.flush().unwrap();
+
+        // receive the message
         let mut buf = vec![0; msg.len()];
         stream.read_exact(&mut buf).unwrap();
+
+        // verify the message is correct
         assert_eq!(buf, msg);
     }
 }
@@ -43,18 +56,32 @@ fn test_small_messages() {
 /// several large messages.
 #[test]
 fn test_large_messages() {
-    let nonce: [u8; 7] = [75; 7];
-    let key: [u8; 32] = [22; 32];
-    let pipe = VecDeque::new();
-    let mut stream = crate::EncryptedStream::new(pipe, &key, &nonce);
+    // generate pseudorandom data from a seed
+    let mut rng = StdRng::seed_from_u64(0);
 
-    let msg = vec![123; 200_000];
+    // set up a pipe
+    let mut nonce: [u8; 7] = [0; 7];
+    let mut key: [u8; 32] = [0; 32];
+    rng.fill_bytes(&mut nonce);
+    rng.fill_bytes(&mut key);
+    let mut pipe = VecDeque::new();
+    let mut stream = crate::EncryptedStream::new(&mut pipe, &key, &nonce);
+
+    let mut msg = vec![123; 200_000];
 
     for _ in 0..5 {
+        // prepare a pseudorandom message to write
+        rng.fill_bytes(&mut msg);
+
+        // write the message
         stream.write_all(&msg).unwrap();
         stream.flush().unwrap();
+
+        // receive the message
         let mut received = vec![0; msg.len()];
         stream.read_exact(&mut received).unwrap();
+
+        // verify the message is correct
         assert_eq!(msg, received);
     }
 }
@@ -67,7 +94,7 @@ fn test_unexpected_eof() {
     let mut pipe = VecDeque::new();
     let mut writer = crate::EncryptedStream::new(&mut pipe, &key, &nonce);
 
-    let msg = TEST_DATA[0];
+    let msg = b"fjsdka;8u39fsdkaf";
 
     writer.write_all(msg).unwrap();
     writer.flush().unwrap();

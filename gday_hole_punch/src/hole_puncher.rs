@@ -9,95 +9,126 @@ use tokio::{
     net::TcpSocket,
 };
 
+/// Alias to the return type of [`try_connect_to_peer()`].
 type PeerConnection = (std::net::TcpStream, [u8; 32]);
 
+/// How often a connection attempt is made during hole punching.
 const RETRY_INTERVAL: Duration = Duration::from_millis(200);
-
-// TODO: Update all comments here!
-
-// TODO: ADD BETTER ERROR REPORTING.
-// add a timeout.
-// if fails, specify if it failed on connecting to peer, or verifying peer.
 
 /// Tries to establish a TCP connection with the other peer by using
 /// [TCP hole punching](https://en.wikipedia.org/wiki/TCP_hole_punching).
 ///
 /// - `local_contact` should be the `private` field of your [`FullContact`]
-/// that the [`crate::ContactSharer`] returned when you created or joined a room.
+/// that [`crate::ContactSharer`] returned when you created or joined a room.
+/// Panics if both `v4` and `v6` are `None`.
 /// - `peer_contact` should be the [`FullContact`] returned by [`crate::ContactSharer::get_peer_contact()`].
-/// - `shared_secret` should be a secret that both peers know. It will be used to verify
-/// the peer's identity, and derive a stronger shared key using [SPAKE2](https://docs.rs/spake2/latest/spake2/).
+/// - `shared_secret` should be a randomized secret that both peers know.
+/// It will be used to verify the peer's identity, and derive a stronger shared key
+/// using [SPAKE2](https://docs.rs/spake2/).
+/// - Gives up after `timeout` time, and returns [`Error::HolePunchTimeout`].
 ///
 /// Returns:
-/// - A [`std::net::TcpStream`] to the other peer.
+/// - An authenticated [`std::net::TcpStream`] connected to the other peer.
 /// - A `[u8; 32]` shared key that was derived using
-///     [SPAKE2](https://docs.rs/spake2/latest/spake2/) and the weaker `shared_secret`.
+///     [SPAKE2](https://docs.rs/spake2/) and the weaker `shared_secret`.
 pub fn try_connect_to_peer(
     local_contact: Contact,
     peer_contact: FullContact,
     shared_secret: &[u8],
     timeout: std::time::Duration,
 ) -> Result<PeerConnection, Error> {
+    // Instantiate an asynchronous runtime
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_io()
         .enable_time()
         .build()
         .expect("Tokio async runtime error.");
 
-    // hole punch asynchronously
-    match runtime.block_on(async {
-        tokio::time::timeout(
-            timeout,
-            hole_punch(local_contact, peer_contact, shared_secret),
-        )
-        .await
-    }) {
+    // Run the asynchronous hole-punch function.
+    // It is asynchronous to simplify the process
+    // of trying multiple connections concurrently.
+    let result = runtime.block_on(tokio::time::timeout(
+        timeout,
+        hole_punch(local_contact, peer_contact, shared_secret),
+    ));
+
+    match result {
+        // function succeeded, or ended
+        // early with error
         Ok(result) => result,
+
+        // function timed out
         Err(..) => Err(Error::HolePunchTimeout),
     }
 }
 
-/// TODO: Comment
+/// Asynchronous hole-punching function.
 async fn hole_punch(
     local_contact: Contact,
     peer_contact: FullContact,
     shared_secret: &[u8],
 ) -> Result<PeerConnection, Error> {
-    // shorten the variable name for conciseness
+    // shorten the variable name for brevity
     let p = shared_secret;
 
-    let mut futs = tokio::task::JoinSet::new();
+    // A set of tasks that will run concurrently,
+    // trying to establish a connection to the peer.
+    let mut tasks = tokio::task::JoinSet::new();
+
+    // If we have an IPv4 socket address
     if let Some(local) = local_contact.v4 {
-        futs.spawn(try_accept(local, p.to_vec()));
+        // listen to connections from the peer
+        tasks.spawn(try_accept(local, p.to_vec()));
 
+        // try connecting to the peer's private socket address
         if let Some(peer) = peer_contact.private.v4 {
-            futs.spawn(try_connect(local, peer, p.to_vec()));
+            tasks.spawn(try_connect(local, peer, p.to_vec()));
         }
 
+        // try connecting to the peer's public socket address
         if let Some(peer) = peer_contact.public.v4 {
-            futs.spawn(try_connect(local, peer, p.to_vec()));
+            tasks.spawn(try_connect(local, peer, p.to_vec()));
         }
     }
 
+    // If we have an IPv6 socket address
     if let Some(local) = local_contact.v6 {
-        futs.spawn(try_accept(local, p.to_vec()));
+        // listen to connections from the peer
+        tasks.spawn(try_accept(local, p.to_vec()));
 
+        // try connecting to the peer's private socket address
         if let Some(peer) = peer_contact.private.v6 {
-            futs.spawn(try_connect(local, peer, p.to_vec()));
+            tasks.spawn(try_connect(local, peer, p.to_vec()));
         }
+
+        // try connecting to the peer's public socket address
         if let Some(peer) = peer_contact.public.v6 {
-            futs.spawn(try_connect(local, peer, p.to_vec()));
+            tasks.spawn(try_connect(local, peer, p.to_vec()));
         }
     }
-    match futs.join_next().await {
+
+    // Wait for the first hole-punch attempt to complete.
+    // Return its outcome.
+    // Note: the try_connect() and try_accept() functions
+    // will only return error, when something critical goes
+    // wrong. Otherwise they'll keep trying.
+    match tasks.join_next().await {
+        // A task finished
         Some(Ok(result)) => result,
+
+        // Couldn't join the task
         Some(Err(..)) => panic!("Tokio join error."),
-        None => Err(Error::ContactEmpty),
+
+        // No tasks were spawned
+        None => panic!(
+            "local_contact passed to try_connect_to_peer() \
+            had None for both v4 and v6"
+        ),
     }
 }
 
-/// Tries to TCP connect to `peer` from `local`.
-/// Returns the most recent error if not successful by `end_time`.
+/// Tries to TCP connect to `local` to `peer`,
+/// and authenticate using `shared_secret`.
 async fn try_connect<T: Into<SocketAddr>>(
     local: T,
     peer: T,
@@ -113,24 +144,26 @@ async fn try_connect<T: Into<SocketAddr>>(
         if let Ok(stream) = local_socket.connect(peer).await {
             break stream;
         }
+        // wait some time to avoid flooding the network
         interval.tick().await;
     };
 
-    debug!("Connected to {peer} from {local}. Will try to authenticate.");
+    debug!("Connected from {local} to {peer}. Will try to authenticate.");
     verify_peer(&shared_secret, stream).await
 }
 
-/// Tries to accept a peer TCP connection on `local`.
-/// Returns the most recent error if not successful by `end_time`.
+/// Tries to accept a peer TCP connection on `local`,
+/// and authenticate using `shared_secret`.
 async fn try_accept(
     local: impl Into<SocketAddr>,
     shared_secret: Vec<u8>,
 ) -> Result<PeerConnection, Error> {
     let local = local.into();
+    let mut interval = tokio::time::interval(RETRY_INTERVAL);
     trace!("Waiting to accept connections on {local}.");
+
     let local_socket = get_local_socket(local)?;
     let listener = local_socket.listen(1024)?;
-    let mut interval = tokio::time::interval(RETRY_INTERVAL);
 
     let (stream, addr) = loop {
         if let Ok(ok) = listener.accept().await {
@@ -140,27 +173,22 @@ async fn try_accept(
         interval.tick().await;
     };
 
-    debug!(
-        "Connected from {} to {}. Will try to authenticate.",
-        addr,
-        stream.local_addr()?
-    );
-
+    debug!("Received connection on {local} from {addr}. Will try to authenticate.");
     verify_peer(&shared_secret, stream).await
 }
 
 /// Uses [SPAKE 2](https://docs.rs/spake2/latest/spake2/)
 /// to derive a cryptographically secure secret from
-/// a potentially weak `shared_secret`.
+/// a `weak_secret`.
 /// Verifies that the other peer derived the same secret.
 /// If successful, returns a [`PeerConnection`].
 async fn verify_peer(
-    shared_secret: &[u8],
+    weak_secret: &[u8],
     mut stream: tokio::net::TcpStream,
 ) -> Result<PeerConnection, Error> {
     //// Password authenticated key exchange ////
     let (spake, outbound_msg) = Spake2::<Ed25519Group>::start_symmetric(
-        &Password::new(shared_secret),
+        &Password::new(weak_secret),
         &Identity::new(b"gday mates"),
     );
 
@@ -206,13 +234,16 @@ async fn verify_peer(
     hasher.update(&my_challenge);
     let expected = hasher.finalize();
 
-    if expected == peer_hash {
-        let stream = stream.into_std()?;
-        stream.set_nonblocking(false)?;
-        Ok((stream, shared_key))
-    } else {
-        Err(Error::PeerAuthenticationFailed)
+    // Peer authentication failed
+    if expected != peer_hash {
+        return Err(Error::PeerAuthenticationFailed);
     }
+
+    // Convert the authenticated stream into
+    // an std TCP stream.
+    let stream = stream.into_std()?;
+    stream.set_nonblocking(false)?;
+    Ok((stream, shared_key))
 }
 
 /// Makes a new socket with this address.
@@ -227,16 +258,16 @@ fn get_local_socket(local_addr: SocketAddr) -> std::io::Result<TcpSocket> {
 
     let sock = SockRef::from(&socket);
 
-    let _ = sock.set_reuse_address(true);
+    sock.set_reuse_address(true)?;
 
     // socket2 only supports this method on these systems
     #[cfg(all(unix, not(any(target_os = "solaris", target_os = "illumos"))))]
-    let _ = sock.set_reuse_port(true);
+    sock.set_reuse_port(true)?;
 
     let keepalive = TcpKeepalive::new()
         .with_time(Duration::from_secs(60))
         .with_interval(Duration::from_secs(10));
-    let _ = sock.set_tcp_keepalive(&keepalive);
+    sock.set_tcp_keepalive(&keepalive)?;
 
     socket.bind(local_addr)?;
     Ok(socket)

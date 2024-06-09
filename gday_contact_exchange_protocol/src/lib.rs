@@ -228,7 +228,7 @@ impl std::fmt::Display for FullContact {
     }
 }
 
-/// Write `msg` to `writer` using [`serde_json`].
+/// Write `msg` to `writer` using [`serde_json`], and flush.
 ///
 /// Prefixes the message with 4 big-endian bytes that hold its length.
 pub fn write_to(msg: impl Serialize, writer: &mut impl Write) -> Result<(), Error> {
@@ -240,7 +240,7 @@ pub fn write_to(msg: impl Serialize, writer: &mut impl Write) -> Result<(), Erro
     Ok(())
 }
 
-/// Asynchronously write `msg` to `writer` using [`serde_json`].
+/// Asynchronously write `msg` to `writer` using [`serde_json`], and flush.
 ///
 /// Prefixes the message with a 4 big-endian bytes that hold its length.
 pub async fn write_to_async(
@@ -255,7 +255,7 @@ pub async fn write_to_async(
     Ok(())
 }
 
-/// Read `msg` from `reader` using [`serde_json`].
+/// Read a message from `reader` using [`serde_json`].
 ///
 /// Assumes the message is prefixed with 4 big-endian bytes that holds its length.
 pub fn read_from<T: DeserializeOwned>(reader: &mut impl Read) -> Result<T, Error> {
@@ -268,7 +268,7 @@ pub fn read_from<T: DeserializeOwned>(reader: &mut impl Read) -> Result<T, Error
     Ok(serde_json::from_reader(&buf[..])?)
 }
 
-/// Asynchronously read `msg` from `reader` using [`serde_json`].
+/// Asynchronously read a message from `reader` using [`serde_json`].
 ///
 /// Assumes the message is prefixed with 4 big-endian bytes that hold its length.
 pub async fn read_from_async<T: DeserializeOwned>(

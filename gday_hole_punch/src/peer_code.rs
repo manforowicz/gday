@@ -34,7 +34,7 @@ impl PeerCode {
         for segment in &mut segments {
             let Some(substring) = substrings.next() else {
                 // return error if less than 4 substrings
-                return Err(Error::WrongNumberOfSegments);
+                return Err(Error::WrongNumberOfSegmentsPeerCode);
             };
             *segment = u64::from_str_radix(substring, 16)?;
         }
@@ -51,15 +51,15 @@ impl PeerCode {
             let checksum = u64::from_str_radix(substring, 16)?;
             // verify checksum
             if checksum != peer_code.get_checksum() {
-                return Err(Error::IncorrectChecksum);
+                return Err(Error::IncorrectChecksumPeerCode);
             }
         } else if require_checksum {
-            return Err(Error::MissingChecksum);
+            return Err(Error::MissingChecksumPeerCode);
         }
 
         // return error if there are too many substrings
         if substrings.next().is_some() {
-            return Err(Error::WrongNumberOfSegments);
+            return Err(Error::WrongNumberOfSegmentsPeerCode);
         }
 
         Ok(peer_code)
@@ -121,7 +121,7 @@ mod tests {
         let message = " 1b.13A.f  ";
 
         let received = PeerCode::parse(message, true);
-        assert!(matches!(received, Err(Error::MissingChecksum)));
+        assert!(matches!(received, Err(Error::MissingChecksumPeerCode)));
 
         let received = PeerCode::parse(message, false).unwrap();
         let expected = PeerCode {
@@ -133,7 +133,7 @@ mod tests {
 
         let message = " 1c.13A.f.3  ";
         let received = PeerCode::parse(message, true);
-        assert!(matches!(received, Err(Error::IncorrectChecksum)));
+        assert!(matches!(received, Err(Error::IncorrectChecksumPeerCode)));
     }
 
     #[test]
@@ -141,12 +141,15 @@ mod tests {
         let message = " 21.q.3  ";
 
         let received = PeerCode::parse(message, false);
-        assert!(matches!(received, Err(Error::CouldntParse(..))));
+        assert!(matches!(received, Err(Error::CouldntParsePeerCode(..))));
 
         let message = " 1b.13A.f.3.4 ";
 
         let received = PeerCode::parse(message, false);
-        assert!(matches!(received, Err(Error::WrongNumberOfSegments)));
+        assert!(matches!(
+            received,
+            Err(Error::WrongNumberOfSegmentsPeerCode)
+        ));
     }
 
     #[test]

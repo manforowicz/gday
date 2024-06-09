@@ -189,7 +189,8 @@ impl FileResponseMsg {
     }
 }
 
-/// Write `msg` to `writer` using [`serde_json`].
+/// Write `msg` to `writer` using [`serde_json`], and flush.
+///
 /// Prefixes the message with 4 big-endian bytes that hold its length.
 pub fn write_to(msg: impl Serialize, writer: &mut impl Write) -> Result<(), Error> {
     let vec = serde_json::to_vec(&msg)?;
@@ -202,7 +203,8 @@ pub fn write_to(msg: impl Serialize, writer: &mut impl Write) -> Result<(), Erro
     Ok(())
 }
 
-/// Read `msg` from `reader` using [`serde_json`].
+/// Read a message from `reader` using [`serde_json`].
+///
 /// Assumes the message is prefixed with 4 big-endian bytes that hold its length.
 pub fn read_from<T: DeserializeOwned>(reader: &mut impl Read) -> Result<T, Error> {
     let mut len = [0_u8; 4];

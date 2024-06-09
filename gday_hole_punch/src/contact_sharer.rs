@@ -12,23 +12,28 @@ impl<'a> ContactSharer<'a> {
     /// Creates a new room with `room_code` in the Gday server
     /// that `server_connection` connects to.
     ///
-    /// Sends local socket addresses to the server
+    /// Sends local socket addresses to the server.
+    ///
+    /// Panics if both `v4` and `v6` in `server_connection` are `None`.
     ///
     /// Returns
-    /// - The [`ContactSharer`]
+    /// - The [`ContactSharer`].
     /// - The [`FullContact`] of this endpoint, as
     ///   determined by the server
     pub fn create_room(
         room_code: u64,
         server_connection: &'a mut ServerConnection,
     ) -> Result<(Self, FullContact), Error> {
+        // set reuse addr and reuse port, so that these sockets
+        // can be later reused for hole punching
         server_connection.configure()?;
 
+        // choose a stream to talk to the server with
         let messenger = &mut server_connection.streams()[0];
 
+        // try creating a room in the server
         write_to(ClientMsg::CreateRoom { room_code }, messenger)?;
         let response: ServerMsg = read_from(messenger)?;
-
         if response != ServerMsg::RoomCreated {
             return Err(Error::UnexpectedServerReply(response));
         }
@@ -39,6 +44,7 @@ impl<'a> ContactSharer<'a> {
             connection: server_connection,
         };
 
+        // send personal socket addresses to the server
         let contact = this.share_contact()?;
 
         Ok((this, contact))
@@ -47,7 +53,9 @@ impl<'a> ContactSharer<'a> {
     /// Joins a room with `room_code` in the Gday server
     /// that `server_connection` connects to.
     ///
-    /// Sends local socket addresses to the server
+    /// Sends local socket addresses to the server.
+    ///
+    /// Panics if both `v4` and `v6` in `server_connection` are `None`.
     ///
     /// Returns
     /// - The [`ContactSharer`]
@@ -57,6 +65,8 @@ impl<'a> ContactSharer<'a> {
         room_code: u64,
         server_connection: &'a mut ServerConnection,
     ) -> Result<(Self, FullContact), Error> {
+        // set reuse addr and reuse port, so that these sockets
+        // can be later reused for hole punching
         server_connection.configure()?;
 
         let mut this = Self {
@@ -65,6 +75,7 @@ impl<'a> ContactSharer<'a> {
             connection: server_connection,
         };
 
+        // send personal socket addresses to the server
         let contact = this.share_contact()?;
 
         Ok((this, contact))
@@ -74,8 +85,11 @@ impl<'a> ContactSharer<'a> {
     /// Sends personal contact information the the server, and
     /// returns it's response.
     fn share_contact(&mut self) -> Result<FullContact, Error> {
+        // Get all connections to the server
         let mut streams = self.connection.streams();
 
+        // For each connection, send its private socket address
+        // to the server
         for stream in &mut streams {
             let private_addr = Some(stream.local_addr()?);
             let msg = ClientMsg::SendAddr {
@@ -90,15 +104,16 @@ impl<'a> ContactSharer<'a> {
             }
         }
 
+        // tell the server that we're done
+        // sending socket addresses
         let msg = ClientMsg::DoneSending {
             room_code: self.room_code,
             is_creator: self.is_creator,
         };
-
         write_to(msg, streams[0])?;
 
+        // Get our local contact info from the server
         let reply: ServerMsg = read_from(streams[0])?;
-
         let ServerMsg::ClientContact(my_contact) = reply else {
             return Err(Error::UnexpectedServerReply(reply));
         };
@@ -110,6 +125,9 @@ impl<'a> ContactSharer<'a> {
     /// other peer submitted. Returns the peer's [`FullContact`], as
     /// determined by the server
     pub fn get_peer_contact(self) -> Result<FullContact, Error> {
+        // This is the same stream we used to send DoneSending,
+        // so the server should respond on it,
+        // once the other peer is also done.
         let stream = &mut self.connection.streams()[0];
         let reply: ServerMsg = read_from(stream)?;
         let ServerMsg::PeerContact(peer) = reply else {

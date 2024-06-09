@@ -134,7 +134,10 @@ fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
             let local_files = gday_file_transfer::get_file_metas(&paths)?;
 
             // confirm the user wants to send these files
-            dialog::ask_send(&local_files)?;
+            if !dialog::confirm_send(&local_files)? {
+                // Send aborted
+                return Ok(());
+            }
 
             // create a room in the server
             let (contact_sharer, my_contact) =
