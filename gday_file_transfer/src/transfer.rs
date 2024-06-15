@@ -31,8 +31,8 @@ pub struct TransferReport {
 pub fn send_files(
     offer: Vec<FileMetaLocal>,
     response: FileResponseMsg,
-    writer: &mut impl Write,
-    progress_callback: Option<impl FnMut(&TransferReport)>,
+    writer: impl Write,
+    progress_callback: impl FnMut(&TransferReport),
 ) -> Result<(), Error> {
     let files: Vec<(FileMetaLocal, u64)> = offer
         .into_iter()
@@ -59,8 +59,8 @@ pub fn receive_files(
     offer: FileOfferMsg,
     response: FileResponseMsg,
     save_path: &Path,
-    reader: &mut impl Read,
-    progress_callback: Option<impl FnMut(&TransferReport)>,
+    reader: impl Read,
+    progress_callback: impl FnMut(&TransferReport),
 ) -> Result<(), Error> {
     let files: Vec<(FileMeta, u64)> = offer
         .files
@@ -88,8 +88,8 @@ pub fn receive_files(
 /// encounters a network error.
 pub fn send_these_files(
     files: &[(FileMetaLocal, u64)],
-    writer: &mut impl Write,
-    progress_callback: Option<impl FnMut(&TransferReport)>,
+    writer: impl Write,
+    progress_callback: impl FnMut(&TransferReport),
 ) -> Result<(), Error> {
     // sum up total transfer size
     let mut total_bytes = 0;
@@ -152,8 +152,8 @@ pub fn send_these_files(
 pub fn receive_these_files(
     files: &[(FileMeta, u64)],
     save_path: &Path,
-    reader: &mut impl Read,
-    progress_callback: Option<impl FnMut(&TransferReport)>,
+    reader: impl Read,
+    progress_callback: impl FnMut(&TransferReport),
 ) -> Result<(), Error> {
     // sum up total transfer size
     let mut total_bytes = 0;
@@ -223,7 +223,7 @@ pub fn receive_these_files(
 /// read/write to report progress.
 struct ProgressWrapper<T, F: FnMut(&TransferReport)> {
     /// The callback function called to report progress
-    progress_callback: Option<F>,
+    progress_callback: F,
 
     /// The inner IO stream
     inner_io: T,
@@ -233,7 +233,7 @@ struct ProgressWrapper<T, F: FnMut(&TransferReport)> {
 }
 
 impl<T, F: FnMut(&TransferReport)> ProgressWrapper<T, F> {
-    fn new(inner_io: T, total_bytes: u64, total_files: u64, progress_callback: Option<F>) -> Self {
+    fn new(inner_io: T, total_bytes: u64, total_files: u64, progress_callback: F) -> Self {
         Self {
             progress_callback,
             inner_io,
@@ -249,10 +249,8 @@ impl<T, F: FnMut(&TransferReport)> ProgressWrapper<T, F> {
 
     /// Increment the number of bytes processed
     fn inc_bytes_processed(&mut self, bytes: usize) {
-        if let Some(progress_callback) = &mut self.progress_callback {
-            self.progress.processed_bytes += bytes as u64;
-            (progress_callback)(&self.progress)
-        }
+        self.progress.processed_bytes += bytes as u64;
+        (self.progress_callback)(&self.progress)
     }
 }
 

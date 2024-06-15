@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+#![warn(clippy::all)]
 use std::io::Write;
 
 use tokio::io::AsyncWriteExt;

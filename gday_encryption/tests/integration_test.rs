@@ -1,92 +1,58 @@
 #![forbid(unsafe_code)]
 #![warn(clippy::all)]
+use gday_encryption::EncryptedStream;
+use rand::RngCore;
 use std::{
     collections::VecDeque,
     io::{Read, Write},
+    net::Ipv6Addr,
+    net::SocketAddr,
 };
-
-use gday_encryption::EncryptedStream;
-
-use rand::{rngs::StdRng, RngCore, SeedableRng};
-
-const TEST_DATA: &[&[u8]] = &[
-    b"abc5423gsgdds43",
-    b"def432gfd2354",
-    b"ggdsgdst43646543hi",
-    b"g",
-    b"mgresgdfgno",
-    b"463prs",
-    b"tufdxb5436w",
-    b"y4325tzz",
-    b"132ddsagasfa",
-    b"vds dagdsfa",
-    b"ete243yfdga",
-    b"dbasbalp35",
-    b";kbfagp98845",
-    b"bjkdal;f023590qjva",
-    b"balkdlsaj353osdfa.b",
-    b"bfaa;489ajdfakl;db",
-];
-
-/// Test sending and receiving many small messages.
-#[test]
-fn test_small_messages() {
-    // generate pseudorandom data from a seed
-    let mut rng = StdRng::seed_from_u64(5);
-
-    // set up a pipe
-    let mut nonce: [u8; 7] = [0; 7];
-    let mut key: [u8; 32] = [0; 32];
-    rng.fill_bytes(&mut nonce);
-    rng.fill_bytes(&mut key);
-    let mut pipe = VecDeque::new();
-    let mut stream = EncryptedStream::new(&mut pipe, &key, &nonce);
-
-    for &msg in TEST_DATA {
-        // write the message
-        stream.write_all(msg).unwrap();
-        stream.flush().unwrap();
-
-        // receive the message
-        let mut buf = vec![0; msg.len()];
-        stream.read_exact(&mut buf).unwrap();
-
-        // verify the message is correct
-        assert_eq!(buf, msg);
-    }
-}
 
 /// Try to spot edge-cases that occur when sending
 /// several large messages.
 #[test]
 fn test_large_messages() {
-    // generate pseudorandom data from a seed
-    let mut rng = StdRng::seed_from_u64(0);
+    let mut bytes = vec![0_u8; 1_000_000];
+    rand::thread_rng().fill_bytes(&mut bytes);
 
-    // set up a pipe
-    let mut nonce: [u8; 7] = [0; 7];
-    let mut key: [u8; 32] = [0; 32];
-    rng.fill_bytes(&mut nonce);
-    rng.fill_bytes(&mut key);
-    let mut pipe = VecDeque::new();
-    let mut stream = EncryptedStream::new(&mut pipe, &key, &nonce);
+    test_transfers(bytes, 200_000);
+}
 
-    let mut msg = vec![123; 200_000];
+/// Transfer `bytes` over [`EncryptedStream`],
+/// flushing every `chunk_size` bytes.
+fn test_transfers(bytes: Vec<u8>, chunk_size: usize) {
+    // A random encryption key
+    let shared_key: [u8; 32] = rand::random();
 
-    for _ in 0..5 {
-        // prepare a pseudorandom message to write
-        rng.fill_bytes(&mut msg);
+    // The loopback address that peer_a will connect to.
+    let pipe_addr = SocketAddr::from((Ipv6Addr::LOCALHOST, 2000));
 
-        // write the message
-        stream.write_all(&msg).unwrap();
-        stream.flush().unwrap();
+    // Listens on the loopback address
+    let listener = std::net::TcpListener::bind(pipe_addr).unwrap();
 
-        // receive the message
-        let mut received = vec![0; msg.len()];
-        stream.read_exact(&mut received).unwrap();
+    // A thread that will send data to the loopback address
+    let bytes_clone = bytes.clone();
+    std::thread::spawn(move || {
+        let mut peer_a = std::net::TcpStream::connect(pipe_addr).unwrap();
 
-        // verify the message is correct
-        assert_eq!(msg, received);
+        let mut stream_a = EncryptedStream::encrypt_connection(&mut peer_a, &shared_key).unwrap();
+
+        for chunk in bytes_clone.chunks(chunk_size) {
+            stream_a.write_all(chunk).unwrap();
+            stream_a.flush().unwrap();
+        }
+    });
+
+    // Stream that will receive the test data sent to the loopback address.
+    let mut peer_b = listener.accept().unwrap().0;
+    let mut stream_b = EncryptedStream::encrypt_connection(&mut peer_b, &shared_key).unwrap();
+
+    // Receive and verify the encrypted test data.
+    for chunk in bytes.chunks(chunk_size) {
+        let mut received = vec![0; chunk.len()];
+        stream_b.read_exact(&mut received).unwrap();
+        assert_eq!(*chunk, received);
     }
 }
 

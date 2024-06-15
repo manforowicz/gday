@@ -1,19 +1,25 @@
 # Contributing
 
-## Feature requests and bug reports
+## Submitting issues
 
-To request features or report bugs, submit an
+I'm very open to all feedback and suggestions!
+
+To give feedback, request features, or report bugs, please submit an
 [issue](https://github.com/manforowicz/gday/issues)
 on this GitHub repository.
-Please try to add as much details as you can.
-
-Feel free to share your experiences using gday, by submitting issues.
+Add as much details as you can.
+For example, try running with `--verbosity debug` or `--verbosity trace`
+and paste the log into your issue.
 
 ## Contributing code
 
-Learn how to contribute by following GitHub's
+Learn how to contribute code by following GitHub's
 [Contributing to a project](https://docs.github.com/en/get-started/exploring-projects-on-github/contributing-to-a-project)
 guide.
 
 Verify your code passes tests by running the cargo commands listed
-in the `pre-push` file.
+in the [`/other/pre-push`](/other/pre-push) file.
+
+
+## Technical
+

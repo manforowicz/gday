@@ -20,7 +20,7 @@ pub fn send_files(
         }
     };
 
-    match gday_file_transfer::send_files(offer, response, writer, Some(update_progress)) {
+    match gday_file_transfer::send_files(offer, response, writer, update_progress) {
         Ok(()) => {
             progress_bar.finish_with_message("Transfer complete.");
             Ok(())
@@ -55,7 +55,7 @@ pub fn receive_files(
     };
 
     let result =
-        gday_file_transfer::receive_files(offer, response, save_dir, reader, Some(update_progress));
+        gday_file_transfer::receive_files(offer, response, save_dir, reader, update_progress);
 
     match result {
         Ok(()) => {

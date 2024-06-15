@@ -45,6 +45,7 @@ impl HelperBuf {
 
     /// Increment the right cursor by `num_bytes`.
     /// - Do this after putting data to [`Self::spare_capacity()`].
+    /// - Panics if this would put the right cursor beyond the capacity.
     pub fn increase_len(&mut self, num_bytes: usize) {
         self.r_cursor += num_bytes;
         assert!(self.r_cursor <= self.inner.len());
@@ -202,7 +203,7 @@ mod tests {
         assert_eq!(buf.spare_capacity(), [0]);
         assert_eq!(*buf.inner, [1, 2, 3, 0]);
 
-        buf[0] = 7;
+        buf.as_mut()[0] = 7;
         assert_eq!(*buf, [7, 3]);
         assert_eq!(buf.spare_capacity(), [0]);
         assert_eq!(*buf.inner, [1, 7, 3, 0]);

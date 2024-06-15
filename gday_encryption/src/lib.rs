@@ -40,11 +40,13 @@ pub struct EncryptedStream<T> {
 
     /// Encrypted data received from the inner IO stream.
     /// - Invariant: Never stores a complete chunk(s).
-    /// As soon as the full chunk arrives, moves and decrypts it
+    /// As soon as full chunks are read, moves and decrypts them
     /// into `decrypted`.
     received: HelperBuf,
 
-    /// Data that has been decrypted from `received`
+    /// Data that has been decrypted from `received`.
+    /// - Invariant: This must be empty when calling
+    /// [`Self::inner_read()`]
     decrypted: HelperBuf,
 
     /// Data to be sent. Encrypted only when flushing.
@@ -161,12 +163,11 @@ impl<T: Read> EncryptedStream<T> {
     /// - Invariant: must only be called when `self.decrypted` is empty,
     ///     so that it has space to decrypt into.
     fn inner_read(&mut self) -> std::io::Result<()> {
-        debug_assert!(self.decrypted.is_empty());
-        // ensure at least a 2-byte header will fit in
-        // the spare `received` capacity
-        if self.received.len() + self.received.spare_capacity().len() < 2 {
-            self.received.left_align();
-        }
+        // ensure we have the full buffer to decrypt into
+        assert!(self.decrypted.is_empty());
+
+        // maximize room to receive more data
+        self.received.left_align();
 
         // read at least the first 2-byte header
         while self.received.len() < 2 {
@@ -179,7 +180,7 @@ impl<T: Read> EncryptedStream<T> {
                 // Unexpected EOF within chunk
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::UnexpectedEof,
-                    "Unexpected EOF while receiving encrypted chunk.",
+                    "Unexpected EOF within encrypted chunk.",
                 ));
             }
             self.received.increase_len(bytes_read);
@@ -189,19 +190,15 @@ impl<T: Read> EncryptedStream<T> {
         let chunk_len: [u8; 2] = self.received[0..2].try_into().expect("unreachable");
         let chunk_len = u16::from_be_bytes(chunk_len) as usize + 2;
 
-        // left-align if `chunk_len` won't fit
-        if self.received.len() + self.received.spare_capacity().len() < chunk_len {
-            self.received.left_align();
-        }
-
         // read at least one full chunk
         while self.received.len() < chunk_len {
             let read_buf = self.received.spare_capacity();
             let bytes_read = self.inner.read(read_buf)?;
             if bytes_read == 0 {
+                // Unexpected EOF within chunk
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::UnexpectedEof,
-                    "Unexpected EOF while receiving encrypted chunk.",
+                    "Unexpected EOF within encrypted chunk.",
                 ));
             }
             self.received.increase_len(bytes_read);

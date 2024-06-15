@@ -8,8 +8,6 @@
 mod connection_handler;
 mod state;
 
-mod tests;
-
 use clap::Parser;
 use connection_handler::handle_connection;
 use gday_contact_exchange_protocol::{DEFAULT_TCP_PORT, DEFAULT_TLS_PORT};
