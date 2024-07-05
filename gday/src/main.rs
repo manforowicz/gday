@@ -25,7 +25,7 @@ use std::path::PathBuf;
 const HOLE_PUNCH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 
 /// How long to try connecting to a server before giving up.
-const SERVER_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+const SERVER_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
 #[derive(Parser, Debug)]
 #[command(author, version, about)]
@@ -71,8 +71,8 @@ enum Command {
     Receive {
         /// Directory where to save the files.
         /// By default, saves them in the current directory.
-        #[arg(short, long)]
-        path: Option<PathBuf>,
+        #[arg(short, long, default_value = ".")]
+        path: PathBuf,
 
         /// The code that your peer gave you.
         code: String,
@@ -131,27 +131,27 @@ fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
             let peer_code = if let Some(code) = code {
                 PeerCode::parse(&code, false)?
             } else {
-                let room_code = rand::thread_rng().gen_range(0..u16::MAX as u64);
-                let shared_secret = rand::thread_rng().gen_range(0..u16::MAX as u64);
+                let mut rng = rand::thread_rng();
                 PeerCode {
                     server_id,
-                    room_code,
-                    shared_secret,
+                    room_code: rng.gen_range(0..u16::MAX as u64),
+                    shared_secret: rng.gen_range(0..u16::MAX as u64),
                 }
             };
 
             // get metadata about the files to transfer
             let local_files = gday_file_transfer::get_file_metas(&paths)?;
+            let offer_msg = FileOfferMsg::from(local_files.clone());
 
             // confirm the user wants to send these files
-            if !dialog::confirm_send(&local_files)? {
+            if !dialog::confirm_send(&offer_msg)? {
                 // Send aborted
                 return Ok(());
             }
 
             // create a room in the server
             let (contact_sharer, my_contact) =
-                ContactSharer::create_room(peer_code.room_code, &mut server_connection)?;
+                ContactSharer::create_room(&mut server_connection, peer_code.room_code)?;
 
             info!("Your contact is:\n{my_contact}");
 
@@ -166,7 +166,7 @@ fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
 
             // connect to the peer
             let (stream, shared_key) = gday_hole_punch::try_connect_to_peer(
-                my_contact.private,
+                my_contact.local,
                 peer_contact,
                 &peer_code.shared_secret.to_be_bytes(),
                 HOLE_PUNCH_TIMEOUT,
@@ -177,15 +177,15 @@ fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
             info!("Established authenticated encrypted connection with peer.");
 
             // offer these files to the peer
-            write_to(FileOfferMsg::from(local_files.clone()), &mut stream)?;
+            write_to(offer_msg, &mut stream)?;
 
-            println!("Waiting for your mate to respond to your file offer.");
+            println!("File offer sent to mate. Waiting on response.");
 
             // receive file offer from peer
             let response: FileResponseMsg = read_from(&mut stream)?;
 
             // Total number of files accepted
-            let num_accepted = response.get_total_num_accepted();
+            let num_accepted = response.get_num_not_rejected();
 
             // How many of those files are being resumed
             let resumptions = response.get_num_partially_accepted();
@@ -196,24 +196,20 @@ fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
                 local_files.len()
             );
 
+            if resumptions != 0 {
+                println!("Resuming transfer of {resumptions} previously interrupted file(s).");
+            }
+
             if num_accepted != 0 {
-                if resumptions != 0 {
-                    println!("Resuming transfer of {resumptions} previously interrupted file(s).");
-                }
                 transfer::send_files(local_files, response, &mut stream)?;
             }
         }
 
         // receiving files
         crate::Command::Receive { path, code } => {
-            let save_path = match path {
-                Some(path) => path,
-                None => std::env::current_dir()?,
-            };
-
             let code = PeerCode::parse(&code, true)?;
             let (contact_sharer, my_contact) =
-                ContactSharer::join_room(code.room_code, &mut server_connection)?;
+                ContactSharer::join_room(&mut server_connection, code.room_code)?;
 
             info!("Your contact is:\n{my_contact}");
 
@@ -222,7 +218,7 @@ fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
             info!("Your mate's contact is:\n{peer_contact}");
 
             let (stream, shared_key) = gday_hole_punch::try_connect_to_peer(
-                my_contact.private,
+                my_contact.local,
                 peer_contact,
                 &code.shared_secret.to_be_bytes(),
                 HOLE_PUNCH_TIMEOUT,
@@ -235,20 +231,17 @@ fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
             // receive file offer from peer
             let offer: FileOfferMsg = read_from(&mut stream)?;
 
-            let response = FileResponseMsg {
-                response: ask_receive(&offer.files, &save_path)?,
-            };
+            let response = ask_receive(&offer, &path)?;
 
             // respond to the file offer
             write_to(&response, &mut stream)?;
 
-            if response.get_total_num_accepted() == 0 {
+            if response.get_num_not_rejected() == 0 {
                 println!("No files will be downloaded.");
             } else {
-                transfer::receive_files(offer, response, &save_path, &mut stream)?;
+                transfer::receive_files(offer, response, &path, &mut stream)?;
             }
         }
     }
-
     Ok(())
 }

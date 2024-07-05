@@ -11,7 +11,7 @@ use tokio::sync::oneshot;
 /// Information about a client in a [`Room`].
 #[derive(Default, Debug)]
 struct Client {
-    /// The known contact info of this client
+    /// Contact info of this client
     contact: FullContact,
     /// - `None` if the other peer isn't done and
     ///     isn't ready to receive this peer's contacts.
@@ -54,6 +54,8 @@ impl Room {
 
 /// A reference to the server's shared state.
 ///
+/// Can only be used in a tokio runtime.
+///
 /// Note: Throughout all the functions, only one lock
 /// is acquired at any given time. This is to prevent deadlock.
 #[derive(Clone, Debug)]
@@ -61,7 +63,7 @@ pub struct State {
     /// Maps room_code to rooms
     rooms: Arc<Mutex<HashMap<u64, Room>>>,
 
-    /// Maps IP addresses to the number of requests they sent this minute
+    /// Maps IP addresses to the number of requests they sent this minute.
     request_counts: Arc<Mutex<HashMap<IpAddr, u32>>>,
 
     /// Maximum number of requests an IP address can
@@ -98,11 +100,11 @@ impl State {
         this
     }
 
-    /// Creates a new room, and returns it's room code.
+    /// Creates a new room with `room_code`.
     ///
     /// - Returns [`Error::TooManyRequests`] if the max
     /// allowable number of requests per minute is exceeded.
-    pub fn create_room(&mut self, room_code: u64, origin: IpAddr) -> Result<u64, Error> {
+    pub fn create_room(&mut self, room_code: u64, origin: IpAddr) -> Result<(), Error> {
         self.increment_request_count(origin)?;
 
         {
@@ -126,7 +128,7 @@ impl State {
                 .remove(&room_code);
         });
 
-        Ok(room_code)
+        Ok(())
     }
 
     /// Updates the contact information of a client in the room with `room_code`.
@@ -152,10 +154,10 @@ impl State {
         let contact = if public {
             &mut full_contact.public
         } else {
-            &mut full_contact.private
+            &mut full_contact.local
         };
 
-        // update the client's contact from `addr`
+        // update the client's contact from `endpoint`
         match endpoint {
             SocketAddr::V4(addr) => {
                 contact.v4 = Some(addr);
@@ -221,7 +223,8 @@ impl State {
     }
 
     /// Increments the request count of this IP address.
-    /// Returns a [`Error::TooManyRequests`] if [`State::max_requests_per_minute`]
+    ///
+    /// Returns an [`Error::TooManyRequests`] if [`State::max_requests_per_minute`]
     /// is exceeded.
     fn increment_request_count(&mut self, ip: IpAddr) -> Result<(), Error> {
         let mut request_counts = self
@@ -230,7 +233,7 @@ impl State {
             .expect("Couldn't acquire state lock.");
         let conns_count = request_counts.entry(ip).or_insert(0);
 
-        if *conns_count > *self.max_requests_per_minute {
+        if *conns_count >= *self.max_requests_per_minute {
             Err(Error::TooManyRequests)
         } else {
             *conns_count += 1;
@@ -239,14 +242,183 @@ impl State {
     }
 }
 
+/// Error while trying to update the global server state.
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("No room exists with this ID.")]
+    /// No room exists with this code.
+    #[error("No room exists with this code.")]
     NoSuchRoomCode,
 
-    #[error("Exceeded the request limit. Try again in a minute.")]
+    /// Exceeded the request per minute limit. Try again in a minute.
+    #[error("Exceeded the request per minute limit. Try again in a minute.")]
     TooManyRequests,
 
-    #[error("This room ID is currently in use.")]
+    /// This room code is currently taken.
+    #[error("This room code is currently taken.")]
     RoomCodeTaken,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Error;
+    use super::State;
+    use gday_contact_exchange_protocol::Contact;
+    use gday_contact_exchange_protocol::FullContact;
+    use std::{net::IpAddr, time::Duration};
+
+    #[tokio::test]
+    async fn test_general() {
+        let mut state1 = State::new(100, Duration::from_secs(100));
+        let mut state2 = state1.clone();
+
+        // Origins are only used to limit requests,
+        // and we're not testing that here,
+        // so these are meaningless
+        let origin1 = IpAddr::V4(123.into());
+        let origin2 = IpAddr::V6(456.into());
+
+        let contact1 = FullContact {
+            local: Contact {
+                v4: Some("1.8.3.1:2304".parse().unwrap()),
+                v6: Some("[ab:41::b:43]:92".parse().unwrap()),
+            },
+            public: Contact {
+                v4: Some("12.98.11.20:11".parse().unwrap()),
+                v6: Some("[12:1::9:ab]:56".parse().unwrap()),
+            },
+        };
+
+        let contact2 = FullContact {
+            local: Contact {
+                v4: None,
+                v6: Some("[12:ef::2:55]:1000".parse().unwrap()),
+            },
+            public: Contact {
+                v4: Some("5.20.100.50:2".parse().unwrap()),
+                v6: None,
+            },
+        };
+
+        const ROOM: u64 = 1234;
+
+        // Client 1 creates a new room
+        state1.create_room(ROOM, origin1).unwrap();
+
+        // Verify that a room with the same ID
+        // can't be created
+        assert!(matches!(
+            state2.create_room(ROOM, origin2),
+            Err(Error::RoomCodeTaken)
+        ));
+
+        // Client 1 sends over their contact info
+        if let Some(addr) = contact1.local.v4 {
+            state1
+                .update_client(ROOM, true, addr.into(), false, origin1)
+                .unwrap();
+        }
+        if let Some(addr) = contact1.local.v6 {
+            state1
+                .update_client(ROOM, true, addr.into(), false, origin1)
+                .unwrap();
+        }
+        if let Some(addr) = contact1.public.v4 {
+            state1
+                .update_client(ROOM, true, addr.into(), true, origin1)
+                .unwrap();
+        }
+        if let Some(addr) = contact1.public.v6 {
+            state1
+                .update_client(ROOM, true, addr.into(), true, origin1)
+                .unwrap();
+        }
+
+        // Client 2 sends over their contact info
+        if let Some(addr) = contact2.local.v4 {
+            state1
+                .update_client(ROOM, false, addr.into(), false, origin2)
+                .unwrap();
+        }
+        if let Some(addr) = contact2.local.v6 {
+            state1
+                .update_client(ROOM, false, addr.into(), false, origin2)
+                .unwrap();
+        }
+        if let Some(addr) = contact2.public.v4 {
+            state1
+                .update_client(ROOM, false, addr.into(), true, origin2)
+                .unwrap();
+        }
+        if let Some(addr) = contact2.public.v6 {
+            state1
+                .update_client(ROOM, false, addr.into(), true, origin2)
+                .unwrap();
+        }
+
+        let (reported_contact1, rx1) = state1.set_client_done(ROOM, true, origin1).unwrap();
+
+        let (reported_contact2, rx2) = state2.set_client_done(ROOM, false, origin2).unwrap();
+
+        assert_eq!(reported_contact1, contact1);
+        assert_eq!(reported_contact2, contact2);
+
+        assert_eq!(rx1.await.unwrap(), contact2);
+        assert_eq!(rx2.await.unwrap(), contact1);
+    }
+
+    #[tokio::test]
+    async fn test_request_limit() {
+        let mut state1 = State::new(100, Duration::from_secs(100));
+        let mut state2 = state1.clone();
+
+        let origin1 = IpAddr::V4(123.into());
+        let origin2 = IpAddr::V4(456.into());
+
+        // 100 requests
+        for i in 1..=100 {
+            state1.create_room(i, origin1).unwrap();
+
+            // unrelated requests that shouldn't hit limit
+            state2.create_room(i + 1000, origin2).unwrap();
+        }
+
+        // 101th request should hit limit
+        assert!(matches!(
+            state2.create_room(101, origin1),
+            Err(Error::TooManyRequests)
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_room_timeout() {
+        let mut state1 = State::new(100, Duration::from_millis(10));
+        let mut state2 = state1.clone();
+
+        let origin1 = IpAddr::V4(123.into());
+        let origin2 = IpAddr::V4(456.into());
+
+        let example_endpoint = "12.213.31.13:342".parse().unwrap();
+
+        const ROOM: u64 = 1234;
+
+        state1.create_room(ROOM, origin1).unwrap();
+
+        // Confirm this room is taken
+        assert!(matches!(
+            state2.create_room(ROOM, origin2),
+            Err(Error::RoomCodeTaken)
+        ));
+
+        // confirm that this room works
+        state2
+            .update_client(ROOM, false, example_endpoint, true, origin2)
+            .unwrap();
+
+        // wait for the room to time out
+        tokio::time::sleep(Duration::from_millis(20)).await;
+
+        // confirm this room has been removed
+        let result = state2.update_client(ROOM, false, example_endpoint, false, origin2);
+        assert!(matches!(result, Err(Error::NoSuchRoomCode)))
+    }
 }

@@ -1,6 +1,8 @@
 # systemd service that runs a gday_server
 #
-# Save as:
+# Put your gday_server executable in ~/gday_server/gday_server.
+#
+# Save this file as:
 # '/etc/systemd/system/gday_server.service'
 #
 # Reload the dameon:
@@ -32,7 +34,7 @@ After=network.target
 
 [Service]
 
-# Command to execute
+# Command to execute (modify as needed)
 ExecStart=/home/ubuntu/gday_server/gday_server --key /etc/letsencrypt/live/gday.manforowicz.com/privkey.pem --certificate /etc/letsencrypt/live/gday.manforowicz.com/fullchain.pem
 
 # Auto-restart the service if it crashes
@@ -44,7 +46,7 @@ RestartSec=20
 # Run the service as root, so it can access the certificates
 User=root
 
-# Pipe stdout and stderr into custom log files
+# Pipe stdout and stderr into custom log files (modify as needed)
 StandardOutput=append:/home/ubuntu/gday_server/stdout.log
 StandardError=append:/home/ubuntu/gday_server/stderr.log
 

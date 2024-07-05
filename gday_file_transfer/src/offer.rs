@@ -1,14 +1,45 @@
-use std::io::{Read, Write};
-
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
-
 use crate::{Error, FileMeta, FileMetaLocal};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use std::{
+    io::{Read, Write},
+    path::Path,
+};
 
 /// A [`Vec`] of file metadatas that this peer is offering
 /// to send. The other peer should reply with [`FileResponseMsg`].
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct FileOfferMsg {
     pub files: Vec<FileMeta>,
+}
+
+impl FileOfferMsg {
+    /// Returns the sum of sizes
+    /// of all offered files.
+    pub fn get_total_offered_size(&self) -> u64 {
+        self.files.iter().map(|f| f.len).sum()
+    }
+
+    /// Returns the number of bytes that would be transferred for this
+    /// [`FileOfferMsg`] and corresponding [`FileResponseMsg`].
+    pub fn get_transfer_size(&self, response: &FileResponseMsg) -> Result<u64, Error> {
+        // The response must have the same number of elements
+        // as the offer.
+        if self.files.len() != response.response.len() {
+            return Err(Error::InvalidResponseLength);
+        }
+
+        // sum up total transfer size
+        let mut total_bytes = 0;
+        for (file, start) in self.files.iter().zip(response.response.iter()) {
+            if let Some(start) = start {
+                total_bytes += file
+                    .len
+                    .checked_sub(*start)
+                    .ok_or(Error::InvalidStartIndex)?;
+            }
+        }
+        Ok(total_bytes)
+    }
 }
 
 impl From<Vec<FileMetaLocal>> for FileOfferMsg {
@@ -38,13 +69,109 @@ pub struct FileResponseMsg {
 }
 
 impl FileResponseMsg {
+    /// Returns a [`FileResponseMsg`] that would
+    /// accept all the offered files.
+    pub fn accept_all_files(offer: &FileOfferMsg) -> Self {
+        Self {
+            response: vec![Some(0); offer.files.len()],
+        }
+    }
+
+    /// Returns a [`FileResponseMsg`] that would
+    /// reject all the offered files.
+    pub fn reject_all_files(offer: &FileOfferMsg) -> Self {
+        Self {
+            response: vec![None; offer.files.len()],
+        }
+    }
+
+    /// Returns a [`FileResponseMsg`] that would
+    /// accept only files that are not yet in `save_dir`,
+    /// or have a different size.
+    ///
+    /// Will NOT try to resume interrupted downloads
+    /// by partially accepting files.
+    ///
+    /// Rejects all other files.
+    pub fn accept_only_full_new_files(
+        offer: &FileOfferMsg,
+        save_dir: &Path,
+    ) -> Result<Self, Error> {
+        let mut response = Vec::with_capacity(offer.files.len());
+
+        for offered in &offer.files {
+            if offered.already_exists(save_dir)? {
+                // reject
+                response.push(None);
+            } else {
+                // accept full
+                response.push(Some(0));
+            }
+        }
+        Ok(Self { response })
+    }
+
+    /// Returns a [`FileResponseMsg`] that would
+    /// accept only the remaining portions of files
+    /// whose downloads to `save_dir` have been previously interrupted.
+    ///
+    /// Rejects all other files.
+    pub fn accept_only_remaining_portions(
+        offer: &FileOfferMsg,
+        save_dir: &Path,
+    ) -> Result<Self, Error> {
+        let mut response = Vec::with_capacity(offer.files.len());
+
+        for offered in &offer.files {
+            if let Some(existing_size) = offered.partial_download_exists(save_dir)? {
+                response.push(Some(existing_size));
+            } else {
+                response.push(None);
+            }
+        }
+        Ok(Self { response })
+    }
+
+    /// Get a [`FileResponseMsg`] that would:
+    /// - Accept the remaining portions of files whose
+    /// downloads to `save_dir` have been previously interrupted,
+    /// - AND files that are not yet in `save_dir`,
+    /// or have a different size.
+    ///
+    /// Rejects all other files.
+    pub fn accept_only_new_and_interrupted(
+        offer: &FileOfferMsg,
+        save_dir: &Path,
+    ) -> Result<FileResponseMsg, Error> {
+        let mut response = Vec::with_capacity(offer.files.len());
+
+        for offered in &offer.files {
+            if let Some(existing_size) = offered.partial_download_exists(save_dir)? {
+                response.push(Some(existing_size));
+            } else if offered.already_exists(save_dir)? {
+                response.push(None);
+            } else {
+                response.push(Some(0));
+            }
+        }
+        Ok(FileResponseMsg { response })
+    }
+
+    /// Returns the number of fully accepted files.
+    pub fn get_num_fully_accepted(&self) -> usize {
+        self.response
+            .iter()
+            .filter_map(|f| *f)
+            .filter(|f| *f == 0)
+            .count()
+    }
+
     /// Returns the number of non-rejected files.
-    /// Returns the number of fully and partially accepted files.
-    pub fn get_total_num_accepted(&self) -> usize {
+    pub fn get_num_not_rejected(&self) -> usize {
         self.response.iter().filter_map(|f| *f).count()
     }
 
-    /// Returns only the total number of partially accepted files.
+    /// Returns the total number of only partially accepted files.
     pub fn get_num_partially_accepted(&self) -> usize {
         self.response
             .iter()

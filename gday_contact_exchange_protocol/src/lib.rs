@@ -48,49 +48,52 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{
     fmt::Display,
     io::{Read, Write},
-    net::{SocketAddr, SocketAddrV4, SocketAddrV6},
+    net::{SocketAddrV4, SocketAddrV6},
 };
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 /// The port that contact exchange servers
-/// using unencrypted TCP should listen on
-pub const DEFAULT_TCP_PORT: u16 = 2310;
+/// using unencrypted TCP should listen on.
+pub const DEFAULT_TCP_PORT: u16 = 80;
 
 /// The port that contact exchange servers
-/// using encrypted TLS should listen on
-pub const DEFAULT_TLS_PORT: u16 = 2311;
+/// using encrypted TLS should listen on.
+pub const DEFAULT_TLS_PORT: u16 = 443;
 
 /// A message from client to server.
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Clone, Copy)]
 #[non_exhaustive]
 pub enum ClientMsg {
-    /// Request the server to create a new room.
-    /// Server responds with [`ServerMsg::RoomCreated`] on success.
+    /// Requests the server to create a new room.
+    ///
+    /// Server responds with [`ServerMsg::RoomCreated`] on success
+    /// and [`ServerMsg::ErrorRoomTaken`] if the room already exists.
     CreateRoom { room_code: u64 },
 
-    /// Tells the server to record the public socket address of this connection.
-    /// Optionally sends one of their private/local socket addresses too.
+    /// Tells the server to record the client's public socket address
+    /// of the connection on which this message was sent.
+    ///
     /// Server responds with [`ServerMsg::ReceivedAddr`] on success.
-    SendAddr {
+    RecordPublicAddr {
         /// The room this client is in.
         room_code: u64,
         /// Whether this is the client that created this room,
         /// or the other client.
         is_creator: bool,
-        /// Optionally the client's private/local socket. If not sent,
-        /// the server will only know the public address deduced from
-        /// the internet connection.
-        private_addr: Option<SocketAddr>,
     },
 
-    /// Tells the server that the client has finished
+    /// Tells the server that the client has finished using [`ClientMsg::RecordPublicAddr`]
     /// sending any addresses they want to share.
     /// The server immediately responds with [`ServerMsg::ClientContact`] which
     /// contains this client's contact info.
     ///
     /// After the other peer sends `DoneSending` as well, the server sends
     /// [`ServerMsg::PeerContact`] which contains the peer's contact info.
-    DoneSending { room_code: u64, is_creator: bool },
+    DoneSending {
+        local_contact: Contact,
+        room_code: u64,
+        is_creator: bool,
+    },
 }
 
 /// A message from server to client.
@@ -102,7 +105,7 @@ pub enum ServerMsg {
     /// The room will expire/close in a few minutes.
     RoomCreated,
 
-    /// Responds to a [`ClientMsg::SendAddr`] to indicate it was successfully recorded.
+    /// Responds to a [`ClientMsg::RecordPublicAddr`] to indicate it was successfully recorded.
     ReceivedAddr,
 
     /// Immediately responds to a [`ClientMsg::DoneSending`].
@@ -211,7 +214,7 @@ impl std::fmt::Display for Contact {
 pub struct FullContact {
     /// The peer's private contact in it's local network.
     /// The server knows this from [`ClientMsg::SendAddr::private_addr`].
-    pub private: Contact,
+    pub local: Contact,
     /// The entity's public contact visible to the public internet.
     /// The server determines this by checking where
     /// a [`ClientMsg::SendAddr`] message came from.
@@ -220,7 +223,7 @@ pub struct FullContact {
 
 impl std::fmt::Display for FullContact {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "Private: ({})", self.private)?;
+        writeln!(f, "Private: ({})", self.local)?;
         write!(f, "Public:  ({})", self.public)?;
         Ok(())
     }

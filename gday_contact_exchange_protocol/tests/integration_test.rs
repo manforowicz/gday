@@ -83,14 +83,17 @@ async fn error_on_invalid_json_async() {
 fn get_client_msg_examples() -> Vec<ClientMsg> {
     vec![
         ClientMsg::CreateRoom { room_code: 452932 },
-        ClientMsg::SendAddr {
+        ClientMsg::RecordPublicAddr {
             room_code: 2345,
             is_creator: true,
-            private_addr: Some("31.31.65.31:324".parse().unwrap()),
         },
         ClientMsg::DoneSending {
             room_code: 24325423,
             is_creator: false,
+            local_contact: Contact {
+                v4: Some("31.31.65.31:324".parse().unwrap()),
+                v6: Some("[2001:db8::1]:8080".parse().unwrap()),
+            },
         },
     ]
 }
@@ -101,7 +104,7 @@ fn get_server_msg_examples() -> Vec<ServerMsg> {
         ServerMsg::RoomCreated,
         ServerMsg::ReceivedAddr,
         ServerMsg::ClientContact(FullContact {
-            private: Contact {
+            local: Contact {
                 v4: Some("31.31.65.31:324".parse().unwrap()),
                 v6: Some("[2001:db8::1]:8080".parse().unwrap()),
             },
@@ -111,7 +114,7 @@ fn get_server_msg_examples() -> Vec<ServerMsg> {
             },
         }),
         ServerMsg::PeerContact(FullContact {
-            private: Contact {
+            local: Contact {
                 v4: Some("31.31.65.31:324".parse().unwrap()),
                 v6: Some("[2001:db8::1]:8080".parse().unwrap()),
             },

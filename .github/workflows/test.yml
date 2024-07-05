@@ -44,3 +44,9 @@ jobs:
 
       - name: Check formatting
         run: cargo fmt --check --verbose
+      
+      - name: Install cargo audit
+        run: cargo install cargo-audit
+
+      - name: Audit dependencies
+        run: cargo audit

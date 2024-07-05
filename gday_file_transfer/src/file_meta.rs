@@ -27,75 +27,92 @@ pub struct FileMetaLocal {
 }
 
 impl FileMeta {
+    /// Gets the base path where the file that this
+    /// [`FileMetaLocal`] represents should be saved.
+    ///
     /// Returns `save_dir` joined with [`Self::short_path`].
     ///
-    /// Use [`Self::get_unoccupied_save_path()`] to get an unused save path.
-    pub fn get_save_path(&self, save_dir: &Path) -> std::io::Result<PathBuf> {
-        Ok(save_dir.join(&self.short_path))
+    /// Use [`Self::get_unoccupied_save_path()`]
+    /// to get an unoccupied version of this save path.
+    pub fn get_save_path(&self, save_dir: &Path) -> PathBuf {
+        save_dir.join(&self.short_path)
     }
 
-    /// Returns `true` iff a file already exists at
-    /// [`self.get_save_path(save_dir)`](Self::get_save_path)
-    /// with the same length as [`Self::len`].
-    pub fn already_exists(&self, save_dir: &Path) -> std::io::Result<bool> {
-        let local_save_path = self.get_save_path(save_dir)?;
+    /// Returns a version of [`Self::get_save_path()`]
+    /// that isn't taken yet.
+    ///
+    /// If [`self.get_save_path(save_dir)`](Self::get_save_path)
+    /// is taken, suffixes its file stem with
+    /// `" (1)"`, `" (2)"`, ..., `" (99)"` until a free path is found.
+    ///
+    /// If all of these (up to `" (99)"`) are occupied,
+    /// returns [`Error::FilenameOccupied`].
+    pub fn get_unoccupied_save_path(&self, save_dir: &Path) -> Result<PathBuf, Error> {
+        let mut path = self.get_save_path(save_dir);
+        let number = get_first_unoccupied_number(&path)?;
 
-        if let Ok(metadata) = local_save_path.metadata() {
-            if metadata.is_file() && metadata.len() == self.len {
-                return Ok(true);
+        if number != 0 {
+            suffix_with_number(&mut path, number);
+        }
+        Ok(path)
+    }
+
+    /// Returns the occupied save path
+    /// with the greatest numerical suffix.
+    ///
+    /// Iff [`Self::get_save_path()`]
+    /// isn't occupied, returns `None`.
+    ///
+    /// The numerical suffix of the returned path
+    /// will be one less than that of
+    /// [`Self::get_unoccupied_save_path()`] (or no suffix
+    /// if [`Self::get_unoccupied_save_path()`] has suffix of 1).
+    pub fn get_last_occupied_save_path(&self, save_dir: &Path) -> Result<Option<PathBuf>, Error> {
+        let mut path = self.get_save_path(save_dir);
+        let number = get_first_unoccupied_number(&path)?;
+
+        if number == 0 {
+            Ok(None)
+        } else {
+            suffix_with_number(&mut path, number - 1);
+            Ok(Some(path))
+        }
+    }
+
+    /// Returns `true` iff a file is already saved at
+    /// [`Self::get_last_occupied_save_path()`]
+    /// with the same length as [`Self::len`].
+    pub fn already_exists(&self, save_dir: &Path) -> Result<bool, Error> {
+        if let Some(occupied) = self.get_last_occupied_save_path(save_dir)? {
+            if let Ok(metadata) = occupied.metadata() {
+                if metadata.is_file() && metadata.len() == self.len {
+                    return Ok(true);
+                }
             }
         }
         Ok(false)
     }
 
-    /// Returns a suffixed [`self.get_save_path(save_dir)`](Self::get_save_path)
-    /// that isn't taken yet.
+    /// Gets the path where to store the temporary download file.
     ///
-    /// If [`self.get_save_path(save_dir)`](Self::get_save_path)
-    /// already exists, suffixes its file stem with
-    /// `_1`, `_2`, ..., `_99` until a free path is found. If all of
-    /// these are occupied, returns [`Error::FilenameOccupied`].
-    pub fn get_unoccupied_save_path(&self, save_dir: &Path) -> Result<PathBuf, Error> {
-        let plain_path = self.get_save_path(save_dir)?;
-
-        if !plain_path.exists() {
-            return Ok(plain_path);
-        }
-
-        for i in 1..100 {
-            // otherwise make a new `modified_path`
-            // with a different suffix
-            let mut modified_path = plain_path.clone();
-            let suffix = OsString::from(format!(" ({i})"));
-            add_suffix_to_file_stem(&mut modified_path, &suffix);
-
-            // if the `modified_path` doesn't exist,
-            // then return it
-            if !modified_path.exists() {
-                return Ok(modified_path);
-            }
-        }
-
-        Err(Error::FilenameOccupied(plain_path))
-    }
-
-    /// Returns [`self.get_unoccupied_save_path(save_dir)`](Self::get_unoccupied_save_path)
-    /// suffixed by `".part"`.
+    /// Returns [`self.get_save_path(save_dir)`](Self::get_save_path)
+    /// suffixed by the extension `".part{self.len}"`.
     pub fn get_partial_download_path(&self, save_dir: &Path) -> Result<PathBuf, Error> {
-        let mut path = self.get_unoccupied_save_path(save_dir)?;
+        let mut path = self.get_save_path(save_dir);
+        let extension = format!(".part{}", self.len);
         let mut filename = path
             .file_name()
             .expect("Path terminates in ..")
             .to_os_string();
-        filename.push(".part");
+        filename.push(extension);
         path.set_file_name(filename);
         Ok(path)
     }
 
-    /// Checks if [`self.get_unoccupied_save_path(save_dir)`](Self::get_unoccupied_save_path)
-    /// exists and has a length smaller than [`Self::len`].
+    /// Checks if [`Self::get_partial_download_path()`]
+    /// already exists and has a length smaller than [`Self::len`].
     /// If so, returns the length of the partially downloaded file.
-    /// Otherwise returns None.
+    /// If it doesn't exist, returns None.
     pub fn partial_download_exists(&self, save_dir: &Path) -> Result<Option<u64>, Error> {
         let local_path = self.get_partial_download_path(save_dir)?;
 
@@ -123,10 +140,34 @@ impl From<FileMetaLocal> for FileMeta {
     }
 }
 
-/// Appends `suffix` to the file stem of `path`.
-fn add_suffix_to_file_stem(path: &mut PathBuf, suffix: &OsStr) {
+/// If the path isn't taken, returns `0`.
+///
+/// Otherwise, returns the smallest number, starting at 1, that
+/// when suffixed to `path` (using [`suffix_with_number()`]),
+/// gives an unoccupied path.
+fn get_first_unoccupied_number(path: &Path) -> Result<u32, Error> {
+    if !path.exists() {
+        return Ok(0);
+    }
+
+    for i in 1..100 {
+        let mut modified_path = PathBuf::from(path);
+        suffix_with_number(&mut modified_path, i);
+
+        if !modified_path.exists() {
+            return Ok(i);
+        }
+    }
+
+    Err(Error::FilenameOccupied(PathBuf::from(path)))
+}
+
+/// Appends the suffix `" ({number})"` to the file stem of `path`.
+fn suffix_with_number(path: &mut PathBuf, number: u32) {
     // isolate the file name
     let filename = path.file_name().expect("Path terminates in ..");
+
+    let suffix = format!(" ({number})");
 
     // split the filename at the first '.'
     if let Some((first, second)) = filename.split_once('.') {
@@ -145,7 +186,7 @@ fn add_suffix_to_file_stem(path: &mut PathBuf, suffix: &OsStr) {
     }
 }
 
-/// Takes a set of `paths`, each of which may be a directory or file.
+/// Takes a list of distinct `paths`, each of which may be a directory or file.
 ///
 /// Returns the [`FileMetaLocal`] of each file, including those in nested directories.
 ///
@@ -168,7 +209,7 @@ pub fn get_file_metas(paths: &[PathBuf]) -> Result<Vec<FileMetaLocal>, Error> {
             let a = &canonical_paths[i];
             let b = &canonical_paths[j];
 
-            // we don't want two folders or files with the same name
+            // we don't want two top-level folders or files with the same name
             // then we'd run into weird cases with FileMetaLocal.short_path
             if a.file_name() == b.file_name() && a.is_file() == b.is_file() {
                 let name = a.file_name().unwrap_or(OsStr::new("")).to_os_string();

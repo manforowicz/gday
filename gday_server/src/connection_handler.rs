@@ -105,18 +105,12 @@ async fn handle_message(
             write_to_async(ServerMsg::RoomCreated, stream).await?;
         }
 
-        ClientMsg::SendAddr {
+        ClientMsg::RecordPublicAddr {
             room_code,
             is_creator,
-            private_addr,
         } => {
             // record their public socket address from the connection
             state.update_client(room_code, is_creator, origin, true, origin.ip())?;
-
-            // record their private socket address if they provided one
-            if let Some(private_addr) = private_addr {
-                state.update_client(room_code, is_creator, private_addr, false, origin.ip())?;
-            }
 
             // acknowledge the receipt
             write_to_async(ServerMsg::ReceivedAddr, stream).await?;
@@ -125,7 +119,28 @@ async fn handle_message(
         ClientMsg::DoneSending {
             room_code,
             is_creator,
+            local_contact,
         } => {
+            if let Some(sockaddr_v4) = local_contact.v4 {
+                state.update_client(
+                    room_code,
+                    is_creator,
+                    sockaddr_v4.into(),
+                    false,
+                    origin.ip(),
+                )?;
+            }
+
+            if let Some(sockaddr_v6) = local_contact.v6 {
+                state.update_client(
+                    room_code,
+                    is_creator,
+                    sockaddr_v6.into(),
+                    false,
+                    origin.ip(),
+                )?;
+            }
+
             let (client_contact, rx) = state.set_client_done(room_code, is_creator, origin.ip())?;
 
             // responds to the client with their own contact info

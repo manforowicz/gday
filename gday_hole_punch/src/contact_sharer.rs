@@ -9,7 +9,7 @@ pub struct ContactSharer<'a> {
 }
 
 impl<'a> ContactSharer<'a> {
-    /// Creates a new room with `room_code` in the Gday server
+    /// Creates a new room with `room_code` in the gday server
     /// that `server_connection` connects to.
     ///
     /// Sends local socket addresses to the server.
@@ -21,8 +21,8 @@ impl<'a> ContactSharer<'a> {
     /// - The [`FullContact`] of this endpoint, as
     ///   determined by the server
     pub fn create_room(
-        room_code: u64,
         server_connection: &'a mut ServerConnection,
+        room_code: u64,
     ) -> Result<(Self, FullContact), Error> {
         // set reuse addr and reuse port, so that these sockets
         // can be later reused for hole punching
@@ -62,8 +62,8 @@ impl<'a> ContactSharer<'a> {
     /// - The [`FullContact`] of this endpoint, as
     ///   determined by the server
     pub fn join_room(
-        room_code: u64,
         server_connection: &'a mut ServerConnection,
+        room_code: u64,
     ) -> Result<(Self, FullContact), Error> {
         // set reuse addr and reuse port, so that these sockets
         // can be later reused for hole punching
@@ -85,17 +85,17 @@ impl<'a> ContactSharer<'a> {
     /// Sends personal contact information the the server, and
     /// returns it's response.
     fn share_contact(&mut self) -> Result<FullContact, Error> {
+        let local_contact = self.connection.local_contact()?;
+
         // Get all connections to the server
         let mut streams = self.connection.streams();
 
-        // For each connection, send its private socket address
-        // to the server
+        // For each connection, have the server record its
+        // public address
         for stream in &mut streams {
-            let private_addr = Some(stream.local_addr()?);
-            let msg = ClientMsg::SendAddr {
+            let msg = ClientMsg::RecordPublicAddr {
                 room_code: self.room_code,
                 is_creator: self.is_creator,
-                private_addr,
             };
             write_to(msg, stream)?;
             let reply: ServerMsg = read_from(stream)?;
@@ -109,6 +109,7 @@ impl<'a> ContactSharer<'a> {
         let msg = ClientMsg::DoneSending {
             room_code: self.room_code,
             is_creator: self.is_creator,
+            local_contact,
         };
         write_to(msg, streams[0])?;
 

@@ -2,17 +2,11 @@
 Quick notes on items to consider implementing.
 Not all of them are desirable or necessary.
 
-- Improve error message everywhere in general. Have helpful tips to the user.
+- Add a GUI.
 
-- Add some sort of end-to-end integration tests.
+- Split off more functionality from gday.
 
-- Automatically test interrupted transfer resumption.
-
-- Add explanation in readme, of how this differs from magic wormhole.
-
-- Make gday timeout if the server is unresponsive.
-
-- Make command line messages of gday more helpful.
+- Test the contact sharing and hole-punching.
 
 ## Abandoned ideas
 

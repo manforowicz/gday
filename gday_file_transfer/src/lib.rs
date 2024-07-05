@@ -1,7 +1,7 @@
 //! Note: this crate is still in early-development, so expect breaking changes.
 //!
 //! This library lets you offer and transfer files to another peer,
-//! assuming you already have a TCP connection established.
+//! assuming you already have a reliable connection established.
 //!
 //! # Example steps
 //!
@@ -41,9 +41,7 @@ pub use crate::file_meta::{get_file_metas, FileMeta, FileMetaLocal};
 
 pub use crate::offer::{read_from, write_to, FileOfferMsg, FileResponseMsg};
 
-pub use crate::transfer::{
-    receive_files, receive_these_files, send_files, send_these_files, TransferReport,
-};
+pub use crate::transfer::{receive_files, send_files, TransferReport};
 
 /// `gday_file_transfer` error.
 #[derive(Error, Debug)]
@@ -76,9 +74,16 @@ pub enum Error {
     #[error("A local file changed length between checks.")]
     UnexpectedFileLen,
 
-    /// Requested start index greater than length of file
-    #[error("Requested start index greater than length of file.")]
+    /// A requested start byte index in [`FileResponseMsg`]
+    /// is greater than the length of the corresponding file offered in
+    /// [`FileOfferMsg`].
+    #[error("Requested start index greater than offered file length.")]
     InvalidStartIndex,
+
+    /// The number of elements in [`FileResponseMsg`] didn't match
+    /// the number of elements in the [`FileOfferMsg`].
+    #[error("Number of elements in response message, doesn't match number of files offered.")]
+    InvalidResponseLength,
 
     /// One path is a prefix of another. Local paths to send can't be nested within each other!
     #[error(
@@ -87,7 +92,7 @@ pub enum Error {
     )]
     PathIsPrefix(PathBuf, PathBuf),
 
-    // Two folders or files have same name. This would make the offered metadata ambiguous.
+    /// Two folders or files have same name. This would make the offered metadata ambiguous.
     #[error("Two folders or files have same name: '{0:?}'. This would make the offered metadata ambiguous.")]
     PathsHaveSameName(std::ffi::OsString),
 }

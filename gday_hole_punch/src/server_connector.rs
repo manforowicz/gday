@@ -1,8 +1,6 @@
 //! Functions for connecting to a Gday server.
-//! TODO: Tidy up this file
-
 use crate::Error;
-use gday_contact_exchange_protocol::DEFAULT_TLS_PORT;
+use gday_contact_exchange_protocol::{Contact, DEFAULT_TLS_PORT};
 use log::{debug, warn};
 use rand::seq::SliceRandom;
 use socket2::SockRef;
@@ -18,7 +16,7 @@ use std::{
 ///
 /// Having many server options helps make Gday decentralized!
 /// - Submit an issue on Gday's GitHub if you'd like to add your own!
-/// - All of these only serve encrypted TLS and listen on port 2311.
+/// - All of these serve with encrypted TLS over port 443.
 pub const DEFAULT_SERVERS: &[ServerInfo] = &[ServerInfo {
     domain_name: "gday.manforowicz.com",
     id: 1,
@@ -28,7 +26,7 @@ pub const DEFAULT_SERVERS: &[ServerInfo] = &[ServerInfo {
 /// Information about a single Gday server.
 ///
 /// A public gday server should only serve
-/// encrypted TLS and listen on port 2311.
+/// encrypted TLS and listen on port 443.
 #[derive(Debug, Clone)]
 pub struct ServerInfo {
     /// The DNS name of the server.
@@ -113,6 +111,8 @@ impl ServerStream {
 }
 
 /// Can hold both an IPv4 and IPv6 [`ServerStream`] to a Gday server.
+///
+/// Methods may panic if `v4` and `v6` don't actually correspond to IPv4 and IPv6 streams.
 #[derive(Debug)]
 pub struct ServerConnection {
     pub v4: Option<ServerStream>,
@@ -164,12 +164,35 @@ impl ServerConnection {
 
         streams
     }
+
+    /// Returns the local [`Contact`] of this server stream.
+    pub(super) fn local_contact(&self) -> std::io::Result<Contact> {
+        let mut contact = Contact { v4: None, v6: None };
+
+        if let Some(stream) = &self.v4 {
+            if let SocketAddr::V4(addr_v4) = stream.local_addr()? {
+                contact.v4 = Some(addr_v4);
+            } else {
+                panic!("ServerConnection had IPv6 stream where IPv4 stream was expected.");
+            }
+        }
+
+        if let Some(stream) = &self.v6 {
+            if let SocketAddr::V6(addr_v6) = stream.local_addr()? {
+                contact.v6 = Some(addr_v6);
+            } else {
+                panic!("ServerConnection had IPv4 stream where IPv6 stream was expected.");
+            }
+        }
+
+        Ok(contact)
+    }
 }
 
 /// In random order, sequentially try connecting to the given `servers`.
 ///
 /// Ignores servers that don't have `prefer == true`.
-/// Connects to port [`DEFAULT_TLS_PORT`] (2311) via TLS.
+/// Connects to port [`DEFAULT_TLS_PORT`] (443) via TLS.
 /// Tries the next server after `timeout` time.
 ///
 /// Returns
@@ -188,7 +211,7 @@ pub fn connect_to_random_server(
 }
 
 /// Try connecting to the server with this `server_id` and returning a [`ServerConnection`].
-/// Connects to port [`DEFAULT_TLS_PORT`] (2311) via TLS.
+/// Connects to port [`DEFAULT_TLS_PORT`] (443) via TLS.
 /// Gives up after `timeout` time.
 ///
 /// Returns an error if `servers` contains no server with id `server_id` or connecting
@@ -205,7 +228,7 @@ pub fn connect_to_server_id(
 }
 
 /// In random order, sequentially tries connecting to the given `domain_names`.
-/// Connects to port [`DEFAULT_TLS_PORT`] (2311) via TLS.
+/// Connects to port [`DEFAULT_TLS_PORT`] (443) via TLS.
 /// Tries the next server after `timeout` time.
 ///
 /// Returns

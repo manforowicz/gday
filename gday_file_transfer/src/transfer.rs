@@ -1,12 +1,11 @@
+use crate::{Error, FileMeta, FileMetaLocal, FileOfferMsg, FileResponseMsg};
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 
-use crate::{Error, FileMeta, FileMetaLocal, FileOfferMsg, FileResponseMsg};
-
 const FILE_BUFFER_SIZE: usize = 1_000_000;
 
-/// Reports the status of the file transfer
+/// Holds the status of a file transfer
 #[derive(Debug, Clone)]
 pub struct TransferReport {
     pub processed_bytes: u64,
@@ -20,14 +19,10 @@ pub struct TransferReport {
 ///
 /// - `offer` is the `Vec` of [`FileMetaLocal`] offered to the peer.
 /// - `response` is the peer's [`FileResponseMsg`].
-/// - `progress_callback` is an optional function that gets frequently
-/// called with [`TransferReport`] to report progress. Calling this function
-/// should be a cheap operation to avoid a performance penalty.
+/// - `progress_callback` is a function that gets frequently
+/// called with [`TransferReport`] to report progress.
 ///
-/// Transfers the files in order, sequentially, back-to-back.
-///
-/// Returns an error if can't access a file in a [`FileMetaLocal`], or
-/// encounters a network error.
+/// Transfers the accepted files in order, sequentially, back-to-back.
 pub fn send_files(
     offer: Vec<FileMetaLocal>,
     response: FileResponseMsg,
@@ -40,60 +35,9 @@ pub fn send_files(
         .filter_map(|(file, response)| response.map(|response| (file, response)))
         .collect();
 
-    send_these_files(&files, writer, progress_callback)
-}
-
-/// Receives the requested files from `reader`.
-///
-/// - `offer` is the [`FileOfferMsg`] offered by the peer.
-/// - `response` is your corresponding [`FileResponseMsg`].
-/// - `save_path` is the directory where all the files should be saved.
-/// - `reader` is the IO stream on which the files will be received.
-/// The files must be sent in order, sequentially, back-to-back.
-/// - `progress_callback` is an optional function that gets frequently
-/// called with [`TransferReport`] to report progress. Calling this function
-/// should be a cheap operation to avoid a performance penalty.
-///
-/// Returns an error if encounters a file or network error.
-pub fn receive_files(
-    offer: FileOfferMsg,
-    response: FileResponseMsg,
-    save_path: &Path,
-    reader: impl Read,
-    progress_callback: impl FnMut(&TransferReport),
-) -> Result<(), Error> {
-    let files: Vec<(FileMeta, u64)> = offer
-        .files
-        .into_iter()
-        .zip(response.response)
-        .filter_map(|(file, response)| response.map(|response| (file, response)))
-        .collect();
-
-    receive_these_files(&files, save_path, reader, progress_callback)
-}
-
-/// Transfers specific files to `writer`.
-///
-/// Unlike [`send_files()`], this function takes an array of tuples.
-/// Each tuple stores a [`FileMetaLocal`], and the index of the first byte
-/// of that file to send.
-///
-/// `progress_callback` is an optional function that gets frequently
-/// called with [`TransferReport`] to report progress. Calling this function
-/// should be a cheap operation to avoid a performance penalty.
-///
-/// Transfers the files in order, sequentially, back-to-back.
-///
-/// Returns an error if can't access a file in a [`FileMetaLocal`], or
-/// encounters a network error.
-pub fn send_these_files(
-    files: &[(FileMetaLocal, u64)],
-    writer: impl Write,
-    progress_callback: impl FnMut(&TransferReport),
-) -> Result<(), Error> {
     // sum up total transfer size
     let mut total_bytes = 0;
-    for (file, start) in files {
+    for (file, start) in &files {
         total_bytes += file
             .len
             .checked_sub(*start)
@@ -121,7 +65,7 @@ pub fn send_these_files(
         }
 
         // copy the file into the writer
-        file.seek(SeekFrom::Start(*start))?;
+        file.seek(SeekFrom::Start(start))?;
         std::io::copy(&mut file, &mut writer)?;
 
         // report the number of processed files
@@ -133,31 +77,33 @@ pub fn send_these_files(
     Ok(())
 }
 
-/// Receives specific files to `writer`.
+/// Receives the requested files from `reader`.
 ///
-/// Unlike [`receive_files()`], this function takes an array of tuples.
-/// Each tuple stores a [`FileMeta`], and the index of the first byte
-/// of the file that the peer will send.
+/// - `offer` is the [`FileOfferMsg`] offered by the peer.
+/// - `response` is your corresponding [`FileResponseMsg`].
+/// - `save_path` is the directory where the files should be saved.
+/// - `reader` is the IO stream on which the files will be received.
+/// - `progress_callback` is an function that gets frequently
+/// called with [`TransferReport`] to report progress.
 ///
-/// `save_path` is the directory where all the received
-/// files should be saved.
-///
-/// `progress_callback` is an optional function that gets frequently
-/// called with [`TransferReport`] to report progress. Calling this function
-/// should be a cheap operation to avoid a performance penalty.
-///
-/// Receives the files in order, sequentially, back-to-back.
-///
-/// Returns an error if encounters a file or network error.
-pub fn receive_these_files(
-    files: &[(FileMeta, u64)],
+/// The accepted files must be sent in order, sequentially, back-to-back.
+pub fn receive_files(
+    offer: FileOfferMsg,
+    response: FileResponseMsg,
     save_path: &Path,
     reader: impl Read,
     progress_callback: impl FnMut(&TransferReport),
 ) -> Result<(), Error> {
+    let files: Vec<(FileMeta, u64)> = offer
+        .files
+        .into_iter()
+        .zip(response.response)
+        .filter_map(|(file, response)| response.map(|response| (file, response)))
+        .collect();
+
     // sum up total transfer size
     let mut total_bytes = 0;
-    for (file, start) in files {
+    for (file, start) in &files {
         total_bytes += file
             .len
             .checked_sub(*start)
@@ -177,7 +123,7 @@ pub fn receive_these_files(
         let tmp_path = offer.get_partial_download_path(save_path)?;
 
         // download whole file
-        if *start == 0 {
+        if start == 0 {
             // create a directory and TMP file
             if let Some(parent) = tmp_path.parent() {
                 std::fs::create_dir_all(parent)?;
@@ -198,12 +144,12 @@ pub fn receive_these_files(
         } else {
             // open the partially downloaded file in append mode
             let file = OpenOptions::new().append(true).open(&tmp_path)?;
-            if file.metadata()?.len() != *start {
+            if file.metadata()?.len() != start {
                 return Err(Error::UnexpectedFileLen);
             }
 
             // buffer the writer
-            let buf_size = std::cmp::min(FILE_BUFFER_SIZE, offer.len as usize - *start as usize);
+            let buf_size = std::cmp::min(FILE_BUFFER_SIZE, offer.len as usize - start as usize);
             let mut file = BufWriter::with_capacity(buf_size, file);
 
             // only take the length of the remaining part of the file from the reader

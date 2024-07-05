@@ -1,6 +1,6 @@
 //! Helper functions for asking the user questions through
 //! the command line.
-use gday_file_transfer::{FileMeta, FileMetaLocal};
+use gday_file_transfer::{FileOfferMsg, FileResponseMsg};
 use indicatif::HumanBytes;
 use owo_colors::OwoColorize;
 use std::{io::Write, path::Path};
@@ -8,19 +8,19 @@ use std::{io::Write, path::Path};
 /// Confirms that the user wants to send these files.
 ///
 /// If not, returns false.
-pub fn confirm_send(files: &[FileMetaLocal]) -> std::io::Result<bool> {
+pub fn confirm_send(files: &FileOfferMsg) -> std::io::Result<bool> {
     // print all the file names and sizes
     println!("{}", "Files to send:".bold());
-    for file in files {
+    for file in &files.files {
         println!("{} ({})", file.short_path.display(), HumanBytes(file.len));
     }
     println!();
 
     // print their total size
-    let total_size: u64 = files.iter().map(|file| file.len).sum();
+    let total_size: u64 = files.get_total_offered_size();
     print!(
         "Would you like to send these {} files ({})? (y/n): ",
-        files.len(),
+        files.files.len(),
         HumanBytes(total_size).bold()
     );
     std::io::stdout().flush()?;
@@ -44,32 +44,18 @@ pub fn confirm_send(files: &[FileMetaLocal]) -> std::io::Result<bool> {
 /// - `Some(0)` represents fully accepting the file at this index,
 /// - `Some(x)` represents resuming with the first `x` bytes skipped.
 pub fn ask_receive(
-    files: &[FileMeta],
+    offer: &FileOfferMsg,
     save_dir: &Path,
-) -> Result<Vec<Option<u64>>, gday_file_transfer::Error> {
+) -> Result<FileResponseMsg, gday_file_transfer::Error> {
     println!("{}", "Your mate wants to send you:".bold(),);
 
-    // A response accepting files that are not already fully saved
-    let mut new_files = Vec::<Option<u64>>::with_capacity(files.len());
-    // The total size that `new_files` would download.
-    let mut new_size = 0;
-    // Number of new files
-    let mut num_new_files = 0;
-    // Number of interrupted files
-    let mut num_interrupted = 0;
-
     // Print all the offered files.
-    for file in files {
+    for file in &offer.files {
         // print file metadata
         print!("{} ({})", file.short_path.display(), HumanBytes(file.len));
 
-        // file was already downloaded
-        if file.already_exists(save_dir)? {
-            print!(" {}", "ALREADY EXISTS".green().bold());
-            new_files.push(None);
-
         // an interrupted download exists
-        } else if let Some(local_len) = file.partial_download_exists(save_dir)? {
+        if let Some(local_len) = file.partial_download_exists(save_dir)? {
             let remaining_len = file.len - local_len;
 
             print!(
@@ -78,37 +64,32 @@ pub fn ask_receive(
                 HumanBytes(remaining_len).red().bold(),
                 "REMAINING".red().bold()
             );
-            new_size += remaining_len;
-            new_files.push(Some(local_len));
-            num_interrupted += 1;
 
-        // this file does not exist
-        } else {
-            new_size += file.len;
-            new_files.push(Some(0));
-            num_new_files += 1;
+        // file was already downloaded
+        } else if file.already_exists(save_dir)? {
+            print!(" {}", "ALREADY EXISTS".green().bold());
         }
         println!();
     }
 
     println!();
 
-    // The total size of all the files
-    let total_size = files.iter().map(|f| f.len).sum();
+    let new_files = FileResponseMsg::accept_only_new_and_interrupted(offer, save_dir)?;
+    let all_files = FileResponseMsg::accept_all_files(offer);
 
     // If there are no existing/interrupted files,
     // send or quit.
-    if new_size == total_size {
+    if new_files == all_files {
         print!(
             "Download all {} files ({})? (y/n): ",
-            files.len(),
-            HumanBytes(total_size).bold()
+            all_files.get_num_fully_accepted(),
+            HumanBytes(offer.get_transfer_size(&new_files)?).bold()
         );
         std::io::stdout().flush()?;
         let input = get_lowercase_input()?;
 
         if "yes".starts_with(&input) {
-            return Ok(vec![Some(0); files.len()]);
+            return Ok(all_files);
         } else {
             println!("Cancelled.");
             std::process::exit(0);
@@ -117,14 +98,14 @@ pub fn ask_receive(
 
     println!(
         "1. Fully download all {} files ({}).",
-        files.len(),
-        HumanBytes(total_size).bold()
+        all_files.response.len(),
+        HumanBytes(offer.get_transfer_size(&all_files)?).bold()
     );
     println!(
         "2. Download only the {} new files, and resume {} interrupted downloads ({}).",
-        num_new_files,
-        num_interrupted,
-        HumanBytes(new_size).bold()
+        new_files.get_num_fully_accepted(),
+        new_files.get_num_partially_accepted(),
+        HumanBytes(offer.get_transfer_size(&new_files)?).bold()
     );
     println!("3. Cancel.");
     print!("{} ", "Choose an option (1, 2, or 3):".bold());
@@ -132,11 +113,11 @@ pub fn ask_receive(
 
     match get_lowercase_input()?.as_str() {
         // all files
-        "1" => Ok(vec![Some(0); files.len()]),
+        "1" => Ok(all_files),
         // new/interrupted files
         "2" => Ok(new_files),
         // cancel
-        _ => Ok(vec![None; files.len()]),
+        _ => Ok(FileResponseMsg::reject_all_files(offer)),
     }
 }
 

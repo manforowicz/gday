@@ -44,12 +44,12 @@ struct Args {
     unencrypted: bool,
 
     /// Custom socket address on which to listen.
-    /// [default: `[::]:2311` for TLS, `[::]:2310` when --unencrypted]
+    /// [default: `[::]:443` for TLS, `[::]:80` when --unencrypted]
     #[arg(short, long)]
     address: Option<String>,
 
     /// Number of seconds before a new room is deleted
-    #[arg(short, long, default_value = "600")]
+    #[arg(short, long, default_value = "3600")]
     timeout: u64,
 
     /// Max number of requests an IP address can

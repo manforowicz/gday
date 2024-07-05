@@ -8,7 +8,7 @@
 
 # cargo test
 if ! cargo test; then
-    echo "Error with 'cargo fmt --check'."
+    echo "Error with 'cargo test'."
     exit 1
 fi
 
@@ -27,6 +27,12 @@ fi
 # cargo fmt --check
 if ! cargo fmt --check; then
     echo "Error with 'cargo fmt --check'."
+    exit 1
+fi
+
+# cargo audit
+if ! cargo install cargo-audit && cargo audit; then
+    echo "Error with 'cargo audit'."
     exit 1
 fi
 

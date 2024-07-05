@@ -47,10 +47,13 @@ pub fn try_connect_to_peer(
     // Run the asynchronous hole-punch function.
     // It is asynchronous to simplify the process
     // of trying multiple connections concurrently.
-    let result = runtime.block_on(tokio::time::timeout(
-        timeout,
-        hole_punch(local_contact, peer_contact, shared_secret),
-    ));
+    let result = runtime.block_on(async {
+        tokio::time::timeout(
+            timeout,
+            hole_punch(local_contact, peer_contact, shared_secret),
+        )
+        .await
+    });
 
     match result {
         // function succeeded, or ended
@@ -81,7 +84,7 @@ async fn hole_punch(
         tasks.spawn(try_accept(local, p.to_vec()));
 
         // try connecting to the peer's private socket address
-        if let Some(peer) = peer_contact.private.v4 {
+        if let Some(peer) = peer_contact.local.v4 {
             tasks.spawn(try_connect(local, peer, p.to_vec()));
         }
 
@@ -97,7 +100,7 @@ async fn hole_punch(
         tasks.spawn(try_accept(local, p.to_vec()));
 
         // try connecting to the peer's private socket address
-        if let Some(peer) = peer_contact.private.v6 {
+        if let Some(peer) = peer_contact.local.v6 {
             tasks.spawn(try_connect(local, peer, p.to_vec()));
         }
 
