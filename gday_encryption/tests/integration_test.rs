@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 #![warn(clippy::all)]
 use gday_encryption::EncryptedStream;
-use rand::RngCore;
+use rand::{RngCore, SeedableRng};
 use std::{
     collections::VecDeque,
     io::{Read, Write},
@@ -13,8 +13,10 @@ use std::{
 /// several large messages.
 #[test]
 fn test_large_messages() {
+    // A pseudorandom test vector
+    let mut rng = rand::rngs::StdRng::seed_from_u64(10);
     let mut bytes = vec![0_u8; 1_000_000];
-    rand::thread_rng().fill_bytes(&mut bytes);
+    rng.fill_bytes(&mut bytes);
 
     test_transfers(bytes, 200_000);
 }
@@ -22,8 +24,10 @@ fn test_large_messages() {
 /// Transfer `bytes` over [`EncryptedStream`],
 /// flushing every `chunk_size` bytes.
 fn test_transfers(bytes: Vec<u8>, chunk_size: usize) {
-    // A random encryption key
-    let shared_key: [u8; 32] = rand::random();
+    // A pseudorandom encryption key
+    let mut rng = rand::rngs::StdRng::seed_from_u64(10);
+    let mut shared_key = [0u8; 32];
+    rng.fill_bytes(&mut shared_key);
 
     // The loopback address that peer_a will connect to.
     let pipe_addr = SocketAddr::from((Ipv6Addr::LOCALHOST, 2000));
@@ -64,13 +68,19 @@ fn test_unexpected_eof() {
     let mut pipe = VecDeque::new();
     let mut writer = EncryptedStream::new(&mut pipe, &key, &nonce);
 
+    // write the message
     let msg = b"fjsdka;8u39fsdkaf";
-
     writer.write_all(msg).unwrap();
     writer.flush().unwrap();
+
+    // remove part of it
     pipe.pop_back().unwrap();
+
+    // try receiving the broken message
     let mut reader = EncryptedStream::new(&mut pipe, &key, &nonce);
     let mut buf = vec![0; msg.len()];
     let result = reader.read_exact(&mut buf);
+
+    // confirm its an error
     assert!(result.is_err());
 }

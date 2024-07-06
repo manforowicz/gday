@@ -190,24 +190,24 @@ fn suffix_with_number(path: &mut PathBuf, number: u32) {
 ///
 /// Returns the [`FileMetaLocal`] of each file, including those in nested directories.
 ///
-/// Returns an error if can't access a path, or if one path is the prefix
-/// of another path.
+/// Returns an error if can't access a path, one path is the prefix
+/// of another path, or two paths end in the same name.
 ///
 /// Each file's [`FileMeta::short_path`] will contain the path to the file,
 /// starting at the provided level, ignoring parent directories.
 pub fn get_file_metas(paths: &[PathBuf]) -> Result<Vec<FileMetaLocal>, Error> {
     // canonicalize the paths to remove symlinks
-    let canonical_paths = paths
+    let paths = paths
         .iter()
         .map(|p| p.canonicalize())
         .collect::<std::io::Result<Vec<PathBuf>>>()?;
 
     // Return an error if any path is a prefix of another,
     // or has the same folder or file name.
-    for i in 0..canonical_paths.len() {
-        for j in (i + 1)..canonical_paths.len() {
-            let a = &canonical_paths[i];
-            let b = &canonical_paths[j];
+    for i in 0..paths.len() {
+        for j in (i + 1)..paths.len() {
+            let a = &paths[i];
+            let b = &paths[j];
 
             // we don't want two top-level folders or files with the same name
             // then we'd run into weird cases with FileMetaLocal.short_path
@@ -217,22 +217,16 @@ pub fn get_file_metas(paths: &[PathBuf]) -> Result<Vec<FileMetaLocal>, Error> {
             }
 
             if a.starts_with(b) {
-                return Err(Error::PathIsPrefix(
-                    paths[j].to_path_buf(),
-                    paths[i].to_path_buf(),
-                ));
+                return Err(Error::PathIsPrefix(b.to_path_buf(), a.to_path_buf()));
             }
             if b.starts_with(a) {
-                return Err(Error::PathIsPrefix(
-                    paths[i].to_path_buf(),
-                    paths[j].to_path_buf(),
-                ));
+                return Err(Error::PathIsPrefix(a.to_path_buf(), b.to_path_buf()));
             }
         }
     }
 
     let mut files = Vec::new();
-    for path in canonical_paths {
+    for path in paths {
         // get the parent path
         let top_path = path.parent().unwrap_or(Path::new(""));
 

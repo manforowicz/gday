@@ -106,7 +106,7 @@ impl<'a> ContactSharer<'a> {
 
         // tell the server that we're done
         // sending socket addresses
-        let msg = ClientMsg::DoneSending {
+        let msg = ClientMsg::ShareContact {
             room_code: self.room_code,
             is_creator: self.is_creator,
             local_contact,

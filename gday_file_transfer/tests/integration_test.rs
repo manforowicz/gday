@@ -236,7 +236,7 @@ fn file_transfer() {
         let response: FileResponseMsg = read_from(&mut stream_a).unwrap();
 
         // send the files
-        send_files(file_metas, response, &mut stream_a, |_| {}).unwrap();
+        send_files(&file_metas, &response, &mut stream_a, |_| {}).unwrap();
     });
 
     // directory to receive the files in
@@ -274,8 +274,8 @@ fn file_transfer() {
     write_to(&response_msg, &mut stream_b).unwrap();
 
     receive_files(
-        file_offer,
-        response_msg,
+        &file_offer,
+        &response_msg,
         dir_b.path(),
         &mut stream_b,
         |_| {},

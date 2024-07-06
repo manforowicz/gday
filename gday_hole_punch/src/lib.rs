@@ -1,31 +1,83 @@
 //! Note: this crate is still in early-development, so expect breaking changes.
 //!
-//! Lets peers behind [NAT (network address translation)](https://en.wikipedia.org/wiki/Network_address_translation)
+//! Lets 2 peers behind [NAT (network address translation)](https://en.wikipedia.org/wiki/Network_address_translation)
 //! try to establish a direct authenticated TCP connection.
-//!
 //! Uses [TCP hole punching](https://en.wikipedia.org/wiki/TCP_hole_punching)
 //! and a helper [gday_server](https://crates.io/crates/gday_server) to do this.
-//!
 //! This library is used by [gday](https://crates.io/crates/gday), a command line tool for sending files.
 //!
-//! # Example steps
+//! # Example
+//! ```no_run
+//! # use gday_hole_punch::server_connector;
+//! # use gday_hole_punch::ContactSharer;
+//! # use gday_hole_punch::try_connect_to_peer;
+//! # use gday_hole_punch::PeerCode;
+//! # use std::str::FromStr;
+//! #
+//! let servers = server_connector::DEFAULT_SERVERS;
+//! let timeout = std::time::Duration::from_secs(5);
+//! let room_code = 123;
+//! let shared_secret = 456;
 //!
-//! 1. Peer A connects to a [gday_server](https://crates.io/crates/gday_server) using
-//! a function such as [`server_connector::connect_to_random_server()`].
+//! //////// Peer 1 ////////
 //!
-//! 2. Peer A creates a room in the server using [`ContactSharer::create_room()`] with a random room code.
+//! // Connect to a random server in the default server list
+//! let (mut server_connection, server_id) = server_connector::connect_to_random_server(
+//!     servers,
+//!     timeout
+//! )?;
 //!
-//! 3. Peer A tells Peer B which server and room code to join, possibly by giving them a [`PeerCode`]
-//!     (done via phone call, email, etc.).
+//! // PeerCode useful for giving rendezvous info to peer
+//! let peer_code = PeerCode { server_id, room_code, shared_secret };
+//! let code_to_share = peer_code.to_string();
 //!
-//! 4. Peer B connects to the same server using [`server_connector::connect_to_server_id()`].
+//! // Create a room in the server, and get my contact from it
+//! let (contact_sharer, my_contact) = ContactSharer::create_room(
+//!     &mut server_connection,
+//!     room_code
+//! )?;
 //!
-//! 5. Peer B joins the same room using [`ContactSharer::join_room()`].
+//! // Wait for the server to send the peer's contact
+//! let peer_contact = contact_sharer.get_peer_contact()?;
 //!
-//! 6. Both peers call [`ContactSharer::get_peer_contact()`] to get their peer's contact.
+//! // Use TCP hole-punching to connect to the peer,
+//! // verify their identity with the shared_secret,
+//! // and get a cryptographically-secure shared key
+//! let (tcp_stream, strong_key) = try_connect_to_peer(
+//!     my_contact.local,
+//!     peer_contact,
+//!     &shared_secret.to_be_bytes(),
+//!     timeout
+//! )?;
 //!
-//! 7. Both peers pass this contact and a shared secret to [`try_connect_to_peer()`],
-//!    which returns a TCP stream, and an authenticated cryptographically-secure shared key.
+//! //////// Peer 2 (on a different computer) ////////
+//!
+//! let peer_code = PeerCode::from_str(&code_to_share)?;
+//!
+//! // Connect to the same server as Peer 1
+//! let mut server_connection = server_connector::connect_to_server_id(
+//!     servers,
+//!     peer_code.server_id,
+//!     timeout
+//! )?;
+//!
+//! // Join the same room in the server, and get my local contact
+//! let (contact_sharer, my_contact) = ContactSharer::join_room(
+//!     &mut server_connection,
+//!     peer_code.room_code
+//! )?;
+//!
+//! let peer_contact = contact_sharer.get_peer_contact()?;
+//!
+//! let (tcp_stream, strong_key) = try_connect_to_peer(
+//!     my_contact.local,
+//!     peer_contact,
+//!     &peer_code.shared_secret.to_be_bytes(),
+//!     timeout
+//! )?;
+//!
+//! # Ok::<(), gday_hole_punch::Error>(())
+//! ```
 //!
 #![forbid(unsafe_code)]
 #![warn(clippy::all)]
@@ -114,8 +166,4 @@ pub enum Error {
     /// Couldn't parse [`PeerCode`]
     #[error("Wrong number of segments in your code. Check it for typos!")]
     WrongNumberOfSegmentsPeerCode,
-
-    /// Missing required checksum in [`PeerCode`]
-    #[error("Your code is missing the required checksum digit. Check it for typos!")]
-    MissingChecksumPeerCode,
 }

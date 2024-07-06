@@ -24,14 +24,14 @@ pub struct TransferReport {
 ///
 /// Transfers the accepted files in order, sequentially, back-to-back.
 pub fn send_files(
-    offer: Vec<FileMetaLocal>,
-    response: FileResponseMsg,
+    offer: &[FileMetaLocal],
+    response: &FileResponseMsg,
     writer: impl Write,
     progress_callback: impl FnMut(&TransferReport),
 ) -> Result<(), Error> {
-    let files: Vec<(FileMetaLocal, u64)> = offer
-        .into_iter()
-        .zip(response.response)
+    let files: Vec<(&FileMetaLocal, u64)> = offer
+        .iter()
+        .zip(&response.response)
         .filter_map(|(file, response)| response.map(|response| (file, response)))
         .collect();
 
@@ -88,16 +88,16 @@ pub fn send_files(
 ///
 /// The accepted files must be sent in order, sequentially, back-to-back.
 pub fn receive_files(
-    offer: FileOfferMsg,
-    response: FileResponseMsg,
+    offer: &FileOfferMsg,
+    response: &FileResponseMsg,
     save_path: &Path,
     reader: impl Read,
     progress_callback: impl FnMut(&TransferReport),
 ) -> Result<(), Error> {
-    let files: Vec<(FileMeta, u64)> = offer
+    let files: Vec<(&FileMeta, u64)> = offer
         .files
-        .into_iter()
-        .zip(response.response)
+        .iter()
+        .zip(&response.response)
         .filter_map(|(file, response)| response.map(|response| (file, response)))
         .collect();
 

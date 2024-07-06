@@ -20,6 +20,7 @@ use log::info;
 use owo_colors::OwoColorize;
 use rand::Rng;
 use std::path::PathBuf;
+use std::str::FromStr;
 
 /// How long to try hole punching before giving up.
 const HOLE_PUNCH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
@@ -129,7 +130,7 @@ fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
             // generate random `room_code` and `shared_secret`
             // if the user didn't provide custom ones
             let peer_code = if let Some(code) = code {
-                PeerCode::parse(&code, false)?
+                PeerCode::from_str(&code)?
             } else {
                 let mut rng = rand::thread_rng();
                 PeerCode {
@@ -157,7 +158,7 @@ fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
 
             println!(
                 "Tell your mate to run \"gday receive {}\"",
-                peer_code.to_str().bold()
+                peer_code.bold()
             );
 
             // get peer's contact
@@ -207,7 +208,7 @@ fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
 
         // receiving files
         crate::Command::Receive { path, code } => {
-            let code = PeerCode::parse(&code, true)?;
+            let code = PeerCode::from_str(&code)?;
             let (contact_sharer, my_contact) =
                 ContactSharer::join_room(&mut server_connection, code.room_code)?;
 

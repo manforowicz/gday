@@ -8,7 +8,7 @@ use std::io::Write;
 
 pub fn encryption_bench(c: &mut Criterion) {
     // generate pseudorandom data from a seed
-    let mut rng = StdRng::seed_from_u64(0);
+    let mut rng = StdRng::seed_from_u64(10);
 
     let mut nonce = [0; 7];
     let mut key = [0; 32];
@@ -35,7 +35,7 @@ pub fn encryption_bench(c: &mut Criterion) {
 
 pub fn decryption_bench(c: &mut Criterion) {
     // generate pseudorandom data from a seed
-    let mut rng = StdRng::seed_from_u64(0);
+    let mut rng = StdRng::seed_from_u64(10);
 
     let mut nonce = [0; 7];
     let mut key = [0; 32];

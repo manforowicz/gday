@@ -1,4 +1,5 @@
-//! This library provides a simple encrypted wrapper around an IO stream.
+//! A simple encrypted wrapper around an IO stream.
+//!
 //! Uses a streaming [chacha20poly1305](https://docs.rs/chacha20poly1305/latest/chacha20poly1305/) cipher.
 //!
 //! This library is used by [gday_file_transfer](https://crates.io/crates/gday_file_transfer),
@@ -6,10 +7,31 @@
 //!
 //! In general, I recommend using the well-established
 //! [rustls](https://docs.rs/rustls/latest/rustls) for encryption.
-//!
 //! [gday_file_transfer](https://crates.io/crates/gday_file_transfer) chose this library
 //! because [rustls](https://docs.rs/rustls/latest/rustls) didn't support
 //! peer-to-peer connections with a shared key.
+//!
+//! # Example
+//! ```no_run
+//! # use gday_encryption::EncryptedStream;
+//! # use std::io::{Read, Write};
+//! #
+//! let shared_key: [u8; 32] = [42; 32];
+//!
+//! //////// Peer A ////////
+//! # let mut tcp_stream = std::collections::VecDeque::new();
+//! let mut encrypted_stream = EncryptedStream::encrypt_connection(&mut tcp_stream, &shared_key)?;
+//! encrypted_stream.write_all(b"Hello!")?;
+//! encrypted_stream.flush()?;
+//!
+//! //////// Peer B (on a different computer) ////////
+//! # let mut tcp_stream = std::collections::VecDeque::new();
+//! let mut encrypted_stream = EncryptedStream::encrypt_connection(&mut tcp_stream, &shared_key)?;
+//!
+//! let mut received = [0u8; 6];
+//! encrypted_stream.read_exact(&mut received)?;
+//! # Ok::<(), std::io::Error>(())
+//! ```
 //!
 #![forbid(unsafe_code)]
 #![warn(clippy::all)]

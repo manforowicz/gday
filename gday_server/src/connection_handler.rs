@@ -116,7 +116,7 @@ async fn handle_message(
             write_to_async(ServerMsg::ReceivedAddr, stream).await?;
         }
 
-        ClientMsg::DoneSending {
+        ClientMsg::ShareContact {
             room_code,
             is_creator,
             local_contact,

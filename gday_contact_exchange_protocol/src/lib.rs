@@ -9,37 +9,66 @@
 //!     A command line tool for sending files to peers.
 //! - [**gday_hole_punch**](https://docs.rs/gday_hole_punch/):
 //!     A library for establishing a peer-to-peer TCP connection.
-//! - [**gday_server**](https://docs.rs/gday_server/):
+//! - [**gday_server**](https://crates.io/crates/gday_server):
 //!     A server binary that facilitates this protocol.
 //!
-//! # Example steps
+//! # Example
+//! First, both peers connect with TLS on both IPv4 and IPv6 (if possible)
+//! to a gday server with [`DEFAULT_TLS_PORT`].
+//! Then they exchange contacts like so:
+//! ```no_run
+//! # use gday_contact_exchange_protocol::{
+//! #    ServerMsg,
+//! #    ClientMsg,
+//! #    write_to,
+//! #    read_from,
+//! #    Contact
+//! # };
+//! # let mut tls_ipv4 = std::collections::VecDeque::new();
+//! # let mut tls_ipv6 = std::collections::VecDeque::new();
+//! #
+//! let room_code = 42;
 //!
-//! 1. Peer A connects to a server via TCP (port [`DEFAULT_TCP_PORT`]) or
-//!     TLS (port [`DEFAULT_TLS_PORT`]).
-//!     
-//! 2. Peer A requests a new room with a random `room_code` using [`ClientMsg::CreateRoom`].
+//! // A client tells the server to create a room.
+//! // The server responds with ServerMsg::RoomCreated or
+//! // ServerMsg::ErrorRoomTaken.
+//! let request = ClientMsg::CreateRoom { room_code };
+//! write_to(request, &mut tls_ipv4)?;
+//! let response: ServerMsg = read_from(&mut tls_ipv4)?;
 //!
-//! 3. The server replies to peer A with [`ServerMsg::RoomCreated`] or [`ServerMsg::ErrorRoomTaken`]
-//!     depending on if this `room_code` is in use.
+//! // Each peer sends ClientMsg::RecordPublicAddr
+//! // from all their endpoints.
+//! // The server records the client's public addresses from these connections.
+//! // The server responds with ServerMsg::ReceivedAddr
+//! let request = ClientMsg::RecordPublicAddr { room_code, is_creator: true };
+//! write_to(request, &mut tls_ipv4)?;
+//! let response: ServerMsg = read_from(&mut tls_ipv4)?;
+//! write_to(request, &mut tls_ipv6)?;
+//! let response: ServerMsg = read_from(&mut tls_ipv6)?;
 //!
-//! 4. Peer A externally tells peer B their `room_code` (by phone call, text message, carrier pigeon, etc.).
+//! // Both peers share their local address with the server.
+//! // The server immediately responds with ServerMsg::ClientContact,
+//! // containing each client's FullContact.
+//! let local_contact = Contact {
+//!     v4: todo!("local v4 addr"),
+//!     v6: todo!("local v6 addr")
+//! };
+//! let request = ClientMsg::ShareContact { local_contact, room_code, is_creator: true };
+//! write_to(request, &mut tls_ipv4)?;
+//! let response: ServerMsg = read_from(&mut tls_ipv4)?;
 //!
-//! 5. Both peers send this `room_code` and optionally their local/private
-//!     socket addresses to the server via [`ClientMsg::SendAddr`] messages.
-//!     The server determines their public addresses from their internet connections.
-//!     The server replies with [`ServerMsg::ReceivedAddr`] after each of these messages.
+//! // Once both clients have sent ClientMsg::ShareContact,
+//! // the server sends both clients a ServerMsg::PeerContact
+//! // containing the FullContact of the peer.
+//! let response: ServerMsg = read_from(&mut tls_ipv4)?;
 //!
-//! 6. Both peers send [`ClientMsg::DoneSending`] once they are ready to receive the contact info of each other.
+//! // The server then closes the room, and the peers disconnect.
 //!
-//! 7. The server immediately replies to [`ClientMsg::DoneSending`]
-//!     with [`ServerMsg::ClientContact`] which contains the [`FullContact`] of this peer.
-//!
-//! 8. Once both peers are ready, the server sends (on the same stream where [`ClientMsg::DoneSending`] came from)
-//!     each peer a [`ServerMsg::PeerContact`] which contains the [`FullContact`] of the other peer.
-//!
-//! 9. On their own, the peers use this info to connect directly to each other by using
-//!     [hole punching](https://en.wikipedia.org/wiki/Hole_punching_(networking)).
-//!     [gday_hole_punch](https://docs.rs/gday_hole_punch/) is a library that provides tools for hole punching.
+//! // The peers then connect directly to each other using a library
+//! // such as gday_hole_punch.
+//! #
+//! # Ok::<(), gday_contact_exchange_protocol::Error>(())
+//! ```
 //!
 #![forbid(unsafe_code)]
 #![warn(clippy::all)]
@@ -89,7 +118,7 @@ pub enum ClientMsg {
     ///
     /// After the other peer sends `DoneSending` as well, the server sends
     /// [`ServerMsg::PeerContact`] which contains the peer's contact info.
-    DoneSending {
+    ShareContact {
         local_contact: Contact,
         room_code: u64,
         is_creator: bool,
@@ -108,11 +137,11 @@ pub enum ServerMsg {
     /// Responds to a [`ClientMsg::RecordPublicAddr`] to indicate it was successfully recorded.
     ReceivedAddr,
 
-    /// Immediately responds to a [`ClientMsg::DoneSending`].
+    /// Immediately responds to a [`ClientMsg::ShareContact`].
     /// Contains the client's contact info.
     ClientContact(FullContact),
 
-    /// After both clients in a room have sent [`ClientMsg::DoneSending`],
+    /// After both clients in a room have sent [`ClientMsg::ShareContact`],
     /// the server replies with this message.
     /// Contains the other peer's contact info.
     PeerContact(FullContact),
@@ -121,7 +150,7 @@ pub enum ServerMsg {
     /// `room_code` is currently taken.
     ErrorRoomTaken,
 
-    /// If only one client sends [`ClientMsg::DoneSending`] before the room
+    /// If only one client sends [`ClientMsg::ShareContact`] before the room
     /// times out, the server replies with this message instead of
     /// [`ServerMsg::PeerContact`]
     ErrorPeerTimedOut,
@@ -206,18 +235,18 @@ impl std::fmt::Display for Contact {
     }
 }
 
-/// The public and private/local endpoints of an client.
+/// The public and local endpoints of an client.
 ///
-/// `public` is different from `private` when the entity is behind
+/// [`FullContact::public`] is different from [`FullContact::local`] when the entity is behind
 /// [NAT (network address translation)](https://en.wikipedia.org/wiki/Network_address_translation).
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Clone, Copy, Default)]
 pub struct FullContact {
     /// The peer's private contact in it's local network.
-    /// The server knows this from [`ClientMsg::SendAddr::private_addr`].
+    /// The server knows this from [`ClientMsg::ShareContact::local_contact`].
     pub local: Contact,
-    /// The entity's public contact visible to the public internet.
+    /// The entity's public contact visible to the internet.
     /// The server determines this by checking where
-    /// a [`ClientMsg::SendAddr`] message came from.
+    /// [`ClientMsg::RecordPublicAddr`] messages came from.
     pub public: Contact,
 }
 
@@ -296,7 +325,7 @@ pub enum Error {
     #[error("IO Error: {0}")]
     IO(#[from] std::io::Error),
 
-    /// A message's length header limits it to 2^32 bytes.
+    /// Can't send message longer than 2^32 bytes.
     #[error("Can't send message longer than 2^32 bytes: {0}")]
     MsgTooLong(#[from] std::num::TryFromIntError),
 }

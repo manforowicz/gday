@@ -2,30 +2,66 @@ use serde::{Deserialize, Serialize};
 
 use crate::Error;
 
-/// Convinience struct for sharing info
-/// required for contact-exchange between two peers.
+/// Info that 2 peers must share before they can exchange contacts.
 ///
-/// Use [`PeerCode::to_str()`] and [`PeerCode::parse()`]
+/// Use `PeerCode.to_string()` and `PeerCode::from_str()`
 /// to convert to and from a short human-readable code.
 #[derive(PartialEq, Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct PeerCode {
+    /// The ID of the gday contact exchange server
+    /// that the peers will connect to.
+    ///
+    /// Use `0` to indicate a custom server.
+    ///
     /// Pass to [`crate::server_connector::connect_to_server_id()`]
-    /// to connect to a gday contact exchange server.
+    /// to connect to the server.
     pub server_id: u64,
+
+    /// The room code within the server.
+    ///
     /// Pass to [`crate::ContactSharer`] to specify
-    /// which room in the server to exchange contacts in.
+    /// which room to exchange contacts in.
     pub room_code: u64,
+
+    /// The shared secret that the peers will use to confirm
+    /// each other's identity during hole-punching.
+    ///
     /// Pass to [`crate::try_connect_to_peer()`] to authenticate
-    /// the peer when hole-punching.
+    /// the other peer when hole-punching.
     pub shared_secret: u64,
 }
 
 impl PeerCode {
+    /// Calculates a simple hash of the three fields, mod 17
+    /// `(self.server_id * 3 + self.room_code * 2 + self.shared_secret) % 17`
+    fn get_checksum(&self) -> u64 {
+        ((self.server_id % 17) * 3 + (self.room_code % 17) * 2 + (self.shared_secret % 17)) % 17
+    }
+}
+
+impl std::fmt::Display for PeerCode {
+    /// Display as `"server_id.room_code.shared_secret.checksum"`
+    /// where each field is in hexadecimal form.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{:X}.{:X}.{:X}.{:X}",
+            self.server_id,
+            self.room_code,
+            self.shared_secret,
+            self.get_checksum()
+        )
+    }
+}
+
+impl std::str::FromStr for PeerCode {
+    type Err = Error;
+
     /// Converts `str` of hexadecimal form:
     /// `"server_id.room_code.shared_secret.checksum"` into a [`PeerCode`].
     ///
-    /// Checksum is not required if `require_checksum` is false.
-    pub fn parse(str: &str, require_checksum: bool) -> Result<Self, Error> {
+    /// The checksum is optional.
+    fn from_str(str: &str) -> Result<Self, Error> {
         // split `str` into period-separated substrings
         let mut substrings = str.trim().split('.');
 
@@ -53,8 +89,6 @@ impl PeerCode {
             if checksum != peer_code.get_checksum() {
                 return Err(Error::IncorrectChecksumPeerCode);
             }
-        } else if require_checksum {
-            return Err(Error::MissingChecksumPeerCode);
         }
 
         // return error if there are too many substrings
@@ -64,30 +98,25 @@ impl PeerCode {
 
         Ok(peer_code)
     }
+}
 
-    /// Converts [`PeerCode`] into [`String`] in hexadecimal string of form:
-    /// `"server_id.room_code.shared_secret.checksum"`.
-    pub fn to_str(&self) -> String {
-        let mut s = format!(
-            "{:X}.{:X}.{:X}.",
-            self.server_id, self.room_code, self.shared_secret
-        );
-
-        // append the checksum as the 4-th segment
-        s.push_str(&format!("{:X}", self.get_checksum()));
-
-        s
-    }
-
-    /// Calculates a simple hash of the fields, mod 17
-    fn get_checksum(&self) -> u64 {
-        ((self.server_id % 17) + (self.room_code % 17) * 2 + (self.shared_secret % 17) * 3) % 17
+impl TryFrom<&str> for PeerCode {
+    type Error = Error;
+    /// Converts `str` of hexadecimal form:
+    /// `"server_id.room_code.shared_secret.checksum"` into a [`PeerCode`].
+    ///
+    /// The checksum is optional.
+    fn try_from(str: &str) -> Result<Self, Error> {
+        str.parse()
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::str::FromStr;
+
+    use crate::{Error, PeerCode};
+
     /// Test encoding a message.
     #[test]
     fn test_encode() {
@@ -97,15 +126,17 @@ mod tests {
             shared_secret: 15,
         };
 
-        let message = peer_code.to_str();
-        assert_eq!(message, "1B.13A.F.3");
+        let message = peer_code.to_string();
+        assert_eq!(message, "1B.13A.F.A");
     }
 
     #[test]
     fn test_decode() {
         // some uppercase, some lowercase, and spacing
-        let message = " 1b.13A.f.3  ";
-        let received = PeerCode::parse(message, true).unwrap();
+        let message = " 1b.13A.f.a  ";
+        let received1 = PeerCode::from_str(message).unwrap();
+        let received2: PeerCode = message.parse().unwrap();
+        let received3 = PeerCode::try_from(message).unwrap();
 
         let expected = PeerCode {
             server_id: 27,
@@ -113,17 +144,15 @@ mod tests {
             shared_secret: 15,
         };
 
-        assert_eq!(received, expected);
+        assert_eq!(received1, expected);
+        assert_eq!(received2, expected);
+        assert_eq!(received3, expected);
     }
 
     #[test]
     fn checksum_test() {
-        let message = " 1b.13A.f  ";
-
-        let received = PeerCode::parse(message, true);
-        assert!(matches!(received, Err(Error::MissingChecksumPeerCode)));
-
-        let received = PeerCode::parse(message, false).unwrap();
+        // checksum omitted
+        let received = PeerCode::from_str(" 1b.13A.f  ").unwrap();
         let expected = PeerCode {
             server_id: 27,
             room_code: 314,
@@ -131,21 +160,26 @@ mod tests {
         };
         assert_eq!(received, expected);
 
-        let message = " 1c.13A.f.3  ";
-        let received = PeerCode::parse(message, true);
+        // checksum incorrect
+        let received = PeerCode::from_str(" 1c.13A.f.3  ");
         assert!(matches!(received, Err(Error::IncorrectChecksumPeerCode)));
     }
 
     #[test]
     fn invalid_encodings() {
-        let message = " 21.q.3  ";
-
-        let received = PeerCode::parse(message, false);
+        // invalid character q
+        let received = PeerCode::from_str(" 21.q.3  ");
         assert!(matches!(received, Err(Error::CouldntParsePeerCode(..))));
 
-        let message = " 1b.13A.f.3.4 ";
+        // too many segments
+        let received = PeerCode::from_str(" 1b.13A.f.a.4 ");
+        assert!(matches!(
+            received,
+            Err(Error::WrongNumberOfSegmentsPeerCode)
+        ));
 
-        let received = PeerCode::parse(message, false);
+        // too little segments
+        let received = PeerCode::from_str(" 1b.13A ");
         assert!(matches!(
             received,
             Err(Error::WrongNumberOfSegmentsPeerCode)
@@ -160,8 +194,8 @@ mod tests {
             shared_secret: 0,
         };
 
-        let str: String = peer_code.to_str();
-        let received = PeerCode::parse(&str, true).unwrap();
+        let str: String = peer_code.to_string();
+        let received = PeerCode::from_str(&str).unwrap();
         assert_eq!(peer_code, received);
     }
 
@@ -173,9 +207,8 @@ mod tests {
             shared_secret: u64::MAX,
         };
 
-        let str: String = peer_code.to_str();
-        println!("{str}");
-        let received = PeerCode::parse(&str, true).unwrap();
+        let str: String = peer_code.to_string();
+        let received = PeerCode::from_str(&str).unwrap();
         assert_eq!(peer_code, received);
     }
 }
