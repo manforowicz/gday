@@ -25,21 +25,21 @@ Tell your mate to run "gday receive <b>1.188T.W3H.E</b>".
 
 1. Go to [releases](https://github.com/manforowicz/gday/releases)
 and download the correct file for your platform.
-2. Extract the executable 
+2. Extract it 
 (on Linux, try: `tar xf <file>`).
-3. Run the executable: `./<path to executable>/gday`
+3. Run it: `./<path to executable>/gday`
 
 ### Cargo
 
-If you have `cargo`, run `cargo install gday`.
+`cargo install gday`
 
 ### Brew
 
-If you have `brew`, run `brew install manforowicz/tap/gday`.
+`brew install manforowicz/tap/gday`
 
 ## Features
 - File transfer is always direct, without relays.
-A server is only used to help the devices find each other.
+A server is only used at the beginning to help the devices find each other.
 - Doesn't require port forwarding.
 - Files encrypted with streaming
 [ChaCha20Poly1305](https://en.wikipedia.org/wiki/ChaCha20-Poly1305).
@@ -47,10 +47,10 @@ A server is only used to help the devices find each other.
 - Immune to malicious servers trying to impersonate your peer.
 Uses password authenticated key exchange
 ([SPAKE2](https://datatracker.ietf.org/doc/rfc9382/))
-to derive a strong encryption key from a weak shared password.
+to derive an encryption key from a shared secret.
 
 ## How it works
-Uses [TCP Hole Punching](https://bford.info/pub/net/p2pnat/)
+Uses authenticated [TCP Hole Punching](https://bford.info/pub/net/p2pnat/)
 with the help of a server
 to establish a direct peer-to-peer connection,
 even between different private networks.
@@ -77,13 +77,11 @@ Options:
 
 ## Similar Projects
 
-I took inspiration from these amazing projects!
-
 <table>
     <tr>
         <th></th>
-        <th>Always direct (no relay)</th>
-        <th>Can work beyond LAN, through most <a href="https://en.wikipedia.org/wiki/Network_address_translation">NATs</a></th>
+        <th>No relays</th>
+        <th>Works beyond LAN</th>
         <th>Works through very strict <a href="https://en.wikipedia.org/wiki/Network_address_translation">NATs</a></th>
         <th>No port forwarding</th>
         <th>Encrypted</th>
@@ -199,16 +197,18 @@ I took inspiration from these amazing projects!
     </tr>
 </table>
 
-Open an [issue](https://github.com/manforowicz/gday/issues) on GitHub to add more projects.
+Open an [issue](https://github.com/manforowicz/gday/issues) to add more projects to this list.
 
 ## In this repository
 
 - [gday](/gday/) - Command line tool for sending files.
 - [gday_server](/gday_server/) - Server that lets two peers share their socket addresses.
 - [gday_hole_punch](/gday_hole_punch/) - Library for establishing peer-to-peer TCP connection.
-- [gday_file_transfer](/gday_file_offer_protocol/) - Library for transferring files over a direct connection.
-- [gday_contact_exchange_protocol](/gday_contact_exchange_protocol/) - Library that specifies a protocol for two peers to share their socket
-addresses via a server.
+- [gday_file_transfer](/gday_file_transfer/) - Library for transferring files over a connection.
 - [gday_encryption](/gday_encryption/) - Library for encrypting an IO stream.
+- [gday_contact_exchange_protocol](/gday_contact_exchange_protocol/) - Library with protocol for two peers to share their socket
+addresses via a server.
 
-![gday crate dependency graph](/images/dependency_graph.svg)
+![gday crate dependency graph](/other/dependency_graph.png)
+
+See [CONTRIBUTING.md](/CONTRIBUTING.md) if you'd like to contribute to this project.
