@@ -16,7 +16,7 @@ repository.workspace = true
 [dependencies]
 os_str_bytes = "7.0.0"
 rand = "0.8.5"
-serde = { version = "1.0.203", features = ["derive"] }
+serde = { version = "1.0.204", features = ["derive"] }
 serde_json = "1.0.120"
 thiserror = "1.0.61"
 

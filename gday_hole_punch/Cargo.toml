@@ -19,7 +19,7 @@ gday_contact_exchange_protocol = { version = "^0.1.1", path = "../gday_contact_e
 log = "0.4.22"
 rand = "0.8.5"
 rustls = { version = "0.23.10", features = ["ring", "log", "logging", "std", "tls12"], default-features = false }
-serde = "1.0.203"
+serde = "1.0.204"
 socket2 = { version = "0.5.7", features = ["all"] }
 spake2 = { version = "0.4.0", features = ["std"] }
 thiserror = "1.0.61"
