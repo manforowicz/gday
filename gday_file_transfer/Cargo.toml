@@ -1,6 +1,6 @@
 [package]
 name = "gday_file_transfer"
-version = "0.1.1"
+version = "0.2.0"
 description = "Protocol to securely transfer files over an encrypted IO stream."
 homepage = "https://github.com/manforowicz/gday/tree/main/gday_file_transfer"
 categories = ["network-programming"]
