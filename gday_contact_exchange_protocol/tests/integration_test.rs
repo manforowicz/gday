@@ -87,7 +87,7 @@ fn get_client_msg_examples() -> Vec<ClientMsg> {
             room_code: 2345,
             is_creator: true,
         },
-        ClientMsg::ShareContact {
+        ClientMsg::ReadyToShare {
             room_code: 24325423,
             is_creator: false,
             local_contact: Contact {

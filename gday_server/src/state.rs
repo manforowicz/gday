@@ -6,7 +6,7 @@ use std::{
     time::Duration,
 };
 use thiserror::Error;
-use tokio::sync::oneshot;
+use tokio::{sync::oneshot, time::MissedTickBehavior};
 
 /// Information about a client in a [`Room`].
 #[derive(Default, Debug)]
@@ -87,7 +87,12 @@ impl State {
         // spawn a backround thread that clears `request_counts` every minute
         let request_counts = this.request_counts.clone();
         tokio::spawn(async move {
+            // Don't burst if the interval is missed.
+            // First tick should resolve immediately.
             let mut interval = tokio::time::interval(Duration::from_secs(60));
+            interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
+            interval.tick().await;
+
             loop {
                 interval.tick().await;
                 request_counts
@@ -104,6 +109,7 @@ impl State {
     ///
     /// - Returns [`Error::TooManyRequests`] if the max
     /// allowable number of requests per minute is exceeded.
+    /// - Returns [`Error::RoomCodeTaken`] if the room already exists.
     pub fn create_room(&mut self, room_code: u64, origin: IpAddr) -> Result<(), Error> {
         self.increment_request_count(origin)?;
 
@@ -117,7 +123,8 @@ impl State {
             rooms.insert(room_code, Room::default());
         }
 
-        // spawn a thread that will remove this room after the timeout
+        // spawn a thread that will remove this
+        // room if it still exists after the timeout
         let timeout = *self.room_timeout;
         let rooms = self.rooms.clone();
         tokio::spawn(async move {
@@ -146,15 +153,22 @@ impl State {
     ) -> Result<(), Error> {
         self.increment_request_count(origin)?;
 
-        // get a mutable reference to the client in question.
+        // get the room
         let mut rooms = self.rooms.lock().expect("Couldn't acquire state lock.");
         let room = rooms.get_mut(&room_code).ok_or(Error::NoSuchRoomCode)?;
-        let full_contact = &mut room.get_client_mut(is_creator).contact;
 
+        // check if this client was already set to done.
+        // if so, it can't be updated
+        if room.get_client_mut(!is_creator).contact_sender.is_some() {
+            return Err(Error::CantUpdateDoneClient);
+        }
+
+        // get the client's contact
+        let client = &mut room.get_client_mut(is_creator);
         let contact = if public {
-            &mut full_contact.public
+            &mut client.contact.public
         } else {
-            &mut full_contact.local
+            &mut client.contact.local
         };
 
         // update the client's contact from `endpoint`
@@ -256,6 +270,10 @@ pub enum Error {
     /// This room code is currently taken.
     #[error("This room code is currently taken.")]
     RoomCodeTaken,
+
+    /// Can't update client after it was set to done.
+    #[error("Can't update client after they were set to done.")]
+    CantUpdateDoneClient,
 }
 
 #[cfg(test)]

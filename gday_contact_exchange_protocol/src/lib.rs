@@ -53,7 +53,7 @@
 //!     v4: todo!("local v4 addr"),
 //!     v6: todo!("local v6 addr")
 //! };
-//! let request = ClientMsg::ShareContact { local_contact, room_code, is_creator: true };
+//! let request = ClientMsg::ReadyToShare { local_contact, room_code, is_creator: true };
 //! write_to(request, &mut tls_ipv4)?;
 //! let response: ServerMsg = read_from(&mut tls_ipv4)?;
 //!
@@ -83,11 +83,11 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 /// The port that contact exchange servers
 /// using unencrypted TCP should listen on.
-pub const DEFAULT_TCP_PORT: u16 = 80;
+pub const DEFAULT_TCP_PORT: u16 = 2310;
 
 /// The port that contact exchange servers
 /// using encrypted TLS should listen on.
-pub const DEFAULT_TLS_PORT: u16 = 443;
+pub const DEFAULT_TLS_PORT: u16 = 2311;
 
 /// A message from client to server.
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Clone, Copy)]
@@ -111,14 +111,20 @@ pub enum ClientMsg {
         is_creator: bool,
     },
 
-    /// Tells the server that the client has finished using [`ClientMsg::RecordPublicAddr`]
-    /// sending any addresses they want to share.
+    /// Tells the server that this client has finished using [`ClientMsg::RecordPublicAddr`]
+    /// to record public addresses.
     /// The server immediately responds with [`ServerMsg::ClientContact`] which
     /// contains this client's contact info.
     ///
-    /// After the other peer sends `DoneSending` as well, the server sends
-    /// [`ServerMsg::PeerContact`] which contains the peer's contact info.
-    ShareContact {
+    /// The server then waits for the other peer to also send [`ClientMsg::ReadyToShare`]
+    /// as well. During this time, no messages should be sent on this
+    /// connection.
+    ///
+    /// Once the other peer also sends [`ClientMsg::ReadyToShare`],
+    /// the server responds with [`ServerMsg::PeerContact`]
+    /// which contains the peer's contact info.
+    /// The room then closes.
+    ReadyToShare {
         local_contact: Contact,
         room_code: u64,
         is_creator: bool,
@@ -129,20 +135,21 @@ pub enum ClientMsg {
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Clone, Copy)]
 #[non_exhaustive]
 pub enum ServerMsg {
-    /// Responds to a [`ClientMsg::CreateRoom`] request.
+    /// Immediately responds to a [`ClientMsg::CreateRoom`] request.
     /// Indicates that a room with the given ID has been successfully created.
     /// The room will expire/close in a few minutes.
     RoomCreated,
 
-    /// Responds to a [`ClientMsg::RecordPublicAddr`] to indicate it was successfully recorded.
+    /// Immediately responds to a [`ClientMsg::RecordPublicAddr`]
+    /// to indicate it was successfully recorded.
     ReceivedAddr,
 
-    /// Immediately responds to a [`ClientMsg::ShareContact`].
+    /// Immediately responds to a [`ClientMsg::ReadyToShare`].
     /// Contains the client's contact info.
     ClientContact(FullContact),
 
-    /// After both clients in a room have sent [`ClientMsg::ShareContact`],
-    /// the server replies with this message.
+    /// After both clients in a room have sent [`ClientMsg::ReadyToShare`],
+    /// the server sends with this message.
     /// Contains the other peer's contact info.
     PeerContact(FullContact),
 
@@ -150,7 +157,7 @@ pub enum ServerMsg {
     /// `room_code` is currently taken.
     ErrorRoomTaken,
 
-    /// If only one client sends [`ClientMsg::ShareContact`] before the room
+    /// If only one client sends [`ClientMsg::ReadyToShare`] before the room
     /// times out, the server replies with this message instead of
     /// [`ServerMsg::PeerContact`]
     ErrorPeerTimedOut,
@@ -158,6 +165,10 @@ pub enum ServerMsg {
     /// The server responds with this if the `room_code` of a [`ClientMsg`]
     /// doesn't exist, either because this room timed out, or never existed.
     ErrorNoSuchRoomCode,
+
+    /// The server responds with this if a client sends [`ClientMsg::RecordPublicAddr`]
+    /// after sending [`ClientMsg::ReadyToShare`] on a different connection.
+    ErrorUnexpectedMsg,
 
     /// Rejects a request if an IP address made too many requests.
     /// The server then closes the connection.
@@ -196,6 +207,10 @@ impl Display for ServerMsg {
             Self::ErrorNoSuchRoomCode => write!(
                 f,
                 "Can't join room with this id, because it hasn't been created."
+            ),
+            Self::ErrorUnexpectedMsg => write!(
+                f,
+                "Server received RecordPublicAddr message after a ReadyToShare message."
             ),
             Self::ErrorTooManyRequests => write!(f, "Too many requests from this IP address."),
             Self::ErrorSyntax => write!(f, "Server couldn't parse message syntax from client."),
@@ -242,7 +257,7 @@ impl std::fmt::Display for Contact {
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Clone, Copy, Default)]
 pub struct FullContact {
     /// The peer's private contact in it's local network.
-    /// The server knows this from [`ClientMsg::ShareContact::local_contact`].
+    /// The server knows this from [`ClientMsg::ReadyToShare::local_contact`].
     pub local: Contact,
     /// The entity's public contact visible to the internet.
     /// The server determines this by checking where

@@ -103,23 +103,25 @@ fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
     let port = if let Some(port) = args.port {
         port
     } else if args.unencrypted {
-        gday_hole_punch::DEFAULT_TCP_PORT
+        server_connector::DEFAULT_TCP_PORT
     } else {
-        gday_hole_punch::DEFAULT_TLS_PORT
+        server_connector::DEFAULT_TLS_PORT
     };
 
     // use custom server if the user provided one,
     // otherwise pick a random default server
     let (mut server_connection, server_id) = if let Some(domain_name) = args.server {
-        (
-            server_connector::connect_to_domain_name(
-                &domain_name,
-                port,
-                !args.unencrypted,
-                SERVER_TIMEOUT,
-            )?,
-            0,
-        )
+        if args.unencrypted {
+            (
+                server_connector::connect_tcp(format!("{domain_name}:{port}"), SERVER_TIMEOUT)?,
+                0,
+            )
+        } else {
+            (
+                server_connector::connect_tls(domain_name, port, SERVER_TIMEOUT)?,
+                0,
+            )
+        }
     } else {
         server_connector::connect_to_random_server(DEFAULT_SERVERS, SERVER_TIMEOUT)?
     };

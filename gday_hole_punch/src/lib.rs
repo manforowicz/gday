@@ -88,8 +88,6 @@ mod peer_code;
 pub mod server_connector;
 
 pub use contact_sharer::ContactSharer;
-pub use gday_contact_exchange_protocol::DEFAULT_TCP_PORT;
-pub use gday_contact_exchange_protocol::DEFAULT_TLS_PORT;
 pub use hole_puncher::try_connect_to_peer;
 pub use peer_code::PeerCode;
 

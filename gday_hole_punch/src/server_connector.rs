@@ -1,16 +1,20 @@
 //! Functions for connecting to a Gday server.
 use crate::Error;
-use gday_contact_exchange_protocol::{Contact, DEFAULT_TLS_PORT};
+use gday_contact_exchange_protocol::Contact;
 use log::{debug, warn};
 use rand::seq::SliceRandom;
 use socket2::SockRef;
-use std::io::{Read, Write};
+use std::fmt::Debug;
+use std::io::ErrorKind;
 use std::net::SocketAddr::{V4, V6};
 use std::{
     net::{SocketAddr, TcpStream, ToSocketAddrs},
     sync::Arc,
     time::Duration,
 };
+
+pub use gday_contact_exchange_protocol::DEFAULT_TCP_PORT;
+pub use gday_contact_exchange_protocol::DEFAULT_TLS_PORT;
 
 /// List of default public Gday servers.
 ///
@@ -48,47 +52,20 @@ pub struct ServerInfo {
     pub prefer: bool,
 }
 
-/// A connection to a server.
-///
-/// Either `TCP` or `TLS`.
-#[allow(clippy::large_enum_variant)]
+/// A TCP or TLS stream to a server.
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum ServerStream {
-    TCP(TcpStream),
-    TLS(rustls::StreamOwned<rustls::ClientConnection, TcpStream>),
-}
-
-impl Read for ServerStream {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        match self {
-            Self::TCP(stream) => stream.read(buf),
-            Self::TLS(stream) => stream.read(buf),
-        }
-    }
-}
-
-impl Write for ServerStream {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        match self {
-            Self::TCP(stream) => stream.write(buf),
-            Self::TLS(stream) => stream.write(buf),
-        }
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        match self {
-            Self::TCP(stream) => stream.flush(),
-            Self::TLS(stream) => stream.flush(),
-        }
-    }
+    TCP(std::net::TcpStream),
+    TLS(rustls::StreamOwned<rustls::ClientConnection, std::net::TcpStream>),
 }
 
 impl ServerStream {
-    /// Returns the local socket address of this stream
-    pub fn local_addr(&self) -> std::io::Result<SocketAddr> {
+    /// Returns the local socket address of this stream.
+    fn local_addr(&self) -> std::io::Result<std::net::SocketAddr> {
         match self {
-            Self::TCP(stream) => stream.local_addr(),
-            Self::TLS(stream) => stream.get_ref().local_addr(),
+            Self::TCP(tcp) => tcp.local_addr(),
+            Self::TLS(tls) => tls.get_ref().local_addr(),
         }
     }
 
@@ -96,17 +73,42 @@ impl ServerStream {
     /// so that this socket can be reused for
     /// hole punching.
     fn enable_reuse(&self) {
-        let stream: &TcpStream = match self {
-            Self::TCP(stream) => stream,
-            Self::TLS(stream) => stream.get_ref(),
+        let tcp_stream = match self {
+            Self::TCP(tcp) => tcp,
+            Self::TLS(tls) => tls.get_ref(),
         };
 
-        let sock = SockRef::from(stream);
+        let sock = SockRef::from(tcp_stream);
         let _ = sock.set_reuse_address(true);
 
         // socket2 only supports this method on these systems
         #[cfg(all(unix, not(any(target_os = "solaris", target_os = "illumos"))))]
         let _ = sock.set_reuse_port(true);
+    }
+}
+
+impl std::io::Read for ServerStream {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        match self {
+            Self::TCP(tcp) => tcp.read(buf),
+            Self::TLS(tls) => tls.read(buf),
+        }
+    }
+}
+
+impl std::io::Write for ServerStream {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        match self {
+            Self::TCP(tcp) => tcp.write(buf),
+            Self::TLS(tls) => tls.write(buf),
+        }
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        match self {
+            Self::TCP(tcp) => tcp.flush(),
+            Self::TLS(tls) => tls.flush(),
+        }
     }
 }
 
@@ -224,12 +226,12 @@ pub fn connect_to_server_id(
     let Some(server) = servers.iter().find(|server| server.id == server_id) else {
         return Err(Error::ServerIDNotFound(server_id));
     };
-    connect_to_domain_name(server.domain_name, DEFAULT_TLS_PORT, true, timeout)
+    connect_tls(server.domain_name.to_string(), DEFAULT_TLS_PORT, timeout)
 }
 
 /// In random order, sequentially tries connecting to the given `domain_names`.
 /// Connects to port [`DEFAULT_TLS_PORT`] (443) via TLS.
-/// Tries the next server after `timeout` time.
+/// Tries the next connection after `timeout` time.
 ///
 /// Returns
 /// - The [`ServerConnection`] of the first successful connection.
@@ -247,7 +249,7 @@ pub fn connect_to_random_domain_name(
 
     for i in indices {
         let server = domain_names[i];
-        let streams = match connect_to_domain_name(server, DEFAULT_TLS_PORT, true, timeout) {
+        let streams = match connect_tls(server.to_string(), DEFAULT_TLS_PORT, timeout) {
             Ok(streams) => streams,
             Err(err) => {
                 recent_error = err;
@@ -260,74 +262,89 @@ pub fn connect_to_random_domain_name(
     Err(recent_error)
 }
 
-/// Tries connecting to this `domain_name` and `port`, on both IPv4 and IPv6.
+/// Tries to TLS connect to `domain_name` over both IPv4 and IPv6.
 ///
+/// - Returns a [`ServerConnection`] with all the successful TLS streams.
 /// - Gives up connecting to each TCP address after `timeout` time.
-/// - Returns an error if each attempted failed.
-/// - Uses TLS if `encrypt` is true, otherwise uses unencrypted TCP.
+/// - Returns an error if every attempt failed.
 /// - Returns an error for any issues with TLS.
-/// - Returns a [`ServerConnection`] with all the successful streams.
-pub fn connect_to_domain_name(
-    domain_name: &str,
+pub fn connect_tls(
+    domain_name: String,
     port: u16,
-    encrypt: bool,
     timeout: Duration,
 ) -> Result<ServerConnection, Error> {
-    let address = format!("{domain_name}:{port}");
-    debug!("Connecting to server '{address}`");
+    let addrs = format!("{domain_name}:{port}");
+    debug!("Connecting to server '{addrs}`");
 
-    // do a DNS lookup to get socket addresses for
-    // this domain name
-    let addrs = address.to_socket_addrs()?;
+    // wrap the DNS name of the server
+    let name = rustls::pki_types::ServerName::try_from(domain_name)?;
+
+    // get the TLS config
+    let tls_config = get_tls_config();
+
+    let connection: ServerConnection = connect_tcp(addrs, timeout)?;
+
+    let mut encrypted_connection = ServerConnection { v4: None, v6: None };
+
+    if let Some(ServerStream::TCP(tcp_v4)) = connection.v4 {
+        let conn = rustls::ClientConnection::new(tls_config.clone(), name.clone())?;
+        encrypted_connection.v4 = Some(ServerStream::TLS(rustls::StreamOwned::new(conn, tcp_v4)))
+    }
+
+    if let Some(ServerStream::TCP(tcp_v6)) = connection.v6 {
+        let conn = rustls::ClientConnection::new(tls_config.clone(), name.clone())?;
+        encrypted_connection.v6 = Some(ServerStream::TLS(rustls::StreamOwned::new(conn, tcp_v6)))
+    }
+
+    Ok(encrypted_connection)
+}
+
+/// Tries to TCP connect to `addrs` over both IPv4 and IPv6.
+///
+/// - Returns a [`ServerConnection`] with all the successful TCP streams.
+/// - Gives up connecting to each TCP address after `timeout` time.
+/// - Returns an error if every attempt failed.
+pub fn connect_tcp(
+    addrs: impl ToSocketAddrs<Iter = impl Iterator<Item = SocketAddr> + Clone> + Debug,
+    timeout: Duration,
+) -> std::io::Result<ServerConnection> {
+    let addresses = addrs.to_socket_addrs()?;
 
     // try connecting to the first IPv4 address
-    let addr_v4: Option<SocketAddr> = addrs.clone().find(|a| a.is_ipv4());
+    let addr_v4: Option<SocketAddr> = addresses.clone().find(|a| a.is_ipv4());
     let tcp_v4 = addr_v4.map(|addr| TcpStream::connect_timeout(&addr, timeout));
 
     // try connecting to the first IPv6 addresss
-    let addr_v6: Option<SocketAddr> = addrs.clone().find(|a| a.is_ipv6());
+    let addr_v6: Option<SocketAddr> = addresses.clone().find(|a| a.is_ipv6());
     let tcp_v6 = addr_v6.map(|addr| TcpStream::connect_timeout(&addr, timeout));
 
     // return an error if couldn't establish any connections
     if !matches!(tcp_v4, Some(Ok(_))) && !matches!(tcp_v6, Some(Ok(_))) {
         if let Some(Err(err_v4)) = tcp_v4 {
-            return Err(Error::IO(err_v4));
+            return Err(err_v4);
         } else if let Some(Err(err_v6)) = tcp_v6 {
-            return Err(Error::IO(err_v6));
+            return Err(err_v6);
         } else {
-            return Err(Error::CouldntResolveServer(domain_name.to_string()));
+            return Err(std::io::Error::new(
+                ErrorKind::NotFound,
+                format!("Couldn't resolve address {addrs:?}"),
+            ));
         }
     }
 
-    let mut server_connection = ServerConnection { v4: None, v6: None };
-    if encrypt {
-        // wrap the DNS name of the server
-        let name = rustls::pki_types::ServerName::try_from(domain_name.to_string())?;
+    let server_connection = ServerConnection {
+        v4: if let Some(Ok(v4)) = tcp_v4 {
+            Some(ServerStream::TCP(v4))
+        } else {
+            None
+        },
+        v6: if let Some(Ok(v6)) = tcp_v6 {
+            Some(ServerStream::TCP(v6))
+        } else {
+            None
+        },
+    };
 
-        // get the TLS config
-        let tls_config = get_tls_config();
-
-        // wrap the TCP in TLS streams, throwing an error if anything goes wrong
-        if let Some(Ok(tcp_v4)) = tcp_v4 {
-            let conn = rustls::ClientConnection::new(tls_config.clone(), name.clone())?;
-            let tls_stream = rustls::StreamOwned::new(conn, tcp_v4);
-            server_connection.v4 = Some(ServerStream::TLS(tls_stream));
-        }
-
-        if let Some(Ok(tcp_v6)) = tcp_v6 {
-            let conn = rustls::ClientConnection::new(tls_config.clone(), name.clone())?;
-            let tls_stream = rustls::StreamOwned::new(conn, tcp_v6);
-            server_connection.v6 = Some(ServerStream::TLS(tls_stream));
-        }
-    } else {
-        if let Some(Ok(tcp_v4)) = tcp_v4 {
-            server_connection.v4 = Some(ServerStream::TCP(tcp_v4));
-        }
-
-        if let Some(Ok(tcp_v6)) = tcp_v6 {
-            server_connection.v6 = Some(ServerStream::TCP(tcp_v6));
-        }
-    }
     Ok(server_connection)
 }
 

@@ -81,7 +81,7 @@ Options:
     <tr>
         <th></th>
         <th>No relays</th>
-        <th>Works beyond LAN</th>
+        <th>Works beyond most LAN</th>
         <th>Works through very strict <a href="https://en.wikipedia.org/wiki/Network_address_translation">NATs</a></th>
         <th>No port forwarding</th>
         <th>Encrypted</th>
@@ -209,6 +209,6 @@ Open an [issue](https://github.com/manforowicz/gday/issues) to add more projects
 - [gday_contact_exchange_protocol](/gday_contact_exchange_protocol/) - Library with protocol for two peers to share their socket
 addresses via a server.
 
-![gday crate dependency graph](/other/dependency_graph.png)
+![gday dependency graph](/other/dependency_graph.png)
 
 See [CONTRIBUTING.md](/CONTRIBUTING.md) if you'd like to contribute to this project.

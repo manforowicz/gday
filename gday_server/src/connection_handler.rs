@@ -72,6 +72,9 @@ async fn handle_requests(
                 write_to_async(ServerMsg::ErrorTooManyRequests, stream).await?;
                 return result;
             }
+            Err(HandleMessageError::State(state::Error::CantUpdateDoneClient)) => {
+                write_to_async(ServerMsg::ErrorUnexpectedMsg, stream).await?;
+            }
             Err(HandleMessageError::Protocol(_)) => {
                 write_to_async(ServerMsg::ErrorSyntax, stream).await?;
                 return result;
@@ -93,7 +96,7 @@ async fn handle_message(
     state: &mut State,
     origin: SocketAddr,
 ) -> Result<(), HandleMessageError> {
-    // try to deserialize the message
+    // read the next message from the client
     let msg: ClientMsg = read_from_async(stream).await?;
 
     match msg {
@@ -116,11 +119,12 @@ async fn handle_message(
             write_to_async(ServerMsg::ReceivedAddr, stream).await?;
         }
 
-        ClientMsg::ShareContact {
+        ClientMsg::ReadyToShare {
             room_code,
             is_creator,
             local_contact,
         } => {
+            // record the given private socket addresses
             if let Some(sockaddr_v4) = local_contact.v4 {
                 state.update_client(
                     room_code,
@@ -130,7 +134,6 @@ async fn handle_message(
                     origin.ip(),
                 )?;
             }
-
             if let Some(sockaddr_v6) = local_contact.v6 {
                 state.update_client(
                     room_code,
@@ -160,18 +163,23 @@ async fn handle_message(
 #[derive(thiserror::Error, Debug)]
 #[non_exhaustive]
 enum HandleMessageError {
-    #[error("Protocol error: {0}")]
+    /// Serialization/deserialization error
+    #[error("Serialization/deserialization error: {0}")]
     Protocol(#[from] gday_contact_exchange_protocol::Error),
 
-    #[error("Server state error: {0}")]
+    /// Error updating server state
+    #[error("Error updating server state: {0}")]
     State(#[from] state::Error),
 
-    #[error("Peer timed out waiting for other peer.")]
+    /// Timed out while waiting for other peer to share contact
+    #[error("Timed out while waiting for other peer to share contact: {0}")]
     Receiver(#[from] tokio::sync::oneshot::error::RecvError),
 
+    /// IO Error
     #[error("IO Error: {0}")]
     IO(#[from] std::io::Error),
 
-    #[error("Unknown message from client: {0:?}")]
+    /// Received unknown message from client
+    #[error("Received unknown message from client:\n{0:?}")]
     UnknownMessage(gday_contact_exchange_protocol::ClientMsg),
 }

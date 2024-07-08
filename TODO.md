@@ -8,6 +8,8 @@ Not all of them are desirable or necessary.
 
 - Test the contact sharing and hole-punching.
 
+- Make sure that gday server still lists the file name during file error.
+
 ## Abandoned ideas
 
 - Maybe add some versioning to the protocols?
