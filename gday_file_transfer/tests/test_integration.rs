@@ -6,7 +6,6 @@ use gday_file_transfer::{
 };
 use std::fs::{self, create_dir_all};
 use std::io::Write;
-use std::net::SocketAddr;
 use std::{fs::File, path::PathBuf};
 
 /// Returns a temporary directory
@@ -207,11 +206,9 @@ fn test_get_file_metas_2() {
 /// Test the file transfer.
 #[test]
 fn file_transfer() {
-    // The loopback address that peer_a will connect to.
-    let pipe_addr: SocketAddr = "[::1]:2000".parse().unwrap();
-
     // Listens on the loopback address
-    let listener = std::net::TcpListener::bind(pipe_addr).unwrap();
+    let listener = std::net::TcpListener::bind("[::1]:0").unwrap();
+    let pipe_addr = listener.local_addr().unwrap();
 
     // dir_a contains test files, some of which
     // will be sent
@@ -239,14 +236,14 @@ fn file_transfer() {
         send_files(&file_metas, &response, &mut stream_a, |_| {}).unwrap();
     });
 
-    // directory to receive the files in
+    // dir_b will receive the files in
     let dir_b = tempfile::tempdir().unwrap();
 
     // create pre-existing file1 and file1 (1)
     let mut f = File::create_new(dir_b.path().join("file1")).unwrap();
     write!(f, "This is a pre-existing file1").unwrap();
     let mut f = File::create_new(dir_b.path().join("file1 (1)")).unwrap();
-    write!(f, "This is a pre-existing file1 (1)").unwrap();
+    write!(f, "This is file1").unwrap();
 
     // create pre-existing file2.txt
     let mut f = File::create_new(dir_b.path().join("file2.txt")).unwrap();
@@ -258,7 +255,7 @@ fn file_transfer() {
     let mut f = File::create_new(dir_b.path().join("subdir1/file2.txt.part29")).unwrap();
     write!(f, "This is dir/subdi").unwrap();
 
-    // Stream that will receive the files to the loopback address.s
+    // Stream that will receive the files from the loopback address.
     let mut stream_b = listener.accept().unwrap().0;
 
     // read the file offer message
@@ -267,9 +264,9 @@ fn file_transfer() {
     let response_msg =
         FileResponseMsg::accept_only_new_and_interrupted(&file_offer, dir_b.path()).unwrap();
 
-    assert_eq!(response_msg.get_num_not_rejected(), 4);
+    assert_eq!(response_msg.get_num_not_rejected(), 3);
     assert_eq!(response_msg.get_num_partially_accepted(), 1);
-    assert_eq!(response_msg.get_num_fully_accepted(), 3);
+    assert_eq!(response_msg.get_num_fully_accepted(), 2);
 
     write_to(&response_msg, &mut stream_b).unwrap();
 
@@ -300,7 +297,7 @@ fn file_transfer() {
     );
     assert_eq!(
         fs::read(dir_b.path().join("file1 (1)")).unwrap(),
-        b"This is a pre-existing file1 (1)"
+        b"This is file1"
     );
     assert_eq!(
         fs::read(dir_b.path().join("file2.txt")).unwrap(),
@@ -310,6 +307,7 @@ fn file_transfer() {
     // confirm that files rejected or not offered
     // weren't downloaded
     assert!(fs::read(dir_b.path().join("dir/file1")).is_err());
+    assert!(fs::read(dir_b.path().join("dir/file1 (2)")).is_err());
     assert!(fs::read(dir_b.path().join("dir/file2.txt")).is_err());
     assert!(fs::read(dir_b.path().join("dir/subdir2/file1")).is_err());
     assert!(fs::read(dir_b.path().join("dir/subdir2/file2.txt")).is_err());

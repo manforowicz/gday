@@ -3,7 +3,6 @@
 #![warn(clippy::all)]
 
 mod dialog;
-mod tests;
 mod transfer;
 
 use crate::dialog::ask_receive;
