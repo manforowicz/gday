@@ -1,6 +1,7 @@
 Note: this project is still in early-development, so expect breaking changes.
 
 # gday
+[![Crates.io Version](https://img.shields.io/crates/v/gday_server)](https://crates.io/crates/gday_server)
 
 A command line tool for sending files.
 

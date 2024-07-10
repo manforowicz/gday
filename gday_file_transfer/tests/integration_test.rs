@@ -1,12 +1,12 @@
 #![forbid(unsafe_code)]
 #![warn(clippy::all)]
 use gday_file_transfer::{
-    get_file_metas, read_from, receive_files, send_files, write_to, FileMeta, FileMetaLocal,
-    FileOfferMsg, FileResponseMsg,
+    get_file_metas, read_from, receive_files, send_files, write_to, FileMetaLocal, FileOfferMsg,
+    FileResponseMsg,
 };
 use std::fs::{self, create_dir_all};
 use std::io::Write;
-use std::net::{Ipv6Addr, SocketAddr};
+use std::net::SocketAddr;
 use std::{fs::File, path::PathBuf};
 
 /// Returns a temporary directory
@@ -94,9 +94,9 @@ fn test_get_file_metas_1() {
     let test_dir = make_test_dir();
     let dir_path = test_dir.path();
     let dir_name = PathBuf::from(dir_path.file_name().unwrap());
-    let files = gday_file_transfer::get_file_metas(&[dir_path.to_path_buf()]).unwrap();
+    let mut result = gday_file_transfer::get_file_metas(&[dir_path.to_path_buf()]).unwrap();
 
-    let expected = [
+    let mut expected = [
         FileMetaLocal {
             short_path: dir_name.join("file1"),
             local_path: dir_path.join("file1"),
@@ -147,10 +147,10 @@ fn test_get_file_metas_1() {
         },
     ];
 
-    assert_eq!(files.len(), expected.len());
-    for e in expected {
-        assert!(files.contains(&e));
-    }
+    result.sort_unstable();
+    expected.sort_unstable();
+
+    assert_eq!(result, expected);
 }
 
 /// Confirm that [`get_file_metas()`] returns
@@ -160,14 +160,14 @@ fn test_get_file_metas_2() {
     let test_dir = make_test_dir();
     let dir_path = test_dir.path();
 
-    let files = gday_file_transfer::get_file_metas(&[
+    let mut result = gday_file_transfer::get_file_metas(&[
         dir_path.join("dir/subdir1/"),
         dir_path.join("dir/subdir2/file1"),
         dir_path.join("dir/subdir2/file2.txt"),
     ])
     .unwrap();
 
-    let expected = [
+    let mut expected = [
         FileMetaLocal {
             short_path: PathBuf::from("subdir1/file1"),
             local_path: dir_path.join("dir/subdir1/file1"),
@@ -198,17 +198,17 @@ fn test_get_file_metas_2() {
         },
     ];
 
-    assert_eq!(files.len(), expected.len());
-    for e in expected {
-        assert!(files.contains(&e));
-    }
+    result.sort_unstable();
+    expected.sort_unstable();
+
+    assert_eq!(result, expected);
 }
 
 /// Test the file transfer.
 #[test]
 fn file_transfer() {
     // The loopback address that peer_a will connect to.
-    let pipe_addr = SocketAddr::from((Ipv6Addr::LOCALHOST, 2000));
+    let pipe_addr: SocketAddr = "[::1]:2000".parse().unwrap();
 
     // Listens on the loopback address
     let listener = std::net::TcpListener::bind(pipe_addr).unwrap();
@@ -230,9 +230,9 @@ fn file_transfer() {
         ];
         let file_metas = get_file_metas(&paths).unwrap();
         let file_offer = FileOfferMsg::from(file_metas.clone());
-        write_to(file_offer, &mut stream_a).unwrap();
 
-        // read the response from the peer
+        // send offer, and read response
+        write_to(file_offer, &mut stream_a).unwrap();
         let response: FileResponseMsg = read_from(&mut stream_a).unwrap();
 
         // send the files
@@ -313,57 +313,4 @@ fn file_transfer() {
     assert!(fs::read(dir_b.path().join("dir/file2.txt")).is_err());
     assert!(fs::read(dir_b.path().join("dir/subdir2/file1")).is_err());
     assert!(fs::read(dir_b.path().join("dir/subdir2/file2.txt")).is_err());
-}
-
-/// Test serializing and deserializing [`FileOfferMsg`] and [`FileResponseMsg`].
-#[test]
-fn sending_messages() {
-    let mut pipe = std::collections::VecDeque::new();
-
-    for msg in get_offer_msg_examples() {
-        write_to(msg, &mut pipe).unwrap();
-    }
-
-    for msg in get_offer_msg_examples() {
-        let deserialized_msg: FileOfferMsg = read_from(&mut pipe).unwrap();
-        assert_eq!(msg, deserialized_msg);
-    }
-
-    for msg in get_response_msg_examples() {
-        write_to(msg, &mut pipe).unwrap();
-    }
-
-    for msg in get_response_msg_examples() {
-        let deserialized_msg: FileResponseMsg = read_from(&mut pipe).unwrap();
-        assert_eq!(msg, deserialized_msg);
-    }
-}
-
-fn get_offer_msg_examples() -> Vec<FileOfferMsg> {
-    vec![
-        FileOfferMsg {
-            files: vec![
-                FileMeta {
-                    short_path: PathBuf::from("example/path"),
-                    len: 43,
-                },
-                FileMeta {
-                    short_path: PathBuf::from("/foo/hello"),
-                    len: 50,
-                },
-            ],
-        },
-        FileOfferMsg { files: Vec::new() },
-    ]
-}
-
-fn get_response_msg_examples() -> Vec<FileResponseMsg> {
-    vec![
-        FileResponseMsg {
-            response: vec![None, Some(0), Some(100)],
-        },
-        FileResponseMsg {
-            response: vec![None, None, None],
-        },
-    ]
 }

@@ -110,7 +110,11 @@ pub enum Error {
     )]
     PathIsPrefix(PathBuf, PathBuf),
 
-    /// Two folders or files have same name. This would make the offered metadata ambiguous.
-    #[error("Two folders or files have same name: '{0:?}'. This would make the offered metadata ambiguous.")]
+    /// Two of the given folders or files have same name.
+    /// This would make the offered metadata ambiguous.
+    #[error(
+        "Two of the given folders or files have same name: '{0:?}'.
+        This would make the offered metadata ambiguous."
+    )]
     PathsHaveSameName(std::ffi::OsString),
 }

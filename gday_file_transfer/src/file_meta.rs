@@ -7,7 +7,7 @@ use std::{
 };
 
 /// Information about an offered file.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
 pub struct FileMeta {
     /// The path offered to the peer
     pub short_path: PathBuf,
@@ -16,7 +16,7 @@ pub struct FileMeta {
 }
 
 /// Information about a locally stored file
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
 pub struct FileMetaLocal {
     /// The shortened path that will be offered to the peer
     pub short_path: PathBuf,
@@ -73,6 +73,8 @@ impl FileMeta {
 
         if number == 0 {
             Ok(None)
+        } else if number == 1 {
+            Ok(Some(path))
         } else {
             suffix_with_number(&mut path, number - 1);
             Ok(Some(path))
@@ -210,12 +212,14 @@ pub fn get_file_metas(paths: &[PathBuf]) -> Result<Vec<FileMetaLocal>, Error> {
             let b = &paths[j];
 
             // we don't want two top-level folders or files with the same name
-            // then we'd run into weird cases with FileMetaLocal.short_path
+            // then we'd run into ambiguity with FileMetaLocal.short_path
             if a.file_name() == b.file_name() && a.is_file() == b.is_file() {
                 let name = a.file_name().unwrap_or(OsStr::new("")).to_os_string();
                 return Err(Error::PathsHaveSameName(name));
             }
 
+            // we don't want one path to be a prefix of another, or we'd
+            // get duplicates
             if a.starts_with(b) {
                 return Err(Error::PathIsPrefix(b.to_path_buf(), a.to_path_buf()));
             }
@@ -263,13 +267,13 @@ fn get_file_metas_helper(
             .to_path_buf();
 
         // get the file's size
-        let size = path.metadata()?.len();
+        let len = path.metadata()?.len();
 
         // insert this file metadata into set
         let meta = FileMetaLocal {
             local_path: path.to_path_buf(),
             short_path,
-            len: size,
+            len,
         };
         files.push(meta);
     }

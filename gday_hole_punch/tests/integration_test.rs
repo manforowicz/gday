@@ -108,5 +108,6 @@ async fn test_integration() {
     .await
     .unwrap();
 
+    // stop the server
     handle.abort();
 }

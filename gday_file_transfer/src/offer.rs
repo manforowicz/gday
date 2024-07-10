@@ -99,8 +99,8 @@ impl FileResponseMsg {
     ) -> Result<Self, Error> {
         let mut response = Vec::with_capacity(offer.files.len());
 
-        for offered in &offer.files {
-            if offered.already_exists(save_dir)? {
+        for file_meta in &offer.files {
+            if file_meta.already_exists(save_dir)? {
                 // reject
                 response.push(None);
             } else {
@@ -168,7 +168,7 @@ impl FileResponseMsg {
 
     /// Returns the number of non-rejected files.
     pub fn get_num_not_rejected(&self) -> usize {
-        self.response.iter().filter_map(|f| *f).count()
+        self.response.iter().filter(|f| f.is_some()).count()
     }
 
     /// Returns the total number of only partially accepted files.
