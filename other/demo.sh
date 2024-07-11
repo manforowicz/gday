@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
 
-# Custom script for starting a tmux 2-pane
-# asciinema recording.
+# Custom script for starting a tmux 2-pane asciinema recording.
 # Intended for recording gday demos.
-
-# Requires: asciinema, tmux,
-# and 2 subdirectories called 'peer_1', 'peer_2'
-
-# Add gday to path using cargo install.
-
+# Requires: asciinema, tmux
 # Use ctrl+b <arrow key> to switch between panes.
+# Use ctrl+d to end the recording.
+
+# Create the demo folders if they don't exist yet.
+mkdir tmp
+cd tmp
+mkdir peer_1
+mkdir peer_2
 
 # Start a new session detached
 tmux new-session -d -s demo_session  

@@ -20,7 +20,7 @@ pub use gday_contact_exchange_protocol::DEFAULT_TLS_PORT;
 ///
 /// Having many server options helps make Gday decentralized!
 /// - Submit an issue on Gday's GitHub if you'd like to add your own!
-/// - All of these serve with encrypted TLS over port 443.
+/// - All of these serve encrypted TLS over port 443.
 pub const DEFAULT_SERVERS: &[ServerInfo] = &[ServerInfo {
     domain_name: "gday.manforowicz.com",
     id: 1,

@@ -5,7 +5,7 @@ use indicatif::HumanBytes;
 use owo_colors::OwoColorize;
 use std::{io::Write, path::Path};
 
-/// Confirms that the user wants to send these files.
+/// Confirms that the user wants to send these `files``.
 ///
 /// If not, returns false.
 pub fn confirm_send(files: &FileOfferMsg) -> std::io::Result<bool> {
@@ -35,19 +35,14 @@ pub fn confirm_send(files: &FileOfferMsg) -> std::io::Result<bool> {
     }
 }
 
-/// Asks the user which of these offered `files` to accept.
+/// Asks the user which of the files in `offer` to accept.
 ///
 /// `save_dir` is the directory where the files will later be saved.
-///
-/// Returns a `Vec<Option<u64>>`, where each
-/// - `None` represents rejecting the file at this index,
-/// - `Some(0)` represents fully accepting the file at this index,
-/// - `Some(x)` represents resuming with the first `x` bytes skipped.
 pub fn ask_receive(
     offer: &FileOfferMsg,
     save_dir: &Path,
 ) -> Result<FileResponseMsg, gday_file_transfer::Error> {
-    println!("{}", "Your mate wants to send you:".bold(),);
+    println!("{}", "Your mate wants to send you:".bold());
 
     // Print all the offered files.
     for file in &offer.files {
@@ -60,7 +55,7 @@ pub fn ask_receive(
 
             print!(
                 " {} {} {}",
-                "PARTIALLY DOWNLOADED.".red().bold(),
+                "CAN RESUME DOWNLOAD.".red().bold(),
                 HumanBytes(remaining_len).red().bold(),
                 "REMAINING".red().bold()
             );

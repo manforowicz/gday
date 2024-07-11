@@ -18,7 +18,7 @@ const RETRY_INTERVAL: Duration = Duration::from_millis(200);
 /// Tries to establish a TCP connection with the other peer by using
 /// [TCP hole punching](https://en.wikipedia.org/wiki/TCP_hole_punching).
 ///
-/// - `local_contact` should be the `private` field of your [`FullContact`]
+/// - `local_contact` should be the `local` field of your [`FullContact`]
 /// that [`crate::ContactSharer`] returned when you created or joined a room.
 /// Panics if both `v4` and `v6` are `None`.
 /// - `peer_contact` should be the [`FullContact`] returned by [`crate::ContactSharer::get_peer_contact()`].

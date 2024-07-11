@@ -68,7 +68,7 @@ enum Command {
     },
 
     /// Receive files.
-    Receive {
+    Get {
         /// Directory where to save the files.
         /// By default, saves them in the current directory.
         #[arg(short, long, default_value = ".")]
@@ -157,10 +157,7 @@ fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
 
             info!("Your contact is:\n{my_contact}");
 
-            println!(
-                "Tell your mate to run \"gday receive {}\"",
-                peer_code.bold()
-            );
+            println!("Tell your mate to run \"gday get {}\"", peer_code.bold());
 
             // get peer's contact
             let peer_contact = contact_sharer.get_peer_contact()?;
@@ -208,7 +205,7 @@ fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
         }
 
         // receiving files
-        crate::Command::Receive { path, code } => {
+        crate::Command::Get { path, code } => {
             let code = PeerCode::from_str(&code)?;
             let (contact_sharer, my_contact) =
                 ContactSharer::join_room(&mut server_connection, code.room_code)?;

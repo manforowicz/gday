@@ -3,22 +3,22 @@ Note: this project is still in early-development, so expect breaking changes.
 # gday
 [![Crates.io Version](https://img.shields.io/crates/v/gday_server)](https://crates.io/crates/gday_server)
 
-A command line tool for sending files.
+Command line tool to securely send files (without a relay or port forwarding).
 
 <pre>
 <b style="color:lime;">peer_1:</b> gday send msg.txt image.jpg
 <i>&lt;Asks for confirmation&gt;</i>
-Tell your mate to run "gday receive <b>1.188T.W3H.E</b>".
+Tell your mate to run "gday get <b>1.188T.W3H.E</b>".
 <b>Transfer complete.</b>
 </pre>
 
 <pre>
-<b style="color:lime;">peer_2:</b> gday receive <b>1.188T.W3H.E</b>
+<b style="color:lime;">peer_2:</b> gday get <b>1.188T.W3H.E</b>
 <i>&lt;Asks for confirmation&gt;</i>
 <b>Transfer complete.</b>
 </pre>
 
-[![asciicast](https://asciinema.org/a/662397.svg)](https://asciinema.org/a/662397)
+[![asciicast](https://asciinema.org/a/1jjPVyccHweqgwA5V3un4tCnU.svg)](https://asciinema.org/a/1jjPVyccHweqgwA5V3un4tCnU)
 
 ## Installation
 
@@ -32,11 +32,11 @@ and download the correct file for your platform.
 
 ### Cargo
 
-`cargo install gday`
+If you have `cargo`, run `cargo install gday`.
 
 ### Brew
 
-`brew install manforowicz/tap/gday`
+If you have `brew`, run `brew install manforowicz/tap/gday`.
 
 ## Features
 - File transfer is always direct, without relays.
@@ -63,14 +63,14 @@ Note: This may not work on networks with very restrictive
 Usage: gday [OPTIONS] <COMMAND>
 
 Commands:
-  send     Send files
-  receive  Receive files. Input the code your peer told you
-  help     Print this message or the help of the given subcommand(s)
+  send  Send files and/or directories
+  get   Receive files
+  help  Print this message or the help of the given subcommand(s)
 
 Options:
   -s, --server <SERVER>        Use a custom gday server with this domain name
-  -p, --port <PORT>            Which server port to connect to
-  -u, --unencrypted            Use unencrypted TCP instead of TLS to the custom server
+  -p, --port <PORT>            Connect to a custom server port
+  -u, --unencrypted            Use raw TCP without TLS
   -v, --verbosity <VERBOSITY>  Verbosity. (trace, debug, info, warn, error) [default: warn]
   -h, --help                   Print help
   -V, --version                Print version
@@ -82,7 +82,7 @@ Options:
     <tr>
         <th></th>
         <th>No relays</th>
-        <th>Works beyond most LAN</th>
+        <th>Works beyond LAN</th>
         <th>Works through very strict <a href="https://en.wikipedia.org/wiki/Network_address_translation">NATs</a></th>
         <th>No port forwarding</th>
         <th>Encrypted</th>

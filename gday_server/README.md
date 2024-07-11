@@ -2,6 +2,7 @@ Note: this crate is still in early-development, so expect breaking changes.
 
 # gday_server
 [![Crates.io Version](https://img.shields.io/crates/v/gday_server)](https://crates.io/crates/gday_server)
+[![docs.rs](https://img.shields.io/docsrs/gday_server)](https://docs.rs/gday_server/)
 
 A server that runs the [gday_contact_exchange_protocol](https://docs.rs/gday_contact_exchange_protocol/).
 
@@ -31,8 +32,8 @@ Options:
   -k, --key <KEY>                      PEM file of private TLS server key
   -c, --certificate <CERTIFICATE>      PEM file of signed TLS server certificate
   -u, --unencrypted                    Use unencrypted TCP instead of TLS
-  -a, --address <ADDRESS>              Custom socket address on which to listen. [default: `[::]:443` for TLS, `[::]:80` when --unencrypted]
-  -t, --timeout <TIMEOUT>              Number of seconds before a new room is deleted [default: 600]
+  -a, --address <ADDRESS>              Custom socket address on which to listen. [default: `[::]:2311` for TLS, `[::]:2310` when --unencrypted]
+  -t, --timeout <TIMEOUT>              Number of seconds before a new room is deleted [default: 3600]
   -r, --request-limit <REQUEST_LIMIT>  Max number of requests an IP address can send in a minute before they're rejected [default: 60]
   -v, --verbosity <VERBOSITY>          Log verbosity. (trace, debug, info, warn, error) [default: info]
   -h, --help                           Print help
@@ -57,7 +58,7 @@ Here's how:
 9. Submit an [issue](https://github.com/manforowicz/gday/issues), asking for your server to be added to the [default server list](https://docs.rs/gday_hole_punch/latest/gday_hole_punch/server_connector/constant.DEFAULT_SERVERS.html).
 
 ## Related
-- [gday](https://crates.io/crates/gday_server) - Command line tool for sending files.
+- [gday](https://crates.io/crates/gday) - Command line tool for sending files.
 
 ## Depends on
 - [gday_contact_exchange_protocol](https://docs.rs/gday_contact_exchange_protocol/) - Library with protocol for two peers to share their socket addresses via a server.
