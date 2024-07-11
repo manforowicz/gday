@@ -39,9 +39,11 @@ If you have `cargo`, run `cargo install gday`.
 If you have `brew`, run `brew install manforowicz/tap/gday`.
 
 ## Features
+## Features
 - File transfer is always direct, without relays.
 A server is only used at the beginning to help the devices find each other.
 - Doesn't require port forwarding.
+- Transfer files and folders of any size.
 - Files encrypted with streaming
 [ChaCha20Poly1305](https://en.wikipedia.org/wiki/ChaCha20-Poly1305).
 - Automatically tries both IPv4 and IPv6.
@@ -49,6 +51,7 @@ A server is only used at the beginning to help the devices find each other.
 Uses password authenticated key exchange
 ([SPAKE2](https://datatracker.ietf.org/doc/rfc9382/))
 to derive an encryption key from a shared secret.
+- No `unsafe` Rust in `gday` crates.
 
 ## How it works
 Uses authenticated [TCP Hole Punching](https://bford.info/pub/net/p2pnat/)
