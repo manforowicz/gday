@@ -10,4 +10,4 @@ assuming you already have a connection established.
 See the [documentation](https://docs.rs/gday_file_transfer/).
 
 ## Used by
-- [gday](https://crates.io/crates/gday_server) - Command line tool for sending files.
+- [gday](https://crates.io/crates/gday) - Command line tool for sending files.

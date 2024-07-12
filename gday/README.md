@@ -1,19 +1,19 @@
 Note: this project is still in early-development, so expect breaking changes.
 
 # gday
-[![Crates.io Version](https://img.shields.io/crates/v/gday_server)](https://crates.io/crates/gday_server)
+[![Crates.io Version](https://img.shields.io/crates/v/gday)](https://crates.io/crates/gday)
 
 Command line tool to securely send files (without a relay or port forwarding).
 
 <pre>
-<b style="color:lime;">peer_1:</b> gday send msg.txt image.jpg
+<b style="color:lime;">peer_1:</b> gday send image.jpg folder
 <i>&lt;Asks for confirmation&gt;</i>
-Tell your mate to run "gday get <b>1.188T.W3H.E</b>".
+Tell your mate to run "gday get <b>1.1C30.C71E.A</b>".
 <b>Transfer complete.</b>
 </pre>
 
 <pre>
-<b style="color:lime;">peer_2:</b> gday get <b>1.188T.W3H.E</b>
+<b style="color:lime;">peer_2:</b> gday get <b>1.1C30.C71E.A</b>
 <i>&lt;Asks for confirmation&gt;</i>
 <b>Transfer complete.</b>
 </pre>
@@ -22,44 +22,39 @@ Tell your mate to run "gday get <b>1.188T.W3H.E</b>".
 
 ## Installation
 
-### Executable
+To run the executable directly:
 
 1. Go to [releases](https://github.com/manforowicz/gday/releases)
 and download the correct file for your platform.
-2. Extract it 
-(on Linux, try: `tar xf <file>`).
-3. Run it: `./<path to executable>/gday`
+2. Extract it (on Linux: `tar xf <file>`).
+3. Run it: `./gday`
 
-### Cargo
+To install with **cargo**:
+```
+$ cargo install gday
+```
 
-If you have `cargo`, run `cargo install gday`.
-
-### Brew
-
-If you have `brew`, run `brew install manforowicz/tap/gday`.
+To install with **brew**:
+```
+$ brew install manforowicz/tap/gday
+```
 
 ## Features
-## Features
-- File transfer is always direct, without relays.
-A server is only used at the beginning to help the devices find each other.
+- File transfer is always direct, without relay servers.
+A server is only used to exchange socket addresses at the beginning.
+- No limit on the size of files and folders sent.
 - Doesn't require port forwarding.
-- Transfer files and folders of any size.
-- Files encrypted with streaming
-[ChaCha20Poly1305](https://en.wikipedia.org/wiki/ChaCha20-Poly1305).
-- Automatically tries both IPv4 and IPv6.
-- Immune to malicious servers trying to impersonate your peer.
-Uses password authenticated key exchange
-([SPAKE2](https://datatracker.ietf.org/doc/rfc9382/))
-to derive an encryption key from a shared secret.
-- No `unsafe` Rust in `gday` crates.
-
-## How it works
-Uses authenticated [TCP Hole Punching](https://bford.info/pub/net/p2pnat/)
-with the help of a server
-to establish a direct peer-to-peer connection,
-even between different private networks.
-Note: This may not work on networks with very restrictive
+Instead, uses [TCP Hole Punching](https://bford.info/pub/net/p2pnat/) to traverse
 [NATs](https://en.wikipedia.org/wiki/Network_address_translation).
+Note: this may not work on very restrictive NATs.
+- Server connection encrypted with [TLS](https://docs.rs/rustls/)
+and file transfer encrypted with [ChaCha20Poly1305](https://docs.rs/chacha20poly1305/).
+- Automatically tries both IPv4 and IPv6.
+- Immune to malicious servers impersonating your peer.
+Uses [SPAKE2](https://docs.rs/spake2/) password authenticated key exchange
+to derive an encryption key from a shared secret.
+- No `unsafe` Rust in this repository.
+
 
 ## Usage
 ```
@@ -204,7 +199,7 @@ Options:
 Open an [issue](https://github.com/manforowicz/gday/issues) to add more projects to this list.
 
 ## Related
-- [gday](https://crates.io/crates/gday_server) - Command line tool for sending files.
+- [gday](https://crates.io/crates/gday) - Command line tool for sending files.
 - [gday_server](https://crates.io/crates/gday_server) - Server that lets two peers share their socket addresses.
 - [gday_hole_punch](https://docs.rs/gday_hole_punch/) - Library for establishing peer-to-peer TCP connection.
 - [gday_file_transfer](https://docs.rs/gday_file_transfer/) - Library for transferring files over a connection.

@@ -8,21 +8,22 @@ A server that runs the [gday_contact_exchange_protocol](https://docs.rs/gday_con
 
 ## Installation
 
-### Executable
+To run the executable directly:
 
 1. Go to [releases](https://github.com/manforowicz/gday/releases)
 and download the correct file for your platform.
-2. Extract it 
-(on Linux, try: `tar xf <file>`).
-3. Run it: `./<path to executable>/gday_server`
+2. Extract it (on Linux: `tar xf <file>`).
+3. Run it: `./gday_server`
 
-### Cargo
+To install with **cargo**:
+```
+$ cargo install gday_server
+```
 
-`cargo install gday_server`
-
-### Brew
-
-`brew install manforowicz/tap/gday_server`
+To install with **brew**:
+```
+$ brew install manforowicz/tap/gday_server
+```
 
 ## Usage
 ```

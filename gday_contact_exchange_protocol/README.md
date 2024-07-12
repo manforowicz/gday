@@ -9,6 +9,6 @@ This protocol lets two users exchange their public and (optionally) private sock
 See the [documentation](https://docs.rs/gday_contact_exchange_protocol/).
 
 ## Used by:
-- [gday](https://crates.io/crates/gday_server) - Command line tool for sending files.
+- [gday](https://crates.io/crates/gday) - Command line tool for sending files.
 - [gday_server](https://crates.io/crates/gday_server) - Server that lets two peers share their socket addresses.
 - [gday_hole_punch](https://docs.rs/gday_hole_punch/) - Library for establishing peer-to-peer TCP connection.

@@ -8,4 +8,4 @@ Uses a streaming [chacha20poly1305](https://docs.rs/chacha20poly1305/latest/chac
 See the [documentation](https://docs.rs/gday_encryption/).
 
 ## Used by
-- [gday](https://crates.io/crates/gday_server) - Command line tool for sending files.
+- [gday](https://crates.io/crates/gday) - Command line tool for sending files.
