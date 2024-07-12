@@ -1,6 +1,6 @@
 [package]
 name = "gday_hole_punch"
-version = "0.2.0"
+version = "0.2.1"
 description = "Securely connect to a peer using TCP hole-punching."
 homepage = "https://github.com/manforowicz/gday/tree/main/gday_hole_punch"
 categories = ["network-programming"]
@@ -15,7 +15,7 @@ repository.workspace = true
 
 [dependencies]
 blake3 = "1.5.1"
-gday_contact_exchange_protocol = { version = "^0.2.0", path = "../gday_contact_exchange_protocol" }
+gday_contact_exchange_protocol = { version = "^0.2.1", path = "../gday_contact_exchange_protocol" }
 log = "0.4.22"
 rand = "0.8.5"
 rustls = { version = "0.23.11", features = ["ring", "log", "logging", "std", "tls12"], default-features = false }

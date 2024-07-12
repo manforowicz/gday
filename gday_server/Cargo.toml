@@ -1,6 +1,6 @@
 [package]
 name = "gday_server"
-version = "0.2.0"
+version = "0.2.1"
 description = "Server that lets 2 peers exchange their socket addresses."
 homepage = "https://github.com/manforowicz/gday/tree/main/gday_server"
 categories = ["command-line-utilities"]
@@ -24,7 +24,7 @@ tokio = { version = "1.38.0", features = [
     "sync",
 ] }
 tokio-rustls = { version = "0.26.0", features = ["ring", "logging", "tls12"], default-features = false }
-gday_contact_exchange_protocol = { version = "0.2.0", path = "../gday_contact_exchange_protocol" }
+gday_contact_exchange_protocol = { version = "0.2.1", path = "../gday_contact_exchange_protocol" }
 thiserror = "1.0.61"
 log = "0.4.22"
 env_logger = "0.11.3"

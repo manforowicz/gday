@@ -1,6 +1,6 @@
 [package]
 name = "gday_contact_exchange_protocol"
-version = "0.2.0"
+version = "0.2.1"
 description = "Protocol for peers to exchange their socket addresses via a server."
 homepage = "https://github.com/manforowicz/gday/tree/main/gday_contact_exchange_protocol"
 categories = ["network-programming"]
