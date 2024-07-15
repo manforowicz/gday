@@ -82,12 +82,8 @@ use std::{
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 /// The port that contact exchange servers
-/// using unencrypted TCP should listen on.
-pub const DEFAULT_TCP_PORT: u16 = 2310;
-
-/// The port that contact exchange servers
 /// using encrypted TLS should listen on.
-pub const DEFAULT_TLS_PORT: u16 = 2311;
+pub const DEFAULT_PORT: u16 = 2311;
 
 /// A message from client to server.
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Clone, Copy)]
@@ -193,26 +189,27 @@ impl Display for ServerMsg {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::RoomCreated => write!(f, "Room in server created successfully."),
-            Self::ReceivedAddr => write!(f, "Server received your address."),
+            Self::ReceivedAddr => write!(f, "Server recorded your public address."),
             Self::ClientContact(c) => write!(f, "The server says your contact is {c}."),
             Self::PeerContact(c) => write!(f, "The server says your peer's contact is {c}."),
             Self::ErrorRoomTaken => write!(
                 f,
-                "Can't create room with this id, because it was already created."
+                "Can't create room with this code, because it was already created."
             ),
             Self::ErrorPeerTimedOut => write!(
                 f,
                 "Timed out while waiting for peer to finish sending their address."
             ),
-            Self::ErrorNoSuchRoomCode => write!(
-                f,
-                "Can't join room with this id, because it hasn't been created."
-            ),
+            Self::ErrorNoSuchRoomCode => write!(f, "No room with this room code has been created."),
             Self::ErrorUnexpectedMsg => write!(
                 f,
-                "Server received RecordPublicAddr message after a ReadyToShare message."
+                "Server received RecordPublicAddr message after a ReadyToShare message. \
+                Maybe someone else tried to join this room with your identity?"
             ),
-            Self::ErrorTooManyRequests => write!(f, "Too many requests from this IP address."),
+            Self::ErrorTooManyRequests => write!(
+                f,
+                "Exceeded request limit from this IP address. Try again in a minute."
+            ),
             Self::ErrorSyntax => write!(f, "Server couldn't parse message syntax from client."),
             Self::ErrorConnection => write!(f, "Connection error to client."),
             Self::ErrorInternal => write!(f, "Internal server error."),

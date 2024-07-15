@@ -15,7 +15,15 @@ async fn main() {
     let args = Args::parse();
 
     match gday_server::start_server(args) {
-        Ok((server, _addr)) => server.await,
-        Err(err) => error!("{err}"),
+        Ok((_addr, mut joinset)) => {
+            joinset
+                .join_next()
+                .await
+                .expect("No addresses provided.")
+                .expect("Server thread panicked.");
+        }
+        Err(err) => {
+            error!("{err}");
+        }
     }
 }

@@ -14,13 +14,14 @@ async fn test_integration() {
         key: None,
         certificate: None,
         unencrypted: true,
-        address: Some("[::]:0".to_string()),
+        addresses: vec!["0.0.0.0:0".parse().unwrap(), "[::]:0".parse().unwrap()],
         timeout: 3600,
         request_limit: 10,
         verbosity: log::LevelFilter::Off,
     };
-    let (server_future, server_addr) = gday_server::start_server(args).unwrap();
-    let handle = tokio::spawn(server_future);
+    let (server_addrs, _joinset) = gday_server::start_server(args).unwrap();
+
+    let server_addr_1 = server_addrs[0];
 
     tokio::task::spawn_blocking(move || {
         let timeout = std::time::Duration::from_secs(5);
@@ -39,7 +40,7 @@ async fn test_integration() {
 
             // Connect to the server
             let mut server_connection =
-                server_connector::connect_tcp(server_addr, timeout).unwrap();
+                server_connector::connect_tcp(server_addr_1, timeout).unwrap();
 
             // Create a room in the server, and get my contact from it
             let (contact_sharer, my_contact) =
@@ -77,7 +78,7 @@ async fn test_integration() {
         let peer_code = PeerCode::from_str(&received_code).unwrap();
 
         // Connect to the same server as Peer 1
-        let mut server_connection = server_connector::connect_tcp(server_addr, timeout).unwrap();
+        let mut server_connection = server_connector::connect_tcp(server_addr_1, timeout).unwrap();
 
         // Join the same room in the server, and get my local contact
         let (contact_sharer, my_contact) =
@@ -107,7 +108,4 @@ async fn test_integration() {
     })
     .await
     .unwrap();
-
-    // stop the server
-    handle.abort();
 }

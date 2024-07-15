@@ -10,18 +10,17 @@ mod state;
 
 use clap::Parser;
 use connection_handler::handle_connection;
-use gday_contact_exchange_protocol::{DEFAULT_TCP_PORT, DEFAULT_TLS_PORT};
 use log::{debug, error, info, warn};
-use socket2::{SockRef, TcpKeepalive};
+use socket2::{Domain, Protocol, TcpKeepalive, Type};
 use state::State;
-use std::net::{SocketAddr, ToSocketAddrs};
+use std::net::SocketAddr;
 use std::{
-    fmt::Display,
     io::{BufReader, ErrorKind},
     path::{Path, PathBuf},
     sync::Arc,
     time::Duration,
 };
+use tokio::task::JoinSet;
 use tokio_rustls::{
     rustls::{self, pki_types::CertificateDer},
     TlsAcceptor,
@@ -42,18 +41,19 @@ pub struct Args {
     #[arg(short, long, conflicts_with_all(["key", "certificate"]))]
     pub unencrypted: bool,
 
-    /// Custom socket address on which to listen.
-    /// [default: `[::]:2311` for TLS, `[::]:2310` when --unencrypted]
-    #[arg(short, long)]
-    pub address: Option<String>,
+    /// Socket addresses on which to listen.
+    #[arg(short, long, default_values = ["0.0.0.0:2311", "[::]:2311"])]
+    pub addresses: Vec<SocketAddr>,
 
     /// Number of seconds before a new room is deleted
-    #[arg(short, long, default_value = "3600")]
+    #[arg(short, long, default_value = "600")]
     pub timeout: u64,
 
-    /// Max number of requests an IP address can
-    /// send in a minute before they're rejected
-    #[arg(short, long, default_value = "60")]
+    /// Max number of create room requests and
+    /// requests with an invalid room code
+    /// an IP address can send per minute
+    /// before they're rejected.
+    #[arg(short, long, default_value = "10")]
     pub request_limit: u32,
 
     /// Log verbosity. (trace, debug, info, warn, error)
@@ -61,13 +61,13 @@ pub struct Args {
     pub verbosity: log::LevelFilter,
 }
 
-/// Run a gday server.
+/// Spawns a tokio server in the background.
 ///
-/// `server_started` will send as soon as the server is ready to accept
-/// requests.
-pub fn start_server(
-    args: Args,
-) -> Result<(impl std::future::Future<Output = ()>, SocketAddr), Error> {
+/// Returns the addresses that the server is listening on and
+/// a [`JoinSet`] of tasks, one for each address being listened on.
+///
+/// Must be called from a tokio async context.
+pub fn start_server(args: Args) -> Result<(Vec<SocketAddr>, JoinSet<()>), Error> {
     // set the log level according to the command line argument
     if let Err(err) = env_logger::builder()
         .filter_level(args.verbosity)
@@ -76,20 +76,22 @@ pub fn start_server(
         error!("Non-fatal error. Couldn't initialize logger: {err}")
     }
 
-    let addr = if let Some(addr) = args.address {
-        addr
-    } else if args.unencrypted {
-        format!("[::]:{DEFAULT_TCP_PORT}")
-    } else {
-        format!("[::]:{DEFAULT_TLS_PORT}")
-    };
+    // get TCP listeners
+    let tcp_listeners: Result<Vec<tokio::net::TcpListener>, Error> =
+        args.addresses.into_iter().map(get_tcp_listener).collect();
+    let tcp_listeners = tcp_listeners?;
 
-    // get tcp listener
-    let tcp_listener = get_tcp_listener(addr)?;
+    // get the addresses that we've actually bound to
+    let addresses: std::io::Result<Vec<SocketAddr>> =
+        tcp_listeners.iter().map(|l| l.local_addr()).collect();
+    let addresses = addresses.map_err(|source| Error {
+        msg: "Couldn't determine local address".to_string(),
+        source,
+    })?;
 
     // get the TLS acceptor if applicable
-    let tls_acceptor = if let (Some(k), Some(c)) = (args.key, args.certificate) {
-        Some(get_tls_acceptor(&k, &c)?)
+    let tls_acceptor = if let (Some(key), Some(cert)) = (args.key, args.certificate) {
+        Some(get_tls_acceptor(&key, &cert)?)
     } else {
         None
     };
@@ -100,29 +102,34 @@ pub fn start_server(
         std::time::Duration::from_secs(args.timeout),
     );
 
-    // log starting information
-    let local_addr = tcp_listener.local_addr().map_err(|source| Error {
-        msg: "Couldn't determine local address".to_string(),
-        source,
-    })?;
-    info!("Listening on {local_addr}.",);
+    // log the addresses being listened on
+    info!("Listening on these addresses: {addresses:?}");
+
     info!("Is encrypted?: {}", tls_acceptor.is_some());
     info!(
-        "Requests per minute per IP address limit: {}",
+        "Critical requests per minute per IP address limit: {}",
         args.request_limit
     );
     info!(
         "Number of seconds before a new room is deleted: {}",
         args.timeout
     );
-    info!("Server started.");
+    info!("Server is now running.");
 
-    let server = run_server(state, tcp_listener, tls_acceptor);
+    let mut joinset = JoinSet::new();
 
-    Ok((server, local_addr))
+    for tcp_listener in tcp_listeners {
+        joinset.spawn(run_single_server(
+            state.clone(),
+            tcp_listener,
+            tls_acceptor.clone(),
+        ));
+    }
+
+    Ok((addresses, joinset))
 }
 
-async fn run_server(
+async fn run_single_server(
     state: State,
     tcp_listener: tokio::net::TcpListener,
     tls_acceptor: Option<TlsAcceptor>,
@@ -147,34 +154,57 @@ async fn run_server(
     }
 }
 
-/// Returns a [`TcpListener`] with the provided address.
+/// Returns a [`tokio::net::TcpListener`] with the provided address.
 ///
 /// Sets the socket's TCP keepalive so that unresponsive
 /// connections close after 10 minutes to save resources.
-fn get_tcp_listener(addr: impl ToSocketAddrs + Display) -> Result<tokio::net::TcpListener, Error> {
-    // binds to the socket address
-    let listener = std::net::TcpListener::bind(&addr).map_err(|source| Error {
-        msg: format!("Can't listen on '{addr}'"),
-        source,
-    })?;
+///
+/// TODO: Check if I need to check for eintr errors?
+fn get_tcp_listener(addr: SocketAddr) -> Result<tokio::net::TcpListener, Error> {
+    // create a socket
+    let socket = socket2::Socket::new(Domain::for_address(addr), Type::STREAM, Some(Protocol::TCP))
+        .map_err(|source| Error {
+            msg: "Couldn't create TCP socket".to_string(),
+            source,
+        })?;
 
-    // make the listener non-blocking
-    listener.set_nonblocking(true).map_err(|source| Error {
-        msg: "Couldn't set TCP listener to non-blocking".to_string(),
-        source,
-    })?;
+    // if this is an IPv6 listener, make it not listen
+    // to IPv4.
+    if addr.is_ipv6() {
+        socket.set_only_v6(true).map_err(|source| Error {
+            msg: format!("Couldn't set IPV6_V6ONLY on {addr}"),
+            source,
+        })?;
+    }
 
     // sets the keepalive to 10 minutes
     let tcp_keepalive = TcpKeepalive::new()
         .with_time(Duration::from_secs(600))
-        .with_interval(Duration::from_secs(10));
-    let socket = SockRef::from(&listener);
+        .with_interval(Duration::from_secs(10))
+        .with_retries(6);
     socket
         .set_tcp_keepalive(&tcp_keepalive)
         .map_err(|source| Error {
             msg: "Couldn't set TCP keepalive".to_string(),
             source,
         })?;
+
+    socket.set_nonblocking(true).map_err(|source| Error {
+        msg: "Couldn't set TCP socket to non blocking".to_string(),
+        source,
+    })?;
+
+    socket.bind(&addr.into()).map_err(|source| Error {
+        msg: format!("Couldn't bind socket to address {addr}"),
+        source,
+    })?;
+
+    socket.listen(128).map_err(|source| Error {
+        msg: format!("Couldn't listen on {addr}"),
+        source,
+    })?;
+
+    let listener: std::net::TcpListener = socket.into();
 
     // convert to a tokio listener
     let listener = tokio::net::TcpListener::from_std(listener).map_err(|source| Error {
@@ -186,7 +216,7 @@ fn get_tcp_listener(addr: impl ToSocketAddrs + Display) -> Result<tokio::net::Tc
 }
 
 /// Takes paths to a PEM-encoded private key and signed certificate.
-/// Returns a [`TlsAcceptor`]
+/// Returns a [`TlsAcceptor`].
 fn get_tls_acceptor(key_path: &Path, cert_path: &Path) -> Result<TlsAcceptor, Error> {
     // try reading the key file
     let mut key = BufReader::new(std::fs::File::open(key_path).map_err(|source| Error {
@@ -194,6 +224,7 @@ fn get_tls_acceptor(key_path: &Path, cert_path: &Path) -> Result<TlsAcceptor, Er
         source,
     })?);
 
+    // try parsing the key file
     let key = rustls_pemfile::private_key(&mut key)
         .map_err(|source| Error {
             msg: format!("Couldn't parse key file {key_path:?}."),
@@ -210,6 +241,7 @@ fn get_tls_acceptor(key_path: &Path, cert_path: &Path) -> Result<TlsAcceptor, Er
         source,
     })?);
 
+    // try parsing the certificate file
     let cert: Result<Vec<CertificateDer<'static>>, _> = rustls_pemfile::certs(&mut cert).collect();
     let cert = cert.map_err(|source| Error {
         msg: format!("Couldn't parse certificate file {cert_path:?}."),

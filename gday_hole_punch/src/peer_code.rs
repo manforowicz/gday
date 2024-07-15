@@ -1,10 +1,11 @@
-use serde::{Deserialize, Serialize};
-
 use crate::Error;
+use serde::{Deserialize, Serialize};
+use std::fmt::Display;
+use std::str::FromStr;
 
 /// Info that 2 peers must share before they can exchange contacts.
 ///
-/// Use `PeerCode.to_string()` and `PeerCode::from_str()`
+/// Use [`PeerCode::fmt()`] and [`PeerCode::try_from()`]
 /// to convert to and from a short human-readable code.
 #[derive(PartialEq, Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct PeerCode {
@@ -12,7 +13,6 @@ pub struct PeerCode {
     /// that the peers will connect to.
     ///
     /// Use `0` to indicate a custom server.
-    ///
     /// Pass to [`crate::server_connector::connect_to_server_id()`]
     /// to connect to the server.
     pub server_id: u64,
@@ -24,7 +24,7 @@ pub struct PeerCode {
     pub room_code: u64,
 
     /// The shared secret that the peers will use to confirm
-    /// each other's identity during hole-punching.
+    /// each other's identity.
     ///
     /// Pass to [`crate::try_connect_to_peer()`] to authenticate
     /// the other peer when hole-punching.
@@ -39,7 +39,7 @@ impl PeerCode {
     }
 }
 
-impl std::fmt::Display for PeerCode {
+impl Display for PeerCode {
     /// Display as `"server_id.room_code.shared_secret.checksum"`
     /// where each field is in hexadecimal form.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -107,7 +107,7 @@ impl TryFrom<&str> for PeerCode {
     ///
     /// The checksum is optional.
     fn try_from(str: &str) -> Result<Self, Error> {
-        str.parse()
+        Self::from_str(str)
     }
 }
 

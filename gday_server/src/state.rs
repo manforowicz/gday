@@ -107,8 +107,8 @@ impl State {
 
     /// Creates a new room with `room_code`.
     ///
-    /// - Returns [`Error::TooManyRequests`] if the max
-    /// allowable number of requests per minute is exceeded.
+    /// - Returns [`Error::TooManyRequests`] if `origin`'s
+    /// request limit is exceeded.
     /// - Returns [`Error::RoomCodeTaken`] if the room already exists.
     pub fn create_room(&mut self, room_code: u64, origin: IpAddr) -> Result<(), Error> {
         self.increment_request_count(origin)?;
@@ -141,8 +141,8 @@ impl State {
     /// Updates the contact information of a client in the room with `room_code`.
     ///
     /// - Returns [`Error::NoSuchRoomCode`] if no room with `room_code` exists.
-    /// - Returns [`Error::TooManyRequests`] if the max
-    /// allowable number of requests per minute is exceeded.
+    /// - Returns [`Error::TooManyRequests`] if `origin`'s
+    /// request limit is exceeded.
     pub fn update_client(
         &mut self,
         room_code: u64,
@@ -151,15 +151,19 @@ impl State {
         public: bool,
         origin: IpAddr,
     ) -> Result<(), Error> {
-        self.increment_request_count(origin)?;
-
         // get the room
         let mut rooms = self.rooms.lock().expect("Couldn't acquire state lock.");
-        let room = rooms.get_mut(&room_code).ok_or(Error::NoSuchRoomCode)?;
+        let Some(room) = rooms.get_mut(&room_code) else {
+            drop(rooms);
+            self.increment_request_count(origin)?;
+            return Err(Error::NoSuchRoomCode);
+        };
 
         // check if this client was already set to done.
         // if so, it can't be updated
         if room.get_client_mut(!is_creator).contact_sender.is_some() {
+            drop(rooms);
+            self.increment_request_count(origin)?;
             return Err(Error::CantUpdateDoneClient);
         }
 
@@ -196,10 +200,12 @@ impl State {
         is_creator: bool,
         origin: IpAddr,
     ) -> Result<(FullContact, oneshot::Receiver<FullContact>), Error> {
-        self.increment_request_count(origin)?;
-
         let mut rooms = self.rooms.lock().expect("Couldn't acquire state lock.");
-        let room = rooms.get_mut(&room_code).ok_or(Error::NoSuchRoomCode)?;
+        let Some(room) = rooms.get_mut(&room_code) else {
+            drop(rooms);
+            self.increment_request_count(origin)?;
+            return Err(Error::NoSuchRoomCode);
+        };
 
         let (tx, rx) = oneshot::channel();
 
@@ -240,7 +246,7 @@ impl State {
     ///
     /// Returns an [`Error::TooManyRequests`] if [`State::max_requests_per_minute`]
     /// is exceeded.
-    fn increment_request_count(&mut self, ip: IpAddr) -> Result<(), Error> {
+    fn increment_request_count(&self, ip: IpAddr) -> Result<(), Error> {
         let mut request_counts = self
             .request_counts
             .lock()

@@ -101,10 +101,8 @@ fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
     // get the server port
     let port = if let Some(port) = args.port {
         port
-    } else if args.unencrypted {
-        server_connector::DEFAULT_TCP_PORT
     } else {
-        server_connector::DEFAULT_TLS_PORT
+        server_connector::DEFAULT_PORT
     };
 
     // use custom server if the user provided one,
@@ -242,5 +240,8 @@ fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     }
+
+    server_connection.notify_tls_close()?;
+
     Ok(())
 }

@@ -4,11 +4,10 @@ Not all of them are desirable or necessary.
 
 - Add a GUI.
 
-- Split off more functionality from gday.
+- Confirm gday server works properly on both ipv4 and ipv6. Maybe add a test.
 
-- Test the contact sharing and hole-punching.
+- Confirm that TLS close is now properly sent, and no errors are logged.
 
-- Make sure that gday server still lists the file name during file error.
 
 ## Abandoned ideas
 
@@ -21,8 +20,7 @@ Not all of them are desirable or necessary.
   the peer's device is acting as some sort of server.
 
 - Allow sending a simple text string instead of only files.
-  Though, I don't think this is a common use case, so will only
-  add if I get requests.
+  Though, I don't think this is a common use case.
 
 - Let the client select a source port, to utilize port forwarding.
   However, turns out port forwarding works for inbound connections,
@@ -35,3 +33,6 @@ Not all of them are desirable or necessary.
 
 - Make file transfer response msg list file names, instead of going by index?
   I don't really see the advantage to doing this.
+
+- Support a shared secret longer than u64 in peer code? But then again,
+  users can just send their own struct in this case.

@@ -13,8 +13,7 @@ use std::{
     time::Duration,
 };
 
-pub use gday_contact_exchange_protocol::DEFAULT_TCP_PORT;
-pub use gday_contact_exchange_protocol::DEFAULT_TLS_PORT;
+pub use gday_contact_exchange_protocol::DEFAULT_PORT;
 
 /// List of default public Gday servers.
 ///
@@ -62,7 +61,7 @@ pub enum ServerStream {
 
 impl ServerStream {
     /// Returns the local socket address of this stream.
-    fn local_addr(&self) -> std::io::Result<std::net::SocketAddr> {
+    pub fn local_addr(&self) -> std::io::Result<std::net::SocketAddr> {
         match self {
             Self::TCP(tcp) => tcp.local_addr(),
             Self::TLS(tls) => tls.get_ref().local_addr(),
@@ -189,6 +188,23 @@ impl ServerConnection {
 
         Ok(contact)
     }
+
+    /// Sends a `close_notify` warning over TLS.
+    /// Does nothing for TCP connections.
+    ///
+    /// This should be called before dropping
+    /// [`ServerConnection`].
+    pub fn notify_tls_close(&mut self) -> std::io::Result<()> {
+        if let Some(ServerStream::TLS(tls)) = &mut self.v4 {
+            tls.conn.send_close_notify();
+            tls.conn.complete_io(&mut tls.sock)?;
+        }
+        if let Some(ServerStream::TLS(tls)) = &mut self.v6 {
+            tls.conn.send_close_notify();
+            tls.conn.complete_io(&mut tls.sock)?;
+        }
+        Ok(())
+    }
 }
 
 /// In random order, sequentially try connecting to the given `servers`.
@@ -226,7 +242,7 @@ pub fn connect_to_server_id(
     let Some(server) = servers.iter().find(|server| server.id == server_id) else {
         return Err(Error::ServerIDNotFound(server_id));
     };
-    connect_tls(server.domain_name.to_string(), DEFAULT_TLS_PORT, timeout)
+    connect_tls(server.domain_name.to_string(), DEFAULT_PORT, timeout)
 }
 
 /// In random order, sequentially tries connecting to the given `domain_names`.
@@ -249,11 +265,11 @@ pub fn connect_to_random_domain_name(
 
     for i in indices {
         let server = domain_names[i];
-        let streams = match connect_tls(server.to_string(), DEFAULT_TLS_PORT, timeout) {
+        let streams = match connect_tls(server.to_string(), DEFAULT_PORT, timeout) {
             Ok(streams) => streams,
             Err(err) => {
                 recent_error = err;
-                warn!("Couldn't connect to \"{server}:{DEFAULT_TLS_PORT}\": {recent_error}");
+                warn!("Couldn't connect to \"{server}:{DEFAULT_PORT}\": {recent_error}");
                 continue;
             }
         };

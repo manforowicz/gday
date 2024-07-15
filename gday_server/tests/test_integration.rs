@@ -10,14 +10,14 @@ async fn test_integration() {
         key: None,
         certificate: None,
         unencrypted: true,
-        address: Some("[::]:0".to_string()),
+        addresses: vec!["0.0.0.0:0".parse().unwrap(), "[::]:0".parse().unwrap()],
         timeout: 3600,
         request_limit: 10,
         verbosity: log::LevelFilter::Off,
     };
-    let (server_future, server_addr_v6) = gday_server::start_server(args).unwrap();
-    let handle = tokio::spawn(server_future);
-    let server_addr_v4 = format!("127.0.0.1:{}", server_addr_v6.port());
+    let (server_addrs, _joinset) = gday_server::start_server(args).unwrap();
+    let server_addr_1 = server_addrs[0];
+    let server_addr_2 = server_addrs[1];
 
     tokio::task::spawn_blocking(move || {
         let local_contact_1 = Contact {
@@ -31,8 +31,8 @@ async fn test_integration() {
         };
 
         // connect to the server
-        let mut stream1 = std::net::TcpStream::connect(server_addr_v4).unwrap();
-        let mut stream2 = std::net::TcpStream::connect(server_addr_v6).unwrap();
+        let mut stream1 = std::net::TcpStream::connect(server_addr_1).unwrap();
+        let mut stream2 = std::net::TcpStream::connect(server_addr_2).unwrap();
 
         // successfully create a room
         write_to(ClientMsg::CreateRoom { room_code: 123 }, &mut stream1).unwrap();
@@ -150,9 +150,6 @@ async fn test_integration() {
     })
     .await
     .unwrap();
-
-    // stop the server
-    handle.abort();
 }
 
 #[tokio::test]
@@ -162,19 +159,19 @@ async fn test_request_limit() {
         key: None,
         certificate: None,
         unencrypted: true,
-        address: Some("[::]:0".to_string()),
+        addresses: vec!["0.0.0.0:0".parse().unwrap(), "[::]:0".parse().unwrap()],
         timeout: 3600,
         request_limit: 10,
         verbosity: log::LevelFilter::Off,
     };
-    let (server_future, server_addr_v6) = gday_server::start_server(args).unwrap();
-    let handle = tokio::spawn(server_future);
-    let server_addr_v4 = format!("127.0.0.1:{}", server_addr_v6.port());
+    let (server_addrs, _joinset) = gday_server::start_server(args).unwrap();
+    let server_addr_1 = server_addrs[0];
+    let server_addr_2 = server_addrs[1];
 
     tokio::task::spawn_blocking(move || {
         // connect to the server
-        let mut stream1 = std::net::TcpStream::connect(server_addr_v6).unwrap();
-        let mut stream2 = std::net::TcpStream::connect(server_addr_v4).unwrap();
+        let mut stream1 = std::net::TcpStream::connect(server_addr_1).unwrap();
+        let mut stream2 = std::net::TcpStream::connect(server_addr_2).unwrap();
 
         for room_code in 1..=10 {
             // successfully create a room
@@ -202,7 +199,4 @@ async fn test_request_limit() {
     })
     .await
     .unwrap();
-
-    // stop the server
-    handle.abort();
 }
