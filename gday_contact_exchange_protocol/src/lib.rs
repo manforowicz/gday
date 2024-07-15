@@ -14,7 +14,7 @@
 //!
 //! # Example
 //! First, both peers connect with TLS on both IPv4 and IPv6 (if possible)
-//! to a gday server with [`DEFAULT_TLS_PORT`].
+//! to a gday server with [`DEFAULT_PORT`].
 //! Then they exchange contacts like so:
 //! ```no_run
 //! # use gday_contact_exchange_protocol::{

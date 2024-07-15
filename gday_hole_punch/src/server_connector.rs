@@ -19,7 +19,7 @@ pub use gday_contact_exchange_protocol::DEFAULT_PORT;
 ///
 /// Having many server options helps make Gday decentralized!
 /// - Submit an issue on Gday's GitHub if you'd like to add your own!
-/// - All of these serve encrypted TLS over port 443.
+/// - All of these serve encrypted TLS over [`DEFAULT_PORT`].
 pub const DEFAULT_SERVERS: &[ServerInfo] = &[ServerInfo {
     domain_name: "gday.manforowicz.com",
     id: 1,
@@ -29,7 +29,7 @@ pub const DEFAULT_SERVERS: &[ServerInfo] = &[ServerInfo {
 /// Information about a single Gday server.
 ///
 /// A public gday server should only serve
-/// encrypted TLS and listen on port 443.
+/// encrypted TLS and listen on [`DEFAULT_PORT`].
 #[derive(Debug, Clone)]
 pub struct ServerInfo {
     /// The DNS name of the server.
@@ -210,7 +210,7 @@ impl ServerConnection {
 /// In random order, sequentially try connecting to the given `servers`.
 ///
 /// Ignores servers that don't have `prefer == true`.
-/// Connects to port [`DEFAULT_TLS_PORT`] (443) via TLS.
+/// Connects to port [`DEFAULT_PORT`] via TLS.
 /// Tries the next server after `timeout` time.
 ///
 /// Returns
@@ -229,7 +229,7 @@ pub fn connect_to_random_server(
 }
 
 /// Try connecting to the server with this `server_id` and returning a [`ServerConnection`].
-/// Connects to port [`DEFAULT_TLS_PORT`] (443) via TLS.
+/// Connects to port [`DEFAULT_PORT`] via TLS.
 /// Gives up after `timeout` time.
 ///
 /// Returns an error if `servers` contains no server with id `server_id` or connecting
@@ -246,7 +246,7 @@ pub fn connect_to_server_id(
 }
 
 /// In random order, sequentially tries connecting to the given `domain_names`.
-/// Connects to port [`DEFAULT_TLS_PORT`] (443) via TLS.
+/// Connects to port [`DEFAULT_PORT`] via TLS.
 /// Tries the next connection after `timeout` time.
 ///
 /// Returns
