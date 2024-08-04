@@ -289,8 +289,10 @@ pub fn connect_tls(
     port: u16,
     timeout: Duration,
 ) -> Result<ServerConnection, Error> {
-    let addrs = format!("{domain_name}:{port}");
-    debug!("Connecting to server '{addrs}`");
+    debug!("Connecting to server '{domain_name}:{port}'");
+
+    // Connect to the server over TCP
+    let mut connection: ServerConnection = connect_tcp((domain_name.as_str(), port), timeout)?;
 
     // wrap the DNS name of the server
     let name = rustls::pki_types::ServerName::try_from(domain_name)?;
@@ -298,21 +300,23 @@ pub fn connect_tls(
     // get the TLS config
     let tls_config = get_tls_config();
 
-    let connection: ServerConnection = connect_tcp(addrs, timeout)?;
-
-    let mut encrypted_connection = ServerConnection { v4: None, v6: None };
-
-    if let Some(ServerStream::TCP(tcp_v4)) = connection.v4 {
+    if let Some(tcp_v4) = connection.v4 {
+        let ServerStream::TCP(tcp_v4) = tcp_v4 else {
+            unreachable!()
+        };
         let conn = rustls::ClientConnection::new(tls_config.clone(), name.clone())?;
-        encrypted_connection.v4 = Some(ServerStream::TLS(rustls::StreamOwned::new(conn, tcp_v4)))
+        connection.v4 = Some(ServerStream::TLS(rustls::StreamOwned::new(conn, tcp_v4)))
     }
 
-    if let Some(ServerStream::TCP(tcp_v6)) = connection.v6 {
-        let conn = rustls::ClientConnection::new(tls_config.clone(), name.clone())?;
-        encrypted_connection.v6 = Some(ServerStream::TLS(rustls::StreamOwned::new(conn, tcp_v6)))
+    if let Some(tcp_v6) = connection.v6 {
+        let ServerStream::TCP(tcp_v6) = tcp_v6 else {
+            unreachable!()
+        };
+        let conn = rustls::ClientConnection::new(tls_config, name)?;
+        connection.v6 = Some(ServerStream::TLS(rustls::StreamOwned::new(conn, tcp_v6)))
     }
 
-    Ok(encrypted_connection)
+    Ok(connection)
 }
 
 /// Tries to TCP connect to `addrs` over both IPv4 and IPv6.
@@ -321,17 +325,26 @@ pub fn connect_tls(
 /// - Gives up connecting to each TCP address after `timeout` time.
 /// - Returns an error if every attempt failed.
 pub fn connect_tcp(
-    addrs: impl ToSocketAddrs<Iter = impl Iterator<Item = SocketAddr> + Clone> + Debug,
+    addrs: impl ToSocketAddrs + Debug,
     timeout: Duration,
 ) -> std::io::Result<ServerConnection> {
-    let addresses = addrs.to_socket_addrs()?;
+    // Try to get an IPv4 and IPv6 socket address.
+    let mut addr_v4 = None;
+    let mut addr_v6 = None;
+    for addr in addrs.to_socket_addrs()? {
+        if addr.is_ipv6() && addr_v6.is_none() {
+            addr_v6 = Some(addr);
+        } else if addr.is_ipv4() && addr_v4.is_none() {
+            addr_v4 = Some(addr);
+        } else if addr_v4.is_some() && addr_v6.is_some() {
+            break;
+        }
+    }
 
     // try connecting to the first IPv4 address
-    let addr_v4: Option<SocketAddr> = addresses.clone().find(|a| a.is_ipv4());
     let tcp_v4 = addr_v4.map(|addr| TcpStream::connect_timeout(&addr, timeout));
 
     // try connecting to the first IPv6 addresss
-    let addr_v6: Option<SocketAddr> = addresses.clone().find(|a| a.is_ipv6());
     let tcp_v6 = addr_v6.map(|addr| TcpStream::connect_timeout(&addr, timeout));
 
     // return an error if couldn't establish any connections

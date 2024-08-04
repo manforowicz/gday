@@ -7,7 +7,7 @@ use std::str::FromStr;
 ///
 /// Use [`PeerCode::fmt()`] and [`PeerCode::try_from()`]
 /// to convert to and from a short human-readable code.
-#[derive(PartialEq, Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(PartialEq, Eq, Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct PeerCode {
     /// The ID of the gday contact exchange server
     /// that the peers will connect to.

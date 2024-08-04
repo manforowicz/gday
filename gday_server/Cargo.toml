@@ -1,6 +1,5 @@
 [package]
 name = "gday_server"
-version = "0.2.1"
 description = "Server that lets 2 peers exchange their socket addresses."
 homepage = "https://github.com/manforowicz/gday/tree/main/gday_server"
 categories = ["command-line-utilities"]
@@ -10,6 +9,7 @@ authors.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+version.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

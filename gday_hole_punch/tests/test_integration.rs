@@ -44,7 +44,7 @@ async fn test_integration() {
 
             // Create a room in the server, and get my contact from it
             let (contact_sharer, my_contact) =
-                ContactSharer::create_room(&mut server_connection, peer_code.room_code).unwrap();
+                ContactSharer::enter_room(&mut server_connection, peer_code.room_code, true).unwrap();
 
             // Send PeerCode to peer
             let code_to_share = peer_code.to_string();
@@ -82,7 +82,7 @@ async fn test_integration() {
 
         // Join the same room in the server, and get my local contact
         let (contact_sharer, my_contact) =
-            ContactSharer::join_room(&mut server_connection, peer_code.room_code).unwrap();
+            ContactSharer::enter_room(&mut server_connection, peer_code.room_code, false).unwrap();
 
         // Get peer's contact
         let peer_contact = contact_sharer.get_peer_contact().unwrap();

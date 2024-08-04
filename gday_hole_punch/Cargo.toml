@@ -1,6 +1,5 @@
 [package]
 name = "gday_hole_punch"
-version = "0.2.1"
 description = "Securely connect to a peer using TCP hole-punching."
 homepage = "https://github.com/manforowicz/gday/tree/main/gday_hole_punch"
 categories = ["network-programming"]
@@ -10,6 +9,7 @@ authors.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+version.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

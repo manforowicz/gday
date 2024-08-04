@@ -2,6 +2,7 @@ use crate::{server_connector::ServerConnection, Error};
 use gday_contact_exchange_protocol::{read_from, write_to, ClientMsg, FullContact, ServerMsg};
 
 /// Used to exchange socket addresses with a peer via a Gday server.
+#[derive(Debug)]
 pub struct ContactSharer<'a> {
     room_code: u64,
     is_creator: bool,
@@ -9,8 +10,10 @@ pub struct ContactSharer<'a> {
 }
 
 impl<'a> ContactSharer<'a> {
-    /// Creates a new room with `room_code` in the gday server
+    /// Enters a new room with `room_code` in the gday server
     /// that `server_connection` connects to.
+    /// 
+    /// If `is_creator`, tries creating the room, otherwise tries joining it.
     ///
     /// Sends local socket addresses to the server.
     ///
@@ -20,58 +23,31 @@ impl<'a> ContactSharer<'a> {
     /// - The [`ContactSharer`].
     /// - The [`FullContact`] of this endpoint, as
     ///   determined by the server
-    pub fn create_room(
+    pub fn enter_room(
         server_connection: &'a mut ServerConnection,
         room_code: u64,
+        is_creator: bool,
     ) -> Result<(Self, FullContact), Error> {
         // set reuse addr and reuse port, so that these sockets
         // can be later reused for hole punching
         server_connection.configure()?;
 
-        // choose a stream to talk to the server with
-        let messenger = &mut server_connection.streams()[0];
+        if is_creator {
+            // choose a stream to talk to the server with
+            let messenger = &mut server_connection.streams()[0];
 
-        // try creating a room in the server
-        write_to(ClientMsg::CreateRoom { room_code }, messenger)?;
-        let response: ServerMsg = read_from(messenger)?;
-        if response != ServerMsg::RoomCreated {
-            return Err(Error::UnexpectedServerReply(response));
+            // try creating a room in the server
+            write_to(ClientMsg::CreateRoom { room_code }, messenger)?;
+            let response: ServerMsg = read_from(messenger)?;
+            if response != ServerMsg::RoomCreated {
+                return Err(Error::UnexpectedServerReply(response));
+            }
         }
 
-        let mut this = Self {
-            room_code,
-            is_creator: true,
-            connection: server_connection,
-        };
-
-        // send personal socket addresses to the server
-        let contact = this.share_contact()?;
-
-        Ok((this, contact))
-    }
-
-    /// Joins a room with `room_code` in the Gday server
-    /// that `server_connection` connects to.
-    ///
-    /// Sends local socket addresses to the server.
-    ///
-    /// Panics if both `v4` and `v6` in `server_connection` are `None`.
-    ///
-    /// Returns
-    /// - The [`ContactSharer`]
-    /// - The [`FullContact`] of this endpoint, as
-    ///   determined by the server
-    pub fn join_room(
-        server_connection: &'a mut ServerConnection,
-        room_code: u64,
-    ) -> Result<(Self, FullContact), Error> {
-        // set reuse addr and reuse port, so that these sockets
-        // can be later reused for hole punching
-        server_connection.configure()?;
 
         let mut this = Self {
             room_code,
-            is_creator: false,
+            is_creator,
             connection: server_connection,
         };
 

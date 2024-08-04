@@ -151,7 +151,7 @@ fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
 
             // create a room in the server
             let (contact_sharer, my_contact) =
-                ContactSharer::create_room(&mut server_connection, peer_code.room_code)?;
+                ContactSharer::enter_room(&mut server_connection, peer_code.room_code, true)?;
 
             info!("Your contact is:\n{my_contact}");
 
@@ -206,7 +206,7 @@ fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
         crate::Command::Get { path, code } => {
             let code = PeerCode::from_str(&code)?;
             let (contact_sharer, my_contact) =
-                ContactSharer::join_room(&mut server_connection, code.room_code)?;
+                ContactSharer::enter_room(&mut server_connection, code.room_code, false)?;
 
             info!("Your contact is:\n{my_contact}");
 
