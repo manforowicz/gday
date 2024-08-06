@@ -14,6 +14,8 @@
 //! # use gday_hole_punch::PeerCode;
 //! # use std::str::FromStr;
 //! #
+//! # let rt = tokio::runtime::Builder::new_current_thread().build().unwrap();
+//! # rt.block_on( async {
 //! let servers = server_connector::DEFAULT_SERVERS;
 //! let timeout = std::time::Duration::from_secs(5);
 //! let room_code = 123;
@@ -24,21 +26,22 @@
 //! // Connect to a random server in the default server list
 //! let (mut server_connection, server_id) = server_connector::connect_to_random_server(
 //!     servers,
-//!     timeout
-//! )?;
+//!     timeout,
+//! ).await?;
 //!
 //! // PeerCode useful for giving rendezvous info to peer
 //! let peer_code = PeerCode { server_id, room_code, shared_secret };
 //! let code_to_share = peer_code.to_string();
 //!
 //! // Create a room in the server, and get my contact from it
-//! let (contact_sharer, my_contact) = ContactSharer::create_room(
+//! let (contact_sharer, my_contact) = ContactSharer::enter_room(
 //!     &mut server_connection,
-//!     room_code
-//! )?;
+//!     room_code,
+//!     true,
+//! ).await?;
 //!
 //! // Wait for the server to send the peer's contact
-//! let peer_contact = contact_sharer.get_peer_contact()?;
+//! let peer_contact = contact_sharer.get_peer_contact().await?;
 //!
 //! // Use TCP hole-punching to connect to the peer,
 //! // verify their identity with the shared_secret,
@@ -47,8 +50,7 @@
 //!     my_contact.local,
 //!     peer_contact,
 //!     &shared_secret.to_be_bytes(),
-//!     timeout
-//! )?;
+//! ).await?;
 //!
 //! //////// Peer 2 (on a different computer) ////////
 //!
@@ -58,25 +60,26 @@
 //! let mut server_connection = server_connector::connect_to_server_id(
 //!     servers,
 //!     peer_code.server_id,
-//!     timeout
-//! )?;
+//!     timeout,
+//! ).await?;
 //!
 //! // Join the same room in the server, and get my local contact
-//! let (contact_sharer, my_contact) = ContactSharer::join_room(
+//! let (contact_sharer, my_contact) = ContactSharer::enter_room(
 //!     &mut server_connection,
-//!     peer_code.room_code
-//! )?;
+//!     peer_code.room_code,
+//!     false,
+//! ).await?;
 //!
-//! let peer_contact = contact_sharer.get_peer_contact()?;
+//! let peer_contact = contact_sharer.get_peer_contact().await?;
 //!
 //! let (tcp_stream, strong_key) = try_connect_to_peer(
 //!     my_contact.local,
 //!     peer_contact,
 //!     &peer_code.shared_secret.to_be_bytes(),
-//!     timeout
-//! )?;
+//! ).await?;
 //!
-//! # Ok::<(), gday_hole_punch::Error>(())
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! # }).unwrap();
 //! ```
 //!
 #![forbid(unsafe_code)]
@@ -129,7 +132,7 @@ pub enum Error {
 
     /// TLS error with contact exchange server
     #[error("TLS error with contact exchange server: {0}")]
-    Rustls(#[from] rustls::Error),
+    Rustls(#[from] tokio_rustls::rustls::Error),
 
     /// No contact exchange server with this ID found in the given list
     #[error("No contact exchange server with ID '{0}' exists in this server list.")]
@@ -141,7 +144,7 @@ pub enum Error {
 
     /// Invalid server DNS name for TLS
     #[error("Invalid server DNS name for TLS: {0}")]
-    InvalidDNSName(#[from] rustls::pki_types::InvalidDnsNameError),
+    InvalidDNSName(#[from] tokio_rustls::rustls::pki_types::InvalidDnsNameError),
 
     /// Timed out while trying to connect to peer, likely due to an uncooperative
     /// NAT (network address translator).

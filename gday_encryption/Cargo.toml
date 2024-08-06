@@ -15,10 +15,13 @@ version.workspace = true
 
 [dependencies]
 chacha20poly1305 = { version = "0.10.1", features = ["stream"] }
+pin-project = "1.1.5"
 rand = "0.8.5"
+tokio = { version = "1.39.2", features = ["io-util"] }
 
 [dev-dependencies]
-criterion = "0.5.1"
+criterion = { version = "0.5.1", features = ["async_tokio", "tokio"] }
+tokio = { version = "1.39.2", features = ["net", "rt", "macros"] }
 
 [[bench]]
 name = "benchmark"

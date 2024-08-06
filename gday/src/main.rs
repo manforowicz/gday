@@ -8,7 +8,7 @@ mod transfer;
 use crate::dialog::ask_receive;
 use clap::{Parser, Subcommand};
 use gday_encryption::EncryptedStream;
-use gday_file_transfer::{read_from, write_to, FileOfferMsg, FileResponseMsg};
+use gday_file_transfer::{read_from_async, write_to_async, FileOfferMsg, FileResponseMsg};
 use gday_hole_punch::PeerCode;
 use gday_hole_punch::{
     server_connector::{self, DEFAULT_SERVERS},
@@ -79,7 +79,8 @@ enum Command {
     },
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     // read command line arguments
     let args = Args::parse();
 
@@ -92,12 +93,12 @@ fn main() {
         .init();
 
     // catch and log any errors
-    if let Err(err) = run(args) {
+    if let Err(err) = run(args).await {
         error!("{}", err);
     }
 }
 
-fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
+async fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
     // get the server port
     let port = if let Some(port) = args.port {
         port
@@ -110,17 +111,18 @@ fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
     let (mut server_connection, server_id) = if let Some(domain_name) = args.server {
         if args.unencrypted {
             (
-                server_connector::connect_tcp(format!("{domain_name}:{port}"), SERVER_TIMEOUT)?,
+                server_connector::connect_tcp(format!("{domain_name}:{port}"), SERVER_TIMEOUT)
+                    .await?,
                 0,
             )
         } else {
             (
-                server_connector::connect_tls(domain_name, port, SERVER_TIMEOUT)?,
+                server_connector::connect_tls(domain_name, port, SERVER_TIMEOUT).await?,
                 0,
             )
         }
     } else {
-        server_connector::connect_to_random_server(DEFAULT_SERVERS, SERVER_TIMEOUT)?
+        server_connector::connect_to_random_server(DEFAULT_SERVERS, SERVER_TIMEOUT).await?
     };
 
     match args.operation {
@@ -140,46 +142,51 @@ fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
             };
 
             // get metadata about the files to transfer
-            let local_files = gday_file_transfer::get_file_metas(&paths)?;
+            let local_files = gday_file_transfer::get_file_metas(&paths).await?;
             let offer_msg = FileOfferMsg::from(local_files.clone());
 
             // confirm the user wants to send these files
-            if !dialog::confirm_send(&offer_msg)? {
+            if !dialog::confirm_send(&offer_msg).await? {
                 // Send aborted
                 return Ok(());
             }
 
             // create a room in the server
             let (contact_sharer, my_contact) =
-                ContactSharer::enter_room(&mut server_connection, peer_code.room_code, true)?;
+                ContactSharer::enter_room(&mut server_connection, peer_code.room_code, true)
+                    .await?;
 
             info!("Your contact is:\n{my_contact}");
 
             println!("Tell your mate to run \"gday get {}\"", peer_code.bold());
 
             // get peer's contact
-            let peer_contact = contact_sharer.get_peer_contact()?;
+            let peer_contact = contact_sharer.get_peer_contact().await?;
             info!("Your mate's contact is:\n{peer_contact}");
 
             // connect to the peer
-            let (stream, shared_key) = gday_hole_punch::try_connect_to_peer(
-                my_contact.local,
-                peer_contact,
-                &peer_code.shared_secret.to_be_bytes(),
+            let (stream, shared_key) = tokio::time::timeout(
                 HOLE_PUNCH_TIMEOUT,
-            )?;
+                gday_hole_punch::try_connect_to_peer(
+                    my_contact.local,
+                    peer_contact,
+                    &peer_code.shared_secret.to_be_bytes(),
+                ),
+            )
+            .await
+            .map_err(|_| gday_hole_punch::Error::HolePunchTimeout)??;
 
-            let mut stream = EncryptedStream::encrypt_connection(stream, &shared_key)?;
+            let mut stream = EncryptedStream::encrypt_connection(stream, &shared_key).await?;
 
             info!("Established authenticated encrypted connection with peer.");
 
             // offer these files to the peer
-            write_to(offer_msg, &mut stream)?;
+            write_to_async(offer_msg, &mut stream).await?;
 
             println!("File offer sent to mate. Waiting on response.");
 
             // receive file offer from peer
-            let response: FileResponseMsg = read_from(&mut stream)?;
+            let response: FileResponseMsg = read_from_async(&mut stream).await?;
 
             // Total number of files accepted
             let num_accepted = response.get_num_not_rejected();
@@ -198,7 +205,7 @@ fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
             }
 
             if num_accepted != 0 {
-                transfer::send_files(local_files, response, &mut stream)?;
+                transfer::send_files(local_files, response, &mut stream).await?;
             }
         }
 
@@ -206,42 +213,44 @@ fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
         crate::Command::Get { path, code } => {
             let code = PeerCode::from_str(&code)?;
             let (contact_sharer, my_contact) =
-                ContactSharer::enter_room(&mut server_connection, code.room_code, false)?;
+                ContactSharer::enter_room(&mut server_connection, code.room_code, false).await?;
 
             info!("Your contact is:\n{my_contact}");
 
-            let peer_contact = contact_sharer.get_peer_contact()?;
+            let peer_contact = contact_sharer.get_peer_contact().await?;
 
             info!("Your mate's contact is:\n{peer_contact}");
 
-            let (stream, shared_key) = gday_hole_punch::try_connect_to_peer(
-                my_contact.local,
-                peer_contact,
-                &code.shared_secret.to_be_bytes(),
+            let (stream, shared_key) = tokio::time::timeout(
                 HOLE_PUNCH_TIMEOUT,
-            )?;
+                gday_hole_punch::try_connect_to_peer(
+                    my_contact.local,
+                    peer_contact,
+                    &code.shared_secret.to_be_bytes(),
+                ),
+            )
+            .await
+            .map_err(|_| gday_hole_punch::Error::HolePunchTimeout)??;
 
-            let mut stream = EncryptedStream::encrypt_connection(stream, &shared_key)?;
+            let mut stream = EncryptedStream::encrypt_connection(stream, &shared_key).await?;
 
             info!("Established authenticated encrypted connection with peer.");
 
             // receive file offer from peer
-            let offer: FileOfferMsg = read_from(&mut stream)?;
+            let offer: FileOfferMsg = read_from_async(&mut stream).await?;
 
-            let response = ask_receive(&offer, &path)?;
+            let response = ask_receive(&offer, &path).await?;
 
             // respond to the file offer
-            write_to(&response, &mut stream)?;
+            write_to_async(&response, &mut stream).await?;
 
             if response.get_num_not_rejected() == 0 {
                 println!("No files will be downloaded.");
             } else {
-                transfer::receive_files(offer, response, &path, &mut stream)?;
+                transfer::receive_files(offer, response, &path, &mut stream).await?;
             }
         }
     }
-
-    server_connection.notify_tls_close()?;
 
     Ok(())
 }

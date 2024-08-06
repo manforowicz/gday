@@ -4,11 +4,12 @@ use gday_file_transfer::{FileOfferMsg, FileResponseMsg};
 use indicatif::HumanBytes;
 use owo_colors::OwoColorize;
 use std::{io::Write, path::Path};
+use tokio::io::{AsyncBufReadExt, BufReader};
 
 /// Confirms that the user wants to send these `files``.
 ///
 /// If not, returns false.
-pub fn confirm_send(files: &FileOfferMsg) -> std::io::Result<bool> {
+pub async fn confirm_send(files: &FileOfferMsg) -> std::io::Result<bool> {
     // print all the file names and sizes
     println!("{}", "Files to send:".bold());
     for file in &files.files {
@@ -24,7 +25,7 @@ pub fn confirm_send(files: &FileOfferMsg) -> std::io::Result<bool> {
         HumanBytes(total_size).bold()
     );
     std::io::stdout().flush()?;
-    let input = get_lowercase_input()?;
+    let input = get_lowercase_input().await?;
 
     // act on user choice
     if "yes".starts_with(&input) {
@@ -38,7 +39,7 @@ pub fn confirm_send(files: &FileOfferMsg) -> std::io::Result<bool> {
 /// Asks the user which of the files in `offer` to accept.
 ///
 /// `save_dir` is the directory where the files will later be saved.
-pub fn ask_receive(
+pub async fn ask_receive(
     offer: &FileOfferMsg,
     save_dir: &Path,
 ) -> Result<FileResponseMsg, gday_file_transfer::Error> {
@@ -50,7 +51,7 @@ pub fn ask_receive(
         print!("{} ({})", file.short_path.display(), HumanBytes(file.len));
 
         // an interrupted download exists
-        if let Some(local_len) = file.partial_download_exists(save_dir)? {
+        if let Some(local_len) = file.partial_download_exists(save_dir).await? {
             let remaining_len = file.len - local_len;
 
             print!(
@@ -61,7 +62,7 @@ pub fn ask_receive(
             );
 
         // file was already downloaded
-        } else if file.already_exists(save_dir)? {
+        } else if file.already_exists(save_dir).await? {
             print!(" {}", "ALREADY EXISTS".green().bold());
         }
         println!();
@@ -69,7 +70,7 @@ pub fn ask_receive(
 
     println!();
 
-    let new_files = FileResponseMsg::accept_only_new_and_interrupted(offer, save_dir)?;
+    let new_files = FileResponseMsg::accept_only_new_and_interrupted(offer, save_dir).await?;
     let all_files = FileResponseMsg::accept_all_files(offer);
 
     // If there are no existing/interrupted files,
@@ -81,7 +82,7 @@ pub fn ask_receive(
             HumanBytes(offer.get_transfer_size(&new_files)?).bold()
         );
         std::io::stdout().flush()?;
-        let input = get_lowercase_input()?;
+        let input = get_lowercase_input().await?;
 
         if "yes".starts_with(&input) {
             return Ok(all_files);
@@ -106,7 +107,7 @@ pub fn ask_receive(
     print!("{} ", "Choose an option (1, 2, or 3):".bold());
     std::io::stdout().flush()?;
 
-    match get_lowercase_input()?.as_str() {
+    match get_lowercase_input().await?.as_str() {
         // all files
         "1" => Ok(all_files),
         // new/interrupted files
@@ -117,9 +118,18 @@ pub fn ask_receive(
 }
 
 /// Reads a trimmed ascii-lowercase line of input from the user.
-fn get_lowercase_input() -> std::io::Result<String> {
-    let mut response = String::new();
-    std::io::stdin().read_line(&mut response)?;
+async fn get_lowercase_input() -> std::io::Result<String> {
+    let Some(response) = BufReader::new(tokio::io::stdin())
+        .lines()
+        .next_line()
+        .await?
+    else {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::UnexpectedEof,
+            "Couldn't read user input.",
+        ));
+    };
+
     let response = response.trim().to_ascii_lowercase();
     Ok(response)
 }

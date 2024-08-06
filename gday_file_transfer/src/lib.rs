@@ -15,37 +15,41 @@
 //! #   get_file_metas,
 //! #   FileOfferMsg,
 //! #   FileResponseMsg,
-//! #   write_to,
-//! #   read_from,
+//! #   write_to_async,
+//! #   read_from_async,
 //! #   send_files,
 //! #   receive_files,
 //! # };
 //! # use std::path::Path;
-//! # let mut stream = std::collections::VecDeque::new();
+//! #
+//! # let rt = tokio::runtime::Builder::new_current_thread().build().unwrap();
+//! # rt.block_on( async {
+//!
+//! # let (mut stream1, mut stream2) = tokio::io::duplex(64);
 //! #
 //! // Peer A offers files and folders they'd like to send
 //! let paths_to_send = ["folder/to/send/".into(), "a/file.txt".into()];
-//! let files_to_send = get_file_metas(&paths_to_send)?;
+//! let files_to_send = get_file_metas(&paths_to_send).await?;
 //! let offer_msg = FileOfferMsg::from(files_to_send.clone());
-//! write_to(offer_msg, &mut stream)?;
+//! write_to_async(offer_msg, &mut stream1).await?;
 //!
 //! // Peer B responds to the offer
-//! let offer_msg: FileOfferMsg = read_from(&mut stream)?;
+//! let offer_msg: FileOfferMsg = read_from_async(&mut stream2).await?;
 //! let response_msg = FileResponseMsg::accept_only_new_and_interrupted(
 //!     &offer_msg,
 //!     Path::new("save/the/files/here/"),
-//! )?;
-//! write_to(response_msg, &mut stream)?;
+//! ).await?;
+//! write_to_async(response_msg, &mut stream2).await?;
 //!
 //! // Peer A sends the accepted files
-//! let response_msg: FileResponseMsg = read_from(&mut stream)?;
-//! send_files(&files_to_send, &response_msg, &mut stream, |progress| {})?;
+//! let response_msg: FileResponseMsg = read_from_async(&mut stream1).await?;
+//! send_files(&files_to_send, &response_msg, &mut stream1, |progress| {}).await?;
 //!
 //! // Peer B receives the accepted files
 //! let save_path = Path::new("save/the/files/here/");
-//! receive_files(&offer_msg, &response_msg, save_path, &mut stream, |progress| {})?;
-//! #
-//! # Ok::<(), gday_file_transfer::Error>(())
+//! receive_files(&offer_msg, &response_msg, save_path, &mut stream2, |progress| {}).await?;
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! # }).unwrap();
 //! ```
 #![forbid(unsafe_code)]
 #![warn(clippy::all)]
@@ -58,7 +62,9 @@ use std::path::PathBuf;
 use thiserror::Error;
 
 pub use crate::file_meta::{get_file_metas, FileMeta, FileMetaLocal};
-pub use crate::offer::{read_from, write_to, FileOfferMsg, FileResponseMsg};
+pub use crate::offer::{
+    read_from, read_from_async, write_to, write_to_async, FileOfferMsg, FileResponseMsg,
+};
 pub use crate::transfer::{receive_files, send_files, TransferReport};
 
 /// `gday_file_transfer` error.
@@ -84,9 +90,9 @@ pub enum Error {
     /// [`FileOfferMsg`] or [`FileResponseMsg`] was longer than 2^32
     /// bytes when serialized.
     ///
-    /// A message's length header limits it to 2^32 bytes.
-    #[error("Can't serialize JSON message longer than 2^32 bytes")]
-    MsgTooLong,
+    /// Can't send message longer than 2^32 bytes.
+    #[error("Can't send message longer than 2^32 bytes: {0}")]
+    MsgTooLong(#[from] std::num::TryFromIntError),
 
     /// A local file had an unexpected length.
     #[error("A local file changed length between checks.")]

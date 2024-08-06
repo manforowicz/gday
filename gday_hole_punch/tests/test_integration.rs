@@ -2,10 +2,8 @@
 #![warn(clippy::all)]
 
 use gday_hole_punch::{server_connector, try_connect_to_peer, ContactSharer, PeerCode};
-use std::{
-    io::{Read, Write},
-    str::FromStr,
-};
+use std::str::FromStr;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 #[tokio::test]
 async fn test_integration() {
@@ -23,89 +21,94 @@ async fn test_integration() {
 
     let server_addr_1 = server_addrs[0];
 
-    tokio::task::spawn_blocking(move || {
-        let timeout = std::time::Duration::from_secs(5);
+    let timeout = std::time::Duration::from_secs(5);
 
-        // Channel for Peer 1 to send the PeerCode to Peer 2
-        let (code_tx, code_rx) = std::sync::mpsc::channel();
+    // Channel for Peer 1 to send the PeerCode to Peer 2
+    let (code_tx, code_rx) = tokio::sync::oneshot::channel();
 
+    let handle = tokio::spawn(async move {
         //////// Peer 1 ////////
-        std::thread::spawn(move || {
-            // Rendezvous settings
-            let peer_code = PeerCode {
-                server_id: 0,
-                room_code: 123,
-                shared_secret: 456,
-            };
+        // Rendezvous settings
+        let peer_code = PeerCode {
+            server_id: 0,
+            room_code: 123,
+            shared_secret: 456,
+        };
 
-            // Connect to the server
-            let mut server_connection =
-                server_connector::connect_tcp(server_addr_1, timeout).unwrap();
-
-            // Create a room in the server, and get my contact from it
-            let (contact_sharer, my_contact) =
-                ContactSharer::enter_room(&mut server_connection, peer_code.room_code, true).unwrap();
-
-            // Send PeerCode to peer
-            let code_to_share = peer_code.to_string();
-            code_tx.send(code_to_share).unwrap();
-
-            // Wait for the server to send the peer's contact
-            let peer_contact = contact_sharer.get_peer_contact().unwrap();
-
-            // Use TCP hole-punching to connect to the peer,
-            // verify their identity with the shared_secret,
-            // and get a cryptographically-secure shared key
-            let (mut tcp_stream, strong_key) = try_connect_to_peer(
-                my_contact.local,
-                peer_contact,
-                &peer_code.shared_secret.to_be_bytes(),
-                timeout,
-            )
+        // Connect to the server
+        let mut server_connection = server_connector::connect_tcp(server_addr_1, timeout)
+            .await
             .unwrap();
 
-            tcp_stream.write_all(b"Hello peer!").unwrap();
-
-            // never send a secret outside of tests
-            tcp_stream.write_all(&strong_key).unwrap();
-            tcp_stream.flush().unwrap();
-        });
-
-        //////// Peer 2 (on a different computer) ////////
-
-        let received_code = code_rx.recv().unwrap();
-
-        let peer_code = PeerCode::from_str(&received_code).unwrap();
-
-        // Connect to the same server as Peer 1
-        let mut server_connection = server_connector::connect_tcp(server_addr_1, timeout).unwrap();
-
-        // Join the same room in the server, and get my local contact
+        // Create a room in the server, and get my contact from it
         let (contact_sharer, my_contact) =
-            ContactSharer::enter_room(&mut server_connection, peer_code.room_code, false).unwrap();
+            ContactSharer::enter_room(&mut server_connection, peer_code.room_code, true)
+                .await
+                .unwrap();
 
-        // Get peer's contact
-        let peer_contact = contact_sharer.get_peer_contact().unwrap();
+        // Send PeerCode to peer
+        let code_to_share = peer_code.to_string();
+        code_tx.send(code_to_share).unwrap();
 
-        // Use hole-punching to connect to peer.
+        // Wait for the server to send the peer's contact
+        let peer_contact = contact_sharer.get_peer_contact().await.unwrap();
+
+        // Use TCP hole-punching to connect to the peer,
+        // verify their identity with the shared_secret,
+        // and get a cryptographically-secure shared key
         let (mut tcp_stream, strong_key) = try_connect_to_peer(
             my_contact.local,
             peer_contact,
             &peer_code.shared_secret.to_be_bytes(),
-            timeout,
         )
+        .await
         .unwrap();
 
-        // Ensure the direct connection works
-        let mut received = [0_u8; 11];
-        tcp_stream.read_exact(&mut received).unwrap();
-        assert_eq!(&received, b"Hello peer!");
+        tcp_stream.write_all(b"Hello peer!").await.unwrap();
 
-        // Ensure the peer has the same strong key
-        let mut received = [0_u8; 32];
-        tcp_stream.read_exact(&mut received).unwrap();
-        assert_eq!(received, strong_key);
-    })
+        // never send a secret outside of tests
+        tcp_stream.write_all(&strong_key).await.unwrap();
+        tcp_stream.flush().await.unwrap();
+    });
+
+    //////// Peer 2 (on a different computer) ////////
+
+    let received_code = code_rx.await.unwrap();
+
+    let peer_code = PeerCode::from_str(&received_code).unwrap();
+
+    // Connect to the same server as Peer 1
+    let mut server_connection = server_connector::connect_tcp(server_addr_1, timeout)
+        .await
+        .unwrap();
+
+    // Join the same room in the server, and get my local contact
+    let (contact_sharer, my_contact) =
+        ContactSharer::enter_room(&mut server_connection, peer_code.room_code, false)
+            .await
+            .unwrap();
+
+    // Get peer's contact
+    let peer_contact = contact_sharer.get_peer_contact().await.unwrap();
+
+    // Use hole-punching to connect to peer.
+    let (mut tcp_stream, strong_key) = try_connect_to_peer(
+        my_contact.local,
+        peer_contact,
+        &peer_code.shared_secret.to_be_bytes(),
+    )
     .await
     .unwrap();
+
+    // Ensure the direct connection works
+    let mut received = [0_u8; 11];
+    tcp_stream.read_exact(&mut received).await.unwrap();
+    assert_eq!(&received, b"Hello peer!");
+
+    // Ensure the peer has the same strong key
+    let mut received = [0_u8; 32];
+    tcp_stream.read_exact(&mut received).await.unwrap();
+    assert_eq!(received, strong_key);
+
+    handle.await.unwrap();
 }

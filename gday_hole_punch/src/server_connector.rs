@@ -7,11 +7,8 @@ use socket2::SockRef;
 use std::fmt::Debug;
 use std::io::ErrorKind;
 use std::net::SocketAddr::{V4, V6};
-use std::{
-    net::{SocketAddr, TcpStream, ToSocketAddrs},
-    sync::Arc,
-    time::Duration,
-};
+use std::{net::SocketAddr, sync::Arc, time::Duration};
+use tokio::net::{TcpStream, ToSocketAddrs};
 
 pub use gday_contact_exchange_protocol::DEFAULT_PORT;
 
@@ -52,11 +49,12 @@ pub struct ServerInfo {
 }
 
 /// A TCP or TLS stream to a server.
+#[pin_project::pin_project(project = EnumProj)]
 #[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
 pub enum ServerStream {
-    TCP(std::net::TcpStream),
-    TLS(rustls::StreamOwned<rustls::ClientConnection, std::net::TcpStream>),
+    TCP(#[pin] tokio::net::TcpStream),
+    TLS(#[pin] tokio_rustls::client::TlsStream<tokio::net::TcpStream>),
 }
 
 impl ServerStream {
@@ -64,7 +62,7 @@ impl ServerStream {
     pub fn local_addr(&self) -> std::io::Result<std::net::SocketAddr> {
         match self {
             Self::TCP(tcp) => tcp.local_addr(),
-            Self::TLS(tls) => tls.get_ref().local_addr(),
+            Self::TLS(tls) => tls.get_ref().0.local_addr(),
         }
     }
 
@@ -74,7 +72,7 @@ impl ServerStream {
     fn enable_reuse(&self) {
         let tcp_stream = match self {
             Self::TCP(tcp) => tcp,
-            Self::TLS(tls) => tls.get_ref(),
+            Self::TLS(tls) => tls.get_ref().0,
         };
 
         let sock = SockRef::from(tcp_stream);
@@ -86,27 +84,48 @@ impl ServerStream {
     }
 }
 
-impl std::io::Read for ServerStream {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        match self {
-            Self::TCP(tcp) => tcp.read(buf),
-            Self::TLS(tls) => tls.read(buf),
+impl tokio::io::AsyncRead for ServerStream {
+    fn poll_read(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &mut tokio::io::ReadBuf<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        match self.project() {
+            EnumProj::TCP(tcp) => tcp.poll_read(cx, buf),
+            EnumProj::TLS(tls) => tls.poll_read(cx, buf),
         }
     }
 }
 
-impl std::io::Write for ServerStream {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        match self {
-            Self::TCP(tcp) => tcp.write(buf),
-            Self::TLS(tls) => tls.write(buf),
+impl tokio::io::AsyncWrite for ServerStream {
+    fn poll_write(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &[u8],
+    ) -> std::task::Poll<Result<usize, std::io::Error>> {
+        match self.project() {
+            EnumProj::TCP(tcp) => tcp.poll_write(cx, buf),
+            EnumProj::TLS(tls) => tls.poll_write(cx, buf),
         }
     }
 
-    fn flush(&mut self) -> std::io::Result<()> {
-        match self {
-            Self::TCP(tcp) => tcp.flush(),
-            Self::TLS(tls) => tls.flush(),
+    fn poll_flush(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), std::io::Error>> {
+        match self.project() {
+            EnumProj::TCP(tcp) => tcp.poll_flush(cx),
+            EnumProj::TLS(tls) => tls.poll_flush(cx),
+        }
+    }
+
+    fn poll_shutdown(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), std::io::Error>> {
+        match self.project() {
+            EnumProj::TCP(tcp) => tcp.poll_shutdown(cx),
+            EnumProj::TLS(tls) => tls.poll_shutdown(cx),
         }
     }
 }
@@ -188,23 +207,6 @@ impl ServerConnection {
 
         Ok(contact)
     }
-
-    /// Sends a `close_notify` warning over TLS.
-    /// Does nothing for TCP connections.
-    ///
-    /// This should be called before dropping
-    /// [`ServerConnection`].
-    pub fn notify_tls_close(&mut self) -> std::io::Result<()> {
-        if let Some(ServerStream::TLS(tls)) = &mut self.v4 {
-            tls.conn.send_close_notify();
-            tls.conn.complete_io(&mut tls.sock)?;
-        }
-        if let Some(ServerStream::TLS(tls)) = &mut self.v6 {
-            tls.conn.send_close_notify();
-            tls.conn.complete_io(&mut tls.sock)?;
-        }
-        Ok(())
-    }
 }
 
 /// In random order, sequentially try connecting to the given `servers`.
@@ -218,13 +220,13 @@ impl ServerConnection {
 /// - The `id` of the server that [`ServerConnection`] connected to.
 ///
 /// Returns an error if all connection attempts failed.
-pub fn connect_to_random_server(
+pub async fn connect_to_random_server(
     servers: &[ServerInfo],
     timeout: Duration,
 ) -> Result<(ServerConnection, u64), Error> {
     let preferred: Vec<&ServerInfo> = servers.iter().filter(|s| s.prefer).collect();
     let preferred_names: Vec<&str> = preferred.iter().map(|s| s.domain_name).collect();
-    let (conn, i) = connect_to_random_domain_name(&preferred_names, timeout)?;
+    let (conn, i) = connect_to_random_domain_name(&preferred_names, timeout).await?;
     Ok((conn, preferred[i].id))
 }
 
@@ -234,7 +236,7 @@ pub fn connect_to_random_server(
 ///
 /// Returns an error if `servers` contains no server with id `server_id` or connecting
 /// to the server fails.
-pub fn connect_to_server_id(
+pub async fn connect_to_server_id(
     servers: &[ServerInfo],
     server_id: u64,
     timeout: Duration,
@@ -242,7 +244,7 @@ pub fn connect_to_server_id(
     let Some(server) = servers.iter().find(|server| server.id == server_id) else {
         return Err(Error::ServerIDNotFound(server_id));
     };
-    connect_tls(server.domain_name.to_string(), DEFAULT_PORT, timeout)
+    connect_tls(server.domain_name.to_string(), DEFAULT_PORT, timeout).await
 }
 
 /// In random order, sequentially tries connecting to the given `domain_names`.
@@ -254,7 +256,7 @@ pub fn connect_to_server_id(
 /// - The index of the address in `addresses` that the [`ServerConnection`] connected to.
 ///
 /// Returns an error only if all connection attempts failed.
-pub fn connect_to_random_domain_name(
+pub async fn connect_to_random_domain_name(
     domain_names: &[&str],
     timeout: Duration,
 ) -> Result<(ServerConnection, usize), Error> {
@@ -265,7 +267,7 @@ pub fn connect_to_random_domain_name(
 
     for i in indices {
         let server = domain_names[i];
-        let streams = match connect_tls(server.to_string(), DEFAULT_PORT, timeout) {
+        let streams = match connect_tls(server.to_string(), DEFAULT_PORT, timeout).await {
             Ok(streams) => streams,
             Err(err) => {
                 recent_error = err;
@@ -284,7 +286,7 @@ pub fn connect_to_random_domain_name(
 /// - Gives up connecting to each TCP address after `timeout` time.
 /// - Returns an error if every attempt failed.
 /// - Returns an error for any issues with TLS.
-pub fn connect_tls(
+pub async fn connect_tls(
     domain_name: String,
     port: u16,
     timeout: Duration,
@@ -292,28 +294,33 @@ pub fn connect_tls(
     debug!("Connecting to server '{domain_name}:{port}'");
 
     // Connect to the server over TCP
-    let mut connection: ServerConnection = connect_tcp((domain_name.as_str(), port), timeout)?;
+    let mut connection: ServerConnection =
+        connect_tcp((domain_name.as_str(), port), timeout).await?;
 
     // wrap the DNS name of the server
-    let name = rustls::pki_types::ServerName::try_from(domain_name)?;
+    let name = tokio_rustls::rustls::pki_types::ServerName::try_from(domain_name)?;
 
     // get the TLS config
     let tls_config = get_tls_config();
+
+    let connector = tokio_rustls::TlsConnector::from(tls_config);
 
     if let Some(tcp_v4) = connection.v4 {
         let ServerStream::TCP(tcp_v4) = tcp_v4 else {
             unreachable!()
         };
-        let conn = rustls::ClientConnection::new(tls_config.clone(), name.clone())?;
-        connection.v4 = Some(ServerStream::TLS(rustls::StreamOwned::new(conn, tcp_v4)))
+        connection.v4 = Some(ServerStream::TLS(
+            connector.connect(name.clone(), tcp_v4).await?,
+        ));
     }
 
     if let Some(tcp_v6) = connection.v6 {
         let ServerStream::TCP(tcp_v6) = tcp_v6 else {
             unreachable!()
         };
-        let conn = rustls::ClientConnection::new(tls_config, name)?;
-        connection.v6 = Some(ServerStream::TLS(rustls::StreamOwned::new(conn, tcp_v6)))
+        connection.v6 = Some(ServerStream::TLS(
+            connector.connect(name.clone(), tcp_v6).await?,
+        ));
     }
 
     Ok(connection)
@@ -324,14 +331,14 @@ pub fn connect_tls(
 /// - Returns a [`ServerConnection`] with all the successful TCP streams.
 /// - Gives up connecting to each TCP address after `timeout` time.
 /// - Returns an error if every attempt failed.
-pub fn connect_tcp(
+pub async fn connect_tcp(
     addrs: impl ToSocketAddrs + Debug,
     timeout: Duration,
 ) -> std::io::Result<ServerConnection> {
     // Try to get an IPv4 and IPv6 socket address.
     let mut addr_v4 = None;
     let mut addr_v6 = None;
-    for addr in addrs.to_socket_addrs()? {
+    for addr in tokio::net::lookup_host(&addrs).await? {
         if addr.is_ipv6() && addr_v6.is_none() {
             addr_v6 = Some(addr);
         } else if addr.is_ipv4() && addr_v4.is_none() {
@@ -342,17 +349,39 @@ pub fn connect_tcp(
     }
 
     // try connecting to the first IPv4 address
-    let tcp_v4 = addr_v4.map(|addr| TcpStream::connect_timeout(&addr, timeout));
+    let tcp_v4 = if let Some(addr) = addr_v4 {
+        if let Ok(result) = tokio::time::timeout(timeout, TcpStream::connect(addr)).await {
+            Some(result)
+        } else {
+            Some(Err(std::io::Error::new(
+                ErrorKind::TimedOut,
+                format!("Timed out while trying to connect to {addrs:?}."),
+            )))
+        }
+    } else {
+        None
+    };
 
     // try connecting to the first IPv6 addresss
-    let tcp_v6 = addr_v6.map(|addr| TcpStream::connect_timeout(&addr, timeout));
+    let tcp_v6 = if let Some(addr) = addr_v6 {
+        if let Ok(result) = tokio::time::timeout(timeout, TcpStream::connect(addr)).await {
+            Some(result)
+        } else {
+            Some(Err(std::io::Error::new(
+                ErrorKind::TimedOut,
+                format!("Timed out while trying to connect to {addrs:?}."),
+            )))
+        }
+    } else {
+        None
+    };
 
     // return an error if couldn't establish any connections
     if !matches!(tcp_v4, Some(Ok(_))) && !matches!(tcp_v6, Some(Ok(_))) {
-        if let Some(Err(err_v4)) = tcp_v4 {
-            return Err(err_v4);
-        } else if let Some(Err(err_v6)) = tcp_v6 {
-            return Err(err_v6);
+        if let Some(Err(err)) = tcp_v4 {
+            return Err(err);
+        } else if let Some(Err(err)) = tcp_v6 {
+            return Err(err);
         } else {
             return Err(std::io::Error::new(
                 ErrorKind::NotFound,
@@ -378,12 +407,13 @@ pub fn connect_tcp(
 }
 
 /// Get default TLS config
-fn get_tls_config() -> Arc<rustls::ClientConfig> {
-    let root_store =
-        rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+fn get_tls_config() -> Arc<tokio_rustls::rustls::ClientConfig> {
+    let root_store = tokio_rustls::rustls::RootCertStore::from_iter(
+        webpki_roots::TLS_SERVER_ROOTS.iter().cloned(),
+    );
 
     Arc::new(
-        rustls::ClientConfig::builder()
+        tokio_rustls::rustls::ClientConfig::builder()
             .with_root_certificates(root_store)
             .with_no_client_auth(),
     )

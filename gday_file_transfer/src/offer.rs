@@ -4,6 +4,7 @@ use std::{
     io::{Read, Write},
     path::Path,
 };
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 /// A [`Vec`] of file metadatas that this peer is offering
 /// to send. The other peer should reply with [`FileResponseMsg`].
@@ -93,14 +94,14 @@ impl FileResponseMsg {
     /// by partially accepting files.
     ///
     /// Rejects all other files.
-    pub fn accept_only_full_new_files(
+    pub async fn accept_only_full_new_files(
         offer: &FileOfferMsg,
         save_dir: &Path,
     ) -> Result<Self, Error> {
         let mut response = Vec::with_capacity(offer.files.len());
 
         for file_meta in &offer.files {
-            if file_meta.already_exists(save_dir)? {
+            if file_meta.already_exists(save_dir).await? {
                 // reject
                 response.push(None);
             } else {
@@ -116,14 +117,14 @@ impl FileResponseMsg {
     /// whose downloads to `save_dir` have been previously interrupted.
     ///
     /// Rejects all other files.
-    pub fn accept_only_remaining_portions(
+    pub async fn accept_only_remaining_portions(
         offer: &FileOfferMsg,
         save_dir: &Path,
     ) -> Result<Self, Error> {
         let mut response = Vec::with_capacity(offer.files.len());
 
         for offered in &offer.files {
-            if let Some(existing_size) = offered.partial_download_exists(save_dir)? {
+            if let Some(existing_size) = offered.partial_download_exists(save_dir).await? {
                 response.push(Some(existing_size));
             } else {
                 response.push(None);
@@ -139,16 +140,16 @@ impl FileResponseMsg {
     /// or have a different size.
     ///
     /// Rejects all other files.
-    pub fn accept_only_new_and_interrupted(
+    pub async fn accept_only_new_and_interrupted(
         offer: &FileOfferMsg,
         save_dir: &Path,
     ) -> Result<FileResponseMsg, Error> {
         let mut response = Vec::with_capacity(offer.files.len());
 
         for offered in &offer.files {
-            if let Some(existing_size) = offered.partial_download_exists(save_dir)? {
+            if let Some(existing_size) = offered.partial_download_exists(save_dir).await? {
                 response.push(Some(existing_size));
-            } else if offered.already_exists(save_dir)? {
+            } else if offered.already_exists(save_dir).await? {
                 response.push(None);
             } else {
                 response.push(Some(0));
@@ -181,23 +182,36 @@ impl FileResponseMsg {
     }
 }
 
-/// Write `msg` to `writer` using [`serde_json`], and flush.
+/// Writes `msg` to `writer` using [`serde_json`], and flushes.
 ///
 /// Prefixes the message with 4 big-endian bytes that hold its length.
 pub fn write_to(msg: impl Serialize, writer: &mut impl Write) -> Result<(), Error> {
     let vec = serde_json::to_vec(&msg)?;
-    let Ok(len_byte) = u32::try_from(vec.len()) else {
-        return Err(Error::MsgTooLong);
-    };
+    let len_byte = u32::try_from(vec.len())?;
     writer.write_all(&len_byte.to_be_bytes())?;
     writer.write_all(&vec)?;
     writer.flush()?;
     Ok(())
 }
 
-/// Read a message from `reader` using [`serde_json`].
+/// Asynchronously writes `msg` to `writer` using [`serde_json`], and flushes.
 ///
-/// Assumes the message is prefixed with 4 big-endian bytes that hold its length.
+/// Prefixes the message with a 4 big-endian bytes that hold its length.
+pub async fn write_to_async(
+    msg: impl Serialize,
+    writer: &mut (impl AsyncWrite + Unpin),
+) -> Result<(), Error> {
+    let vec = serde_json::to_vec(&msg)?;
+    let len_byte = u32::try_from(vec.len())?;
+    writer.write_all(&len_byte.to_be_bytes()).await?;
+    writer.write_all(&vec).await?;
+    writer.flush().await?;
+    Ok(())
+}
+
+/// Reads a message from `reader` using [`serde_json`].
+///
+/// Assumes the message is prefixed with 4 big-endian bytes that holds its length.
 pub fn read_from<T: DeserializeOwned>(reader: &mut impl Read) -> Result<T, Error> {
     let mut len = [0_u8; 4];
     reader.read_exact(&mut len)?;
@@ -205,5 +219,20 @@ pub fn read_from<T: DeserializeOwned>(reader: &mut impl Read) -> Result<T, Error
 
     let mut buf = vec![0; len];
     reader.read_exact(&mut buf)?;
+    Ok(serde_json::from_reader(&buf[..])?)
+}
+
+/// Asynchronously reads a message from `reader` using [`serde_json`].
+///
+/// Assumes the message is prefixed with 4 big-endian bytes that hold its length.
+pub async fn read_from_async<T: DeserializeOwned>(
+    reader: &mut (impl AsyncRead + Unpin),
+) -> Result<T, Error> {
+    let mut len = [0_u8; 4];
+    reader.read_exact(&mut len).await?;
+    let len = u32::from_be_bytes(len) as usize;
+
+    let mut buf = vec![0; len];
+    reader.read_exact(&mut buf).await?;
     Ok(serde_json::from_reader(&buf[..])?)
 }

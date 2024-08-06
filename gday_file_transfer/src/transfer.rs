@@ -1,7 +1,12 @@
+use tokio::io::{
+    AsyncBufRead, AsyncRead, AsyncReadExt, AsyncSeekExt, AsyncWrite, AsyncWriteExt, BufWriter,
+};
+
 use crate::{Error, FileMeta, FileMetaLocal, FileOfferMsg, FileResponseMsg};
-use std::fs::{File, OpenOptions};
-use std::io::{BufRead, BufWriter, Read, Seek, SeekFrom, Write};
+use std::io::SeekFrom;
 use std::path::Path;
+use std::pin::Pin;
+use std::task::{ready, Context, Poll};
 
 const FILE_BUFFER_SIZE: usize = 1_000_000;
 
@@ -23,10 +28,10 @@ pub struct TransferReport {
 /// called with [`TransferReport`] to report progress.
 ///
 /// Transfers the accepted files in order, sequentially, back-to-back.
-pub fn send_files(
+pub async fn send_files(
     offer: &[FileMetaLocal],
     response: &FileResponseMsg,
-    writer: impl Write,
+    writer: impl AsyncWrite + Unpin,
     progress_callback: impl FnMut(&TransferReport),
 ) -> Result<(), Error> {
     let files: Vec<(&FileMetaLocal, u64)> = offer
@@ -57,22 +62,22 @@ pub fn send_files(
         // report the file path
         writer.progress.current_file.clone_from(&offer.short_path);
 
-        let mut file = File::open(&offer.local_path)?;
+        let mut file = tokio::fs::File::open(&offer.local_path).await?;
 
         // confirm file length matches metadata length
-        if file.metadata()?.len() != offer.len {
+        if file.metadata().await?.len() != offer.len {
             return Err(Error::UnexpectedFileLen);
         }
 
         // copy the file into the writer
-        file.seek(SeekFrom::Start(start))?;
-        std::io::copy(&mut file, &mut writer)?;
+        file.seek(SeekFrom::Start(start)).await?;
+        tokio::io::copy(&mut file, &mut writer).await?;
 
         // report the number of processed files
         writer.progress.processed_files += 1;
     }
 
-    writer.flush()?;
+    writer.flush().await?;
 
     Ok(())
 }
@@ -87,11 +92,11 @@ pub fn send_files(
 /// called with [`TransferReport`] to report progress.
 ///
 /// The accepted files must be sent in order, sequentially, back-to-back.
-pub fn receive_files(
+pub async fn receive_files(
     offer: &FileOfferMsg,
     response: &FileResponseMsg,
     save_path: &Path,
-    reader: impl Read,
+    reader: impl AsyncRead + Unpin,
     progress_callback: impl FnMut(&TransferReport),
 ) -> Result<(), Error> {
     let files: Vec<(&FileMeta, u64)> = offer
@@ -126,9 +131,9 @@ pub fn receive_files(
         if start == 0 {
             // create a directory and TMP file
             if let Some(parent) = tmp_path.parent() {
-                std::fs::create_dir_all(parent)?;
+                tokio::fs::create_dir_all(parent).await?;
             }
-            let file = File::create(&tmp_path)?;
+            let file = tokio::fs::File::create(&tmp_path).await?;
 
             // buffer the writer
             let buf_size = std::cmp::min(FILE_BUFFER_SIZE, offer.len as usize);
@@ -138,13 +143,16 @@ pub fn receive_files(
             let mut reader = (&mut reader).take(offer.len);
 
             // copy from the reader into the file
-            std::io::copy(&mut reader, &mut file)?;
+            tokio::io::copy(&mut reader, &mut file).await?;
 
         // resume interrupted download
         } else {
             // open the partially downloaded file in append mode
-            let file = OpenOptions::new().append(true).open(&tmp_path)?;
-            if file.metadata()?.len() != start {
+            let file = tokio::fs::OpenOptions::new()
+                .append(true)
+                .open(&tmp_path)
+                .await?;
+            if file.metadata().await?.len() != start {
                 return Err(Error::UnexpectedFileLen);
             }
 
@@ -156,10 +164,10 @@ pub fn receive_files(
             let mut reader = (&mut reader).take(offer.len - start);
 
             // copy from the reader into the file
-            std::io::copy(&mut reader, &mut file)?;
+            tokio::io::copy(&mut reader, &mut file).await?;
         }
         reader.progress.processed_files += 1;
-        std::fs::rename(tmp_path, offer.get_unoccupied_save_path(save_path)?)?;
+        tokio::fs::rename(tmp_path, offer.get_unoccupied_save_path(save_path).await?).await?;
     }
 
     Ok(())
@@ -167,11 +175,13 @@ pub fn receive_files(
 
 /// Wraps an IO stream. Calls `progress_callback` on each
 /// read/write to report progress.
+#[pin_project::pin_project]
 struct ProgressWrapper<T, F: FnMut(&TransferReport)> {
     /// The callback function called to report progress
     progress_callback: F,
 
     /// The inner IO stream
+    #[pin]
     inner_io: T,
 
     /// The current progress of the file transfer.
@@ -192,41 +202,57 @@ impl<T, F: FnMut(&TransferReport)> ProgressWrapper<T, F> {
             },
         }
     }
+}
 
-    /// Increment the number of bytes processed
-    fn inc_bytes_processed(&mut self, bytes: usize) {
-        self.progress.processed_bytes += bytes as u64;
-        (self.progress_callback)(&self.progress)
+impl<T: AsyncWrite, F: FnMut(&TransferReport)> AsyncWrite for ProgressWrapper<T, F> {
+    fn poll_write(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<Result<usize, std::io::Error>> {
+        let me = self.project();
+        let amt = ready!(me.inner_io.poll_write(cx, buf))?;
+        me.progress.processed_bytes += amt as u64;
+        (me.progress_callback)(me.progress);
+        Poll::Ready(Ok(amt))
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), std::io::Error>> {
+        self.project().inner_io.poll_flush(cx)
+    }
+
+    fn poll_shutdown(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<(), std::io::Error>> {
+        self.project().inner_io.poll_shutdown(cx)
     }
 }
 
-impl<T: Write, F: FnMut(&TransferReport)> Write for ProgressWrapper<T, F> {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        let amt = self.inner_io.write(buf)?;
-        self.inc_bytes_processed(amt);
-        Ok(amt)
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        self.inner_io.flush()
-    }
-}
-
-impl<T: Read, F: FnMut(&TransferReport)> Read for ProgressWrapper<T, F> {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        let amt = self.inner_io.read(buf)?;
-        self.inc_bytes_processed(amt);
-        Ok(amt)
+impl<T: AsyncRead, F: FnMut(&TransferReport)> AsyncRead for ProgressWrapper<T, F> {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut tokio::io::ReadBuf<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        let me = self.project();
+        let filled = buf.filled().len();
+        ready!(me.inner_io.poll_read(cx, buf))?;
+        me.progress.processed_bytes += (buf.filled().len() - filled) as u64;
+        (me.progress_callback)(me.progress);
+        Poll::Ready(Ok(()))
     }
 }
 
-impl<T: BufRead, F: FnMut(&TransferReport)> BufRead for ProgressWrapper<T, F> {
-    fn fill_buf(&mut self) -> std::io::Result<&[u8]> {
-        self.inner_io.fill_buf()
+impl<T: AsyncBufRead, F: FnMut(&TransferReport)> AsyncBufRead for ProgressWrapper<T, F> {
+    fn consume(self: Pin<&mut Self>, amt: usize) {
+        let me = self.project();
+        me.inner_io.consume(amt);
+        me.progress.processed_bytes += amt as u64;
+        (me.progress_callback)(me.progress);
     }
 
-    fn consume(&mut self, amt: usize) {
-        self.inner_io.consume(amt);
-        self.inc_bytes_processed(amt);
+    fn poll_fill_buf(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<&[u8]>> {
+        self.project().inner_io.poll_fill_buf(cx)
     }
 }

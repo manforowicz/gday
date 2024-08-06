@@ -92,7 +92,6 @@ impl GdayApp {
 
         ui.label("Example: 1.1C30.C71E.A");
 
-
         ui.checkbox(&mut self.custom_server_used, "Use a custom server");
 
         if self.custom_server_used {
@@ -105,7 +104,10 @@ impl GdayApp {
                     ui.label("Server port (default: 2311)");
                     ui.text_edit_singleline(&mut self.custom_server.port);
                 });
-                ui.checkbox(&mut self.custom_server.encrypted, "Encrypt using TLS? (default: Yes)");
+                ui.checkbox(
+                    &mut self.custom_server.encrypted,
+                    "Encrypt using TLS? (default: Yes)",
+                );
             });
         }
 

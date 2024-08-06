@@ -1,8 +1,8 @@
 #![forbid(unsafe_code)]
 #![warn(clippy::all)]
 use gday_file_transfer::{
-    get_file_metas, read_from, receive_files, send_files, write_to, FileMetaLocal, FileOfferMsg,
-    FileResponseMsg,
+    get_file_metas, read_from_async, receive_files, send_files, write_to_async, FileMetaLocal,
+    FileOfferMsg, FileResponseMsg,
 };
 use std::fs::{self, create_dir_all};
 use std::io::Write;
@@ -55,45 +55,47 @@ fn make_test_dir() -> tempfile::TempDir {
 
 /// Confirm that [`get_file_metas()`] returns errors
 /// when it should.
-#[test]
-fn test_file_metas_errors() {
+#[tokio::test]
+async fn test_file_metas_errors() {
     let test_dir = make_test_dir();
     let dir_path = test_dir.path();
 
     // trying to get metadata about file that doesn't exist
     assert!(matches!(
-        get_file_metas(&[dir_path.join("dir/non-existent.txt")]),
+        get_file_metas(&[dir_path.join("dir/non-existent.txt")]).await,
         Err(gday_file_transfer::Error::IO(..))
     ));
 
     // both paths end in the same name.
     // this would cause confusion with FileMetaLocal.short_path
     assert!(matches!(
-        get_file_metas(&[dir_path.join("file1"), dir_path.join("dir/file1")]),
+        get_file_metas(&[dir_path.join("file1"), dir_path.join("dir/file1")]).await,
         Err(gday_file_transfer::Error::PathsHaveSameName(..))
     ));
 
     // one path is prefix of another. that's an error!
     assert!(matches!(
-        get_file_metas(&[dir_path.to_path_buf(), dir_path.join("dir")]),
+        get_file_metas(&[dir_path.to_path_buf(), dir_path.join("dir")]).await,
         Err(gday_file_transfer::Error::PathIsPrefix(..))
     ));
 
     // one path is prefix of another. that's an error!
     assert!(matches!(
-        get_file_metas(&[dir_path.join("dir"), dir_path.to_path_buf()]),
+        get_file_metas(&[dir_path.join("dir"), dir_path.to_path_buf()]).await,
         Err(gday_file_transfer::Error::PathIsPrefix(..))
     ));
 }
 
 /// Confirm that [`get_file_metas()`] returns
 /// the correct [`FileMetaLocal`] for the whole directory.
-#[test]
-fn test_get_file_metas_1() {
+#[tokio::test]
+async fn test_get_file_metas_1() {
     let test_dir = make_test_dir();
     let dir_path = test_dir.path();
     let dir_name = PathBuf::from(dir_path.file_name().unwrap());
-    let mut result = gday_file_transfer::get_file_metas(&[dir_path.to_path_buf()]).unwrap();
+    let mut result = gday_file_transfer::get_file_metas(&[dir_path.to_path_buf()])
+        .await
+        .unwrap();
 
     let mut expected = [
         FileMetaLocal {
@@ -154,8 +156,8 @@ fn test_get_file_metas_1() {
 
 /// Confirm that [`get_file_metas()`] returns
 /// the correct [`FileMetaLocal`] for multiple files and directories.
-#[test]
-fn test_get_file_metas_2() {
+#[tokio::test]
+async fn test_get_file_metas_2() {
     let test_dir = make_test_dir();
     let dir_path = test_dir.path();
 
@@ -164,6 +166,7 @@ fn test_get_file_metas_2() {
         dir_path.join("dir/subdir2/file1"),
         dir_path.join("dir/subdir2/file2.txt"),
     ])
+    .await
     .unwrap();
 
     let mut expected = [
@@ -204,10 +207,10 @@ fn test_get_file_metas_2() {
 }
 
 /// Test the file transfer.
-#[test]
-fn file_transfer() {
+#[tokio::test]
+async fn file_transfer() {
     // Listens on the loopback address
-    let listener = std::net::TcpListener::bind("[::1]:0").unwrap();
+    let listener = tokio::net::TcpListener::bind("[::1]:0").await.unwrap();
     let pipe_addr = listener.local_addr().unwrap();
 
     // dir_a contains test files, some of which
@@ -216,8 +219,8 @@ fn file_transfer() {
     let dir_a_path = dir_a.path().to_path_buf();
 
     // A thread that will send data to the loopback address
-    std::thread::spawn(move || {
-        let mut stream_a = std::net::TcpStream::connect(pipe_addr).unwrap();
+    tokio::spawn(async move {
+        let mut stream_a = tokio::net::TcpStream::connect(pipe_addr).await.unwrap();
 
         // offer to send file1 and dir
         let paths = [
@@ -225,15 +228,17 @@ fn file_transfer() {
             dir_a_path.join("file2.txt"),
             dir_a_path.join("dir/subdir1"),
         ];
-        let file_metas = get_file_metas(&paths).unwrap();
+        let file_metas = get_file_metas(&paths).await.unwrap();
         let file_offer = FileOfferMsg::from(file_metas.clone());
 
         // send offer, and read response
-        write_to(file_offer, &mut stream_a).unwrap();
-        let response: FileResponseMsg = read_from(&mut stream_a).unwrap();
+        write_to_async(file_offer, &mut stream_a).await.unwrap();
+        let response: FileResponseMsg = read_from_async(&mut stream_a).await.unwrap();
 
         // send the files
-        send_files(&file_metas, &response, &mut stream_a, |_| {}).unwrap();
+        send_files(&file_metas, &response, &mut stream_a, |_| {})
+            .await
+            .unwrap();
     });
 
     // dir_b will receive the files in
@@ -256,19 +261,20 @@ fn file_transfer() {
     write!(f, "This is dir/subdi").unwrap();
 
     // Stream that will receive the files from the loopback address.
-    let mut stream_b = listener.accept().unwrap().0;
+    let mut stream_b = listener.accept().await.unwrap().0;
 
     // read the file offer message
-    let file_offer: FileOfferMsg = read_from(&mut stream_b).unwrap();
+    let file_offer: FileOfferMsg = read_from_async(&mut stream_b).await.unwrap();
 
-    let response_msg =
-        FileResponseMsg::accept_only_new_and_interrupted(&file_offer, dir_b.path()).unwrap();
+    let response_msg = FileResponseMsg::accept_only_new_and_interrupted(&file_offer, dir_b.path())
+        .await
+        .unwrap();
 
     assert_eq!(response_msg.get_num_not_rejected(), 3);
     assert_eq!(response_msg.get_num_partially_accepted(), 1);
     assert_eq!(response_msg.get_num_fully_accepted(), 2);
 
-    write_to(&response_msg, &mut stream_b).unwrap();
+    write_to_async(&response_msg, &mut stream_b).await.unwrap();
 
     receive_files(
         &file_offer,
@@ -277,6 +283,7 @@ fn file_transfer() {
         &mut stream_b,
         |_| {},
     )
+    .await
     .unwrap();
 
     // confirm that the offered and accepted

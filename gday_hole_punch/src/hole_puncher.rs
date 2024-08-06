@@ -10,7 +10,7 @@ use tokio::{
 };
 
 /// Alias to the return type of [`try_connect_to_peer()`].
-type PeerConnection = (std::net::TcpStream, [u8; 32]);
+type PeerConnection = (tokio::net::TcpStream, [u8; 32]);
 
 /// How often a connection attempt is made during hole punching.
 const RETRY_INTERVAL: Duration = Duration::from_millis(200);
@@ -31,42 +31,7 @@ const RETRY_INTERVAL: Duration = Duration::from_millis(200);
 /// - An authenticated [`std::net::TcpStream`] connected to the other peer.
 /// - A `[u8; 32]` shared key that was derived using
 ///     [SPAKE2](https://docs.rs/spake2/) and the weaker `shared_secret`.
-pub fn try_connect_to_peer(
-    local_contact: Contact,
-    peer_contact: FullContact,
-    shared_secret: &[u8],
-    timeout: std::time::Duration,
-) -> Result<PeerConnection, Error> {
-    // Instantiate an asynchronous runtime
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_io()
-        .enable_time()
-        .build()
-        .expect("Tokio async runtime error.");
-
-    // Run the asynchronous hole-punch function.
-    // It is asynchronous to simplify the process
-    // of trying multiple connections concurrently.
-    let result = runtime.block_on(async {
-        tokio::time::timeout(
-            timeout,
-            hole_punch(local_contact, peer_contact, shared_secret),
-        )
-        .await
-    });
-
-    match result {
-        // function succeeded, or ended
-        // early with error
-        Ok(result) => result,
-
-        // function timed out
-        Err(..) => Err(Error::HolePunchTimeout),
-    }
-}
-
-/// Asynchronous hole-punching function.
-async fn hole_punch(
+pub async fn try_connect_to_peer(
     local_contact: Contact,
     peer_contact: FullContact,
     shared_secret: &[u8],
@@ -242,10 +207,6 @@ async fn verify_peer(
         return Err(Error::PeerAuthenticationFailed);
     }
 
-    // Convert the authenticated stream into
-    // an std TCP stream.
-    let stream = stream.into_std()?;
-    stream.set_nonblocking(false)?;
     Ok((stream, shared_key))
 }
 

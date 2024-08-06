@@ -3,8 +3,8 @@ use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
 
-#[test]
-fn test_file_offer() {
+#[tokio::test]
+async fn test_file_offer() {
     // create test directory
     let temp_dir = tempfile::tempdir().unwrap();
     let dir_path = temp_dir.path();
@@ -93,7 +93,9 @@ fn test_file_offer() {
     assert_eq!(reject_all.get_num_not_rejected(), 0);
     assert_eq!(offer.get_transfer_size(&reject_all).unwrap(), 0);
 
-    let only_new = FileResponseMsg::accept_only_full_new_files(&offer, dir_path).unwrap();
+    let only_new = FileResponseMsg::accept_only_full_new_files(&offer, dir_path)
+        .await
+        .unwrap();
     assert_eq!(
         only_new.response,
         vec![None, Some(0), Some(0), Some(0), None, Some(0)]
@@ -103,7 +105,9 @@ fn test_file_offer() {
     assert_eq!(only_new.get_num_not_rejected(), 4);
     assert_eq!(offer.get_transfer_size(&only_new).unwrap(), 23);
 
-    let only_remaining = FileResponseMsg::accept_only_remaining_portions(&offer, dir_path).unwrap();
+    let only_remaining = FileResponseMsg::accept_only_remaining_portions(&offer, dir_path)
+        .await
+        .unwrap();
     assert_eq!(
         only_remaining.response,
         vec![None, None, Some(4), None, Some(1), None]
@@ -114,7 +118,9 @@ fn test_file_offer() {
     assert_eq!(offer.get_transfer_size(&only_remaining).unwrap(), 8);
 
     let only_new_and_interrupted =
-        FileResponseMsg::accept_only_new_and_interrupted(&offer, dir_path).unwrap();
+        FileResponseMsg::accept_only_new_and_interrupted(&offer, dir_path)
+            .await
+            .unwrap();
     assert_eq!(
         only_new_and_interrupted.response,
         vec![None, Some(0), Some(4), Some(0), Some(1), Some(0)]

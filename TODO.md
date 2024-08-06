@@ -2,6 +2,8 @@
 Quick notes on items to consider implementing.
 Not all of them are desirable or necessary.
 
+- Update documentation after large async refactoring.
+
 - Add a GUI.
 
 - Confirm gday server works properly on both ipv4 and ipv6. Maybe add a test.

@@ -1,4 +1,6 @@
 //! A simple encrypted wrapper around an IO stream.
+//! TODO: UPDATE FOR ASYNC
+//! TODO: Optimization when inner is bufread
 //!
 //! Uses a streaming [chacha20poly1305](https://docs.rs/chacha20poly1305/latest/chacha20poly1305/) cipher.
 //!
@@ -12,25 +14,43 @@
 //! peer-to-peer connections with a shared key.
 //!
 //! # Example
-//! ```no_run
+//! ```rust
 //! # use gday_encryption::EncryptedStream;
-//! # use std::io::{Read, Write};
+//! # use tokio::io::{AsyncReadExt, AsyncWriteExt};
 //! #
-//! let shared_key: [u8; 32] = [42; 32];
+//! # let rt = tokio::runtime::Builder::new_current_thread().build().unwrap();
+//! # rt.block_on( async {
+//! // Example pipe (like a TCP connection).
+//! let (mut sender, mut receiver) = tokio::io::duplex(64);
 //!
-//! //////// Peer A ////////
-//! # let mut tcp_stream = std::collections::VecDeque::new();
-//! let mut encrypted_stream = EncryptedStream::encrypt_connection(&mut tcp_stream, &shared_key)?;
-//! encrypted_stream.write_all(b"Hello!")?;
-//! encrypted_stream.flush()?;
+//! // Both peers must have the same key
+//! let key: [u8; 32] = [123; 32];
 //!
-//! //////// Peer B (on a different computer) ////////
-//! # let mut tcp_stream = std::collections::VecDeque::new();
-//! let mut encrypted_stream = EncryptedStream::encrypt_connection(&mut tcp_stream, &shared_key)?;
+//! let handle = tokio::spawn(async move {
+//!     // Peer 1 sends "Hello!"
+//!     let mut stream = EncryptedStream::encrypt_connection(
+//!         &mut sender,
+//!         &key,
+//!     ).await?;
+//!     stream.write_all(b"Hello!").await?;
+//!     stream.flush().await?;
 //!
+//!     Ok::<(), std::io::Error>(())
+//! });
+//!
+//! // Peer 2 receives the "Hello!".
+//! let mut stream = EncryptedStream::encrypt_connection(
+//!     &mut receiver,
+//!     &key,
+//! ).await?;
 //! let mut received = [0u8; 6];
-//! encrypted_stream.read_exact(&mut received)?;
-//! # Ok::<(), std::io::Error>(())
+//! stream.read_exact(&mut received).await?;
+//!
+//! assert_eq!(b"Hello!", &received);
+//!
+//! handle.await??;
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! # }).unwrap();
 //! ```
 //!
 #![forbid(unsafe_code)]
@@ -42,7 +62,12 @@ use chacha20poly1305::aead::stream::{DecryptorBE32, EncryptorBE32};
 use chacha20poly1305::aead::Buffer;
 use chacha20poly1305::ChaCha20Poly1305;
 use helper_buf::HelperBuf;
-use std::io::{BufRead, ErrorKind, Read, Write};
+
+use pin_project::pin_project;
+use std::io::ErrorKind;
+use std::pin::Pin;
+use std::task::{ready, Context, Poll};
+use tokio::io::{AsyncBufRead, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
 
 /// How many bytes larger an encrypted chunk is
 /// from an unencrypted chunk.
@@ -50,8 +75,10 @@ const TAG_SIZE: usize = 16;
 
 /// A simple encrypted wrapper around an IO stream.
 /// Uses [`chacha20poly1305`] with the [`chacha20poly1305::aead::stream`].
+#[pin_project]
 pub struct EncryptedStream<T> {
     /// The IO stream to be wrapped in encryption
+    #[pin]
     inner: T,
 
     /// Stream decryptor
@@ -101,7 +128,7 @@ impl<T> EncryptedStream<T> {
     }
 }
 
-impl<T: Read + Write> EncryptedStream<T> {
+impl<T: AsyncRead + AsyncWrite + Unpin> EncryptedStream<T> {
     /// Establish an [`EncryptedStream`] between two peers with an auto-generated nonce.
     ///
     /// - Both peers must have the same `key`.
@@ -112,13 +139,16 @@ impl<T: Read + Write> EncryptedStream<T> {
     /// Both peers must call this function for this to work.
     ///
     /// - See [`Self::new()`] if you'd like to provide your own nonce.
-    pub fn encrypt_connection(mut io_stream: T, shared_key: &[u8; 32]) -> std::io::Result<Self> {
+    pub async fn encrypt_connection(
+        mut io_stream: T,
+        shared_key: &[u8; 32],
+    ) -> std::io::Result<Self> {
         // Exchange random seeds with peer.
         let my_seed: [u8; 7] = rand::random();
-        io_stream.write_all(&my_seed)?;
-        io_stream.flush()?;
+        io_stream.write_all(&my_seed).await?;
+        io_stream.flush().await?;
         let mut peer_seed = [0; 7];
-        io_stream.read_exact(&mut peer_seed)?;
+        io_stream.read_exact(&mut peer_seed).await?;
 
         // The nonce is the XOR of the random seeds.
         peer_seed
@@ -130,101 +160,90 @@ impl<T: Read + Write> EncryptedStream<T> {
     }
 }
 
-impl<T: Read> Read for EncryptedStream<T> {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+impl<T: AsyncRead> AsyncRead for EncryptedStream<T> {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut tokio::io::ReadBuf<'_>,
+    ) -> Poll<std::io::Result<()>> {
         // if we're out of decrypted data, read more
-        if self.decrypted.is_empty() {
-            self.inner_read()?;
+        if self.as_mut().decrypted.is_empty() {
+            ready!(self.as_mut().inner_read(cx))?;
         }
 
-        let num_bytes = std::cmp::min(self.decrypted.len(), buf.len());
-        buf[0..num_bytes].copy_from_slice(&self.decrypted[0..num_bytes]);
-        self.decrypted.consume(num_bytes);
-        Ok(num_bytes)
+        let me = self.project();
+
+        let num_bytes = std::cmp::min(me.decrypted.len(), buf.remaining());
+        buf.put_slice(&me.decrypted[0..num_bytes]);
+        me.decrypted.consume(num_bytes);
+        Poll::Ready(Ok(()))
     }
 }
 
-impl<T: Read> BufRead for EncryptedStream<T> {
-    fn fill_buf(&mut self) -> std::io::Result<&[u8]> {
+impl<T: AsyncBufRead> AsyncBufRead for EncryptedStream<T> {
+    fn consume(self: std::pin::Pin<&mut EncryptedStream<T>>, amt: usize) {
+        self.project().decrypted.consume(amt);
+    }
+
+    fn poll_fill_buf(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<std::io::Result<&[u8]>> {
         // if we're out of plaintext, read more
         if self.decrypted.is_empty() {
-            self.inner_read()?;
+            ready!(self.as_mut().inner_read(cx))?;
         }
 
-        Ok(&self.decrypted)
-    }
-
-    fn consume(&mut self, amt: usize) {
-        self.decrypted.consume(amt);
+        Poll::Ready(Ok(self.project().decrypted))
     }
 }
 
-impl<T: Write> Write for EncryptedStream<T> {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        let bytes_taken = std::cmp::min(buf.len(), self.to_send.spare_capacity().len() - TAG_SIZE);
-        self.to_send
+impl<T: AsyncWrite> AsyncWrite for EncryptedStream<T> {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<Result<usize, std::io::Error>> {
+        let me = self.as_mut().project();
+        let bytes_taken = std::cmp::min(buf.len(), me.to_send.spare_capacity().len() - TAG_SIZE);
+        me.to_send
             .extend_from_slice(&buf[0..bytes_taken])
             .expect("unreachable");
 
         // if `to_send` is full, flush it
-        if self.to_send.spare_capacity().len() - TAG_SIZE == 0 {
-            self.flush_write_buf()?;
+        if me.to_send.spare_capacity().len() - TAG_SIZE == 0 {
+            ready!(self.flush_write_buf(cx))?;
         }
-        Ok(bytes_taken)
+        Poll::Ready(Ok(bytes_taken))
     }
 
-    fn flush(&mut self) -> std::io::Result<()> {
-        self.flush_write_buf()?;
-        self.inner.flush()
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        ready!(self.as_mut().flush_write_buf(cx))?;
+        self.project().inner.poll_flush(cx)
+    }
+
+    fn poll_shutdown(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<(), std::io::Error>> {
+        ready!(self.as_mut().poll_flush(cx))?;
+        self.project().inner.poll_shutdown(cx)
     }
 }
 
-impl<T: Read> EncryptedStream<T> {
-    /// Reads and decrypts at least 1 new chunk into `self.decrypted`,
-    /// unless reached EOF.
-    /// - Invariant: must only be called when `self.decrypted` is empty,
+impl<T: AsyncRead> EncryptedStream<T> {
+    /// Reads and decrypts at least 1 new chunk into [`Self::decrypted`],
+    /// unless reached EOF or the inner reader returned [`Poll::Pending`].
+    /// - Invariant: must only be called when [`Self::decrypted`] is empty,
     ///     so that it has space to decrypt into.
-    fn inner_read(&mut self) -> std::io::Result<()> {
+    fn inner_read(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        let mut me = self.project();
+
         // ensure we have the full buffer to decrypt into
-        assert!(self.decrypted.is_empty());
+        assert!(me.decrypted.is_empty());
 
         // maximize room to receive more data
-        self.received.left_align();
-
-        // read at least the first 2-byte header
-        while self.received.len() < 2 {
-            let read_buf = self.received.spare_capacity();
-            let bytes_read = self.inner.read(read_buf)?;
-            if bytes_read == 0 && self.received.is_empty() {
-                // EOF at chunk boundary
-                return Ok(());
-            } else if bytes_read == 0 && !self.received.is_empty() {
-                // Unexpected EOF within chunk
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::UnexpectedEof,
-                    "Unexpected EOF within encrypted chunk.",
-                ));
-            }
-            self.received.increase_len(bytes_read);
-        }
-
-        // determine the length of the first chunk
-        let chunk_len: [u8; 2] = self.received[0..2].try_into().expect("unreachable");
-        let chunk_len = u16::from_be_bytes(chunk_len) as usize + 2;
-
-        // read at least one full chunk
-        while self.received.len() < chunk_len {
-            let read_buf = self.received.spare_capacity();
-            let bytes_read = self.inner.read(read_buf)?;
-            if bytes_read == 0 {
-                // Unexpected EOF within chunk
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::UnexpectedEof,
-                    "Unexpected EOF within encrypted chunk.",
-                ));
-            }
-            self.received.increase_len(bytes_read);
-        }
+        me.received.left_align();
 
         /// If there is a full chunk at the beginning of `data`,
         /// returns it.
@@ -234,32 +253,53 @@ impl<T: Read> EncryptedStream<T> {
             data.get(2..2 + len)
         }
 
+        // read at least the first 2-byte header
+        while peek_cipher_chunk(me.received).is_none() {
+            let mut read_buf = ReadBuf::new(me.received.spare_capacity());
+            ready!(me.inner.as_mut().poll_read(cx, &mut read_buf))?;
+            let bytes_read = read_buf.filled().len();
+            if bytes_read == 0 {
+                if me.received.is_empty() {
+                    // EOF at chunk boundary
+                    return Poll::Ready(Ok(()));
+                } else {
+                    // Unexpected EOF within chunk
+                    return Poll::Ready(Err(std::io::Error::new(
+                        std::io::ErrorKind::UnexpectedEof,
+                        "Unexpected EOF within encrypted chunk.",
+                    )));
+                }
+            }
+            me.received.increase_len(bytes_read);
+        }
+
         // decrypt all chunks in `self.received`
-        while let Some(cipher_chunk) = peek_cipher_chunk(&self.received) {
+        while let Some(cipher_chunk) = peek_cipher_chunk(me.received) {
             // decrypt in `self.decrypted`
-            let mut decryption_space = self.decrypted.split_off_aead_buf(self.decrypted.len());
+            let mut decryption_space = me.decrypted.split_off_aead_buf(me.decrypted.len());
 
             decryption_space
                 .extend_from_slice(cipher_chunk)
                 .expect("Unreachable");
 
-            self.received.consume(cipher_chunk.len() + 2);
+            me.received.consume(cipher_chunk.len() + 2);
 
-            self.decryptor
+            me.decryptor
                 .decrypt_next_in_place(&[], &mut decryption_space)
                 .map_err(|_| std::io::Error::new(ErrorKind::InvalidData, "Decryption error"))?;
         }
 
-        Ok(())
+        Poll::Ready(Ok(()))
     }
 }
 
-impl<T: Write> EncryptedStream<T> {
+impl<T: AsyncWrite> EncryptedStream<T> {
     /// Encrypts and fully flushes [`Self::to_send`].
-    fn flush_write_buf(&mut self) -> std::io::Result<()> {
+    fn flush_write_buf(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        let mut me = self.project();
         // encrypt in place
-        let mut msg = self.to_send.split_off_aead_buf(2);
-        self.encryptor
+        let mut msg = me.to_send.split_off_aead_buf(2);
+        me.encryptor
             .encrypt_next_in_place(&[], &mut msg)
             .map_err(|_| std::io::Error::new(ErrorKind::InvalidData, "Encryption error"))?;
 
@@ -268,18 +308,18 @@ impl<T: Write> EncryptedStream<T> {
             .to_be_bytes();
 
         // write length to header
-        self.to_send[0..2].copy_from_slice(&len);
+        me.to_send[0..2].copy_from_slice(&len);
 
         // write until empty
-        while !self.to_send.is_empty() {
-            let bytes_written = self.inner.write(&self.to_send)?;
-            self.to_send.consume(bytes_written);
+        while !me.to_send.is_empty() {
+            let bytes_written = ready!(me.inner.as_mut().poll_write(cx, me.to_send))?;
+            me.to_send.consume(bytes_written);
         }
 
         // make space for new header
-        self.to_send
+        me.to_send
             .extend_from_slice(&[0, 0])
             .expect("unreachable: to_send must have space for the header.");
-        Ok(())
+        Poll::Ready(Ok(()))
     }
 }

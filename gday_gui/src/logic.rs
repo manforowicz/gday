@@ -49,50 +49,5 @@ pub fn connect_to_peer(
     custom_server: Option<(String, u16, bool)>,
     is_creator: bool,
 ) -> Result<EncryptedStream<std::net::TcpStream>, Box<dyn std::error::Error>> {
-    let mut server_connection = match custom_server {
-        Some((name, port, true)) => {
-            info!("Connecting over TLS to server '{name}:{port}'.");
-            server_connector::connect_tls(name, port, TIMEOUT)?
-        }
-        Some((name, port, false)) => {
-            info!("Connecting over TCP to server '{name}:{port}'.");
-            server_connector::connect_tcp((name, port), TIMEOUT)?
-        }
-        None => {
-            info!(
-                "Connecting over TLS to server ID '{}'.",
-                peer_code.server_id
-            );
-            server_connector::connect_to_server_id(
-                server_connector::DEFAULT_SERVERS,
-                peer_code.server_id,
-                TIMEOUT,
-            )?
-        }
-    };
-
-    info!("Joining room '{}' in server.", peer_code.room_code);
-
-    let (contact_sharer, my_contact) =
-        ContactSharer::enter_room(&mut server_connection, peer_code.room_code, is_creator)?;
-
-    info!("Local contact is: {my_contact}");
-
-    let peer_contact = contact_sharer.get_peer_contact()?;
-
-    info!("Peer's contact is: {peer_contact}\n Establishing direct connection to peer.");
-
-    let (tcp_stream, shared_key) = gday_hole_punch::try_connect_to_peer(
-        my_contact.local,
-        peer_contact,
-        &peer_code.shared_secret.to_be_bytes(),
-        TIMEOUT,
-    )?;
-
-    info!("Connection established. Encrypting connection.",);
-
-    Ok(EncryptedStream::encrypt_connection(
-        tcp_stream,
-        &shared_key,
-    )?)
+    todo!()
 }

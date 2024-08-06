@@ -16,13 +16,7 @@ version.workspace = true
 [dependencies]
 clap = { version = "4.5.9", features = ["derive"] }
 socket2 = { version = "0.5.7", features = ["all"] }
-tokio = { version = "1.38.0", features = [
-    "rt-multi-thread",
-    "macros",
-    "net",
-    "time",
-    "sync",
-] }
+tokio = { version = "1.38.0", features = ["rt-multi-thread", "macros", "net", "time", "sync"] }
 tokio-rustls = { version = "0.26.0", features = ["ring", "logging", "tls12"], default-features = false }
 gday_contact_exchange_protocol = { version = "0.2.1", path = "../gday_contact_exchange_protocol" }
 thiserror = "1.0.61"

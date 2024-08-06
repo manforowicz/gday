@@ -3,10 +3,10 @@ use gday_file_transfer::{FileMetaLocal, FileOfferMsg, FileResponseMsg, TransferR
 use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
 
 /// Sequentially write the given files to this `writer`.
-pub fn send_files(
+pub async fn send_files(
     offer: Vec<FileMetaLocal>,
     response: FileResponseMsg,
-    writer: &mut EncryptedStream<std::net::TcpStream>,
+    writer: &mut EncryptedStream<tokio::net::TcpStream>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let progress_bar = create_progress_bar();
     let mut current_file = String::from("Starting...");
@@ -20,7 +20,7 @@ pub fn send_files(
         }
     };
 
-    match gday_file_transfer::send_files(&offer, &response, writer, update_progress) {
+    match gday_file_transfer::send_files(&offer, &response, writer, update_progress).await {
         Ok(()) => {
             progress_bar.finish_with_message("Transfer complete.");
             Ok(())
@@ -36,11 +36,11 @@ pub fn send_files(
 ///
 /// `save_dir` is the directory where the files
 /// will be saved.
-pub fn receive_files(
+pub async fn receive_files(
     offer: FileOfferMsg,
     response: FileResponseMsg,
     save_dir: &std::path::Path,
-    reader: &mut EncryptedStream<std::net::TcpStream>,
+    reader: &mut EncryptedStream<tokio::net::TcpStream>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let progress_bar = create_progress_bar();
     let mut current_file = String::from("Starting...");
@@ -55,7 +55,8 @@ pub fn receive_files(
     };
 
     let result =
-        gday_file_transfer::receive_files(&offer, &response, save_dir, reader, update_progress);
+        gday_file_transfer::receive_files(&offer, &response, save_dir, reader, update_progress)
+            .await;
 
     match result {
         Ok(()) => {
