@@ -1,5 +1,3 @@
-//! Note: this crate is still in early-development, so expect breaking changes.
-//!
 //! This library lets you offer and transfer files to another peer,
 //! assuming you already have a reliable connection established.
 //!

@@ -60,7 +60,7 @@ impl From<Vec<FileMetaLocal>> for FileOfferMsg {
 /// - `None` indicates that the corresponding file is rejected.
 /// - `Some(0)` indicates that the corresponding file is fully accepted.
 /// - `Some(k)` indicates that the corresponding file is accepted,
-/// except for the first `k` bytes.
+///   except for the first `k` bytes.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct FileResponseMsg {
     /// The accepted files. `Some(start_byte)` element accepts the offered
@@ -135,9 +135,9 @@ impl FileResponseMsg {
 
     /// Get a [`FileResponseMsg`] that would:
     /// - Accept the remaining portions of files whose
-    /// downloads to `save_dir` have been previously interrupted,
+    ///   downloads to `save_dir` have been previously interrupted,
     /// - AND files that are not yet in `save_dir`,
-    /// or have a different size.
+    ///   or have a different size.
     ///
     /// Rejects all other files.
     pub async fn accept_only_new_and_interrupted(

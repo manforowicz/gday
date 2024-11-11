@@ -1,6 +1,7 @@
 use crate::Error;
 use gday_contact_exchange_protocol::{Contact, FullContact};
 use log::{debug, trace};
+use sha2::Digest;
 use socket2::{SockRef, TcpKeepalive};
 use spake2::{Ed25519Group, Identity, Password, Spake2};
 use std::{net::SocketAddr, time::Duration};
@@ -15,17 +16,18 @@ type PeerConnection = (tokio::net::TcpStream, [u8; 32]);
 /// How often a connection attempt is made during hole punching.
 const RETRY_INTERVAL: Duration = Duration::from_millis(200);
 
-/// Tries to establish a TCP connection with the other peer by using
+/// Tries to connect to the other peer using
 /// [TCP hole punching](https://en.wikipedia.org/wiki/TCP_hole_punching).
 ///
+/// Call this function _after_ you've gotten the peer's contacts with [`crate::share_contacts()`].
+///
+/// Arguments:
 /// - `local_contact` should be the `local` field of your [`FullContact`]
-/// that [`crate::ContactSharer`] returned when you created or joined a room.
-/// Panics if both `v4` and `v6` are `None`.
-/// - `peer_contact` should be the [`FullContact`] returned by [`crate::ContactSharer::get_peer_contact()`].
-/// - `shared_secret` should be a randomized secret that both peers know.
-/// It will be used to verify the peer's identity, and derive a stronger shared key
-/// using [SPAKE2](https://docs.rs/spake2/).
-/// - Gives up after `timeout` time, and returns [`Error::HolePunchTimeout`].
+///   that [`crate::share_contacts()`] returned.
+/// - `peer_contact` should be the peer's [`FullContact`] returned by the future from [`crate::share_contacts()`].
+/// - `shared_secret` should be a secret that both peers know.
+///   It will be used to verify the peer's identity, and derive a stronger shared key
+///   using [SPAKE2](https://docs.rs/spake2/).
 ///
 /// Returns:
 /// - An authenticated [`std::net::TcpStream`] connected to the other peer.
@@ -88,14 +90,11 @@ pub async fn try_connect_to_peer(
         Some(Err(..)) => panic!("Tokio join error."),
 
         // No tasks were spawned
-        None => panic!(
-            "local_contact passed to try_connect_to_peer() \
-            had None for both v4 and v6"
-        ),
+        None => Err(Error::LocalContactEmpty),
     }
 }
 
-/// Tries to TCP connect to `local` to `peer`,
+/// Tries to TCP connect from `local` to `peer`,
 /// and authenticate using `shared_secret`.
 async fn try_connect<T: Into<SocketAddr>>(
     local: T,
@@ -131,7 +130,7 @@ async fn try_accept(
     trace!("Waiting to accept connections on {local}.");
 
     let local_socket = get_local_socket(local)?;
-    let listener = local_socket.listen(1024)?;
+    let listener = local_socket.listen(128)?;
 
     let (stream, addr) = loop {
         if let Ok(ok) = listener.accept().await {
@@ -185,11 +184,11 @@ async fn verify_peer(
     stream.read_exact(&mut peer_challenge).await?;
 
     // reply with the solution hash to the peer's challenge
-    let mut hasher = blake3::Hasher::new();
-    hasher.update(&shared_key);
-    hasher.update(&peer_challenge);
+    let mut hasher = sha2::Sha256::new();
+    hasher.update(shared_key);
+    hasher.update(peer_challenge);
     let my_hash = hasher.finalize();
-    stream.write_all(my_hash.as_bytes()).await?;
+    stream.write_all(&my_hash).await?;
     stream.flush().await?;
 
     // receive peer's hash to my challenge
@@ -197,13 +196,13 @@ async fn verify_peer(
     stream.read_exact(&mut peer_hash).await?;
 
     // confirm peer's hash to my challenge
-    let mut hasher = blake3::Hasher::new();
-    hasher.update(&shared_key);
-    hasher.update(&my_challenge);
+    let mut hasher = sha2::Sha256::new();
+    hasher.update(shared_key);
+    hasher.update(my_challenge);
     let expected = hasher.finalize();
 
     // Peer authentication failed
-    if expected != peer_hash {
+    if expected != peer_hash.into() {
         return Err(Error::PeerAuthenticationFailed);
     }
 

@@ -1,7 +1,7 @@
 use std::sync::mpsc;
 
 use gday_encryption::EncryptedStream;
-use gday_hole_punch::{server_connector, ContactSharer};
+use gday_hole_punch::server_connector;
 use log::info;
 
 const TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);

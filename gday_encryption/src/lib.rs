@@ -89,18 +89,19 @@ pub struct EncryptedStream<T> {
 
     /// Encrypted data received from the inner IO stream.
     /// - Invariant: Never stores a complete chunk(s).
+    ///
     /// As soon as full chunks are read, moves and decrypts them
     /// into `decrypted`.
     received: HelperBuf,
 
     /// Data that has been decrypted from `received`.
     /// - Invariant: This must be empty when calling
-    /// [`Self::inner_read()`]
+    ///   [`Self::inner_read()`]
     decrypted: HelperBuf,
 
     /// Data to be sent. Encrypted only when flushing.
     /// - Invariant: the first 2 bytes are always
-    /// reserved for the length header
+    ///   reserved for the length header
     to_send: HelperBuf,
 }
 

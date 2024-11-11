@@ -1,5 +1,3 @@
-Note: this crate is still in early-development, so expect breaking changes.
-
 # gday_file_transfer
 [![Crates.io Version](https://img.shields.io/crates/v/gday_file_transfer)](https://crates.io/crates/gday_file_transfer)
 [![docs.rs](https://img.shields.io/docsrs/gday_file_transfer)](https://docs.rs/gday_file_transfer/)

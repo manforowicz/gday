@@ -248,7 +248,7 @@ pub async fn get_file_metas(paths: &[PathBuf]) -> Result<Vec<FileMetaLocal>, Err
 }
 
 /// - The [`FileMetaLocal::short_path`] will strip the prefix
-/// `top_path` from all paths. `top_path` must be a prefix of `path`.
+///   `top_path` from all paths. `top_path` must be a prefix of `path`.
 /// - `path` is the file or directory where recursive traversal begins.
 /// - `files` is a [`HashSet`] to which found files will be inserted.
 fn get_file_metas_helper<'a>(

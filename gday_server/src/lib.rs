@@ -1,5 +1,3 @@
-//! Note: this crate is still in early-development, so expect breaking changes.
-//!
 //! Runs a server for the [`gday_contact_exchange_protocol`].
 //! Lets two users exchange their public and (optionally) private socket addresses.
 #![forbid(unsafe_code)]
@@ -158,8 +156,6 @@ async fn run_single_server(
 ///
 /// Sets the socket's TCP keepalive so that unresponsive
 /// connections close after 10 minutes to save resources.
-///
-/// TODO: Check if I need to check for eintr errors?
 fn get_tcp_listener(addr: SocketAddr) -> Result<tokio::net::TcpListener, Error> {
     // create a socket
     let socket = socket2::Socket::new(Domain::for_address(addr), Type::STREAM, Some(Protocol::TCP))

@@ -9,17 +9,12 @@ use crate::dialog::ask_receive;
 use clap::{Parser, Subcommand};
 use gday_encryption::EncryptedStream;
 use gday_file_transfer::{read_from_async, write_to_async, FileOfferMsg, FileResponseMsg};
-use gday_hole_punch::PeerCode;
-use gday_hole_punch::{
-    server_connector::{self, DEFAULT_SERVERS},
-    ContactSharer,
-};
+use gday_hole_punch::server_connector::{self, DEFAULT_SERVERS};
+use gday_hole_punch::{share_contacts, PeerCode};
 use log::error;
 use log::info;
 use owo_colors::OwoColorize;
-use rand::Rng;
 use std::path::PathBuf;
-use std::str::FromStr;
 
 /// How long to try hole punching before giving up.
 const HOLE_PUNCH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
@@ -60,7 +55,7 @@ enum Command {
         ///
         /// Doesn't require a checksum digit.
         #[arg(short, long)]
-        code: Option<String>,
+        code: Option<PeerCode>,
 
         /// Files and/or directories to send.
         #[arg(required = true, num_args = 1..)]
@@ -75,7 +70,7 @@ enum Command {
         path: PathBuf,
 
         /// The code that your peer gave you.
-        code: String,
+        code: PeerCode,
     },
 }
 
@@ -131,14 +126,9 @@ async fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
             // generate random `room_code` and `shared_secret`
             // if the user didn't provide custom ones
             let peer_code = if let Some(code) = code {
-                PeerCode::from_str(&code)?
+                code
             } else {
-                let mut rng = rand::thread_rng();
-                PeerCode {
-                    server_id,
-                    room_code: rng.gen_range(0..u16::MAX as u64),
-                    shared_secret: rng.gen_range(0..u16::MAX as u64),
-                }
+                PeerCode::random(server_id)
             };
 
             // get metadata about the files to transfer
@@ -152,16 +142,19 @@ async fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
             }
 
             // create a room in the server
-            let (contact_sharer, my_contact) =
-                ContactSharer::enter_room(&mut server_connection, peer_code.room_code, true)
+            let (my_contact, peer_contact_fut) =
+                share_contacts(&mut server_connection, peer_code.room_code.as_bytes(), true)
                     .await?;
 
             info!("Your contact is:\n{my_contact}");
 
-            println!("Tell your mate to run \"gday get {}\"", peer_code.bold());
+            println!(
+                "Tell your mate to run \"gday get {}\"",
+                String::try_from(&peer_code)?.bold()
+            );
 
             // get peer's contact
-            let peer_contact = contact_sharer.get_peer_contact().await?;
+            let peer_contact = peer_contact_fut.await?;
             info!("Your mate's contact is:\n{peer_contact}");
 
             // connect to the peer
@@ -170,7 +163,7 @@ async fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
                 gday_hole_punch::try_connect_to_peer(
                     my_contact.local,
                     peer_contact,
-                    &peer_code.shared_secret.to_be_bytes(),
+                    peer_code.shared_secret.as_bytes(),
                 ),
             )
             .await
@@ -211,13 +204,12 @@ async fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
 
         // receiving files
         crate::Command::Get { path, code } => {
-            let code = PeerCode::from_str(&code)?;
-            let (contact_sharer, my_contact) =
-                ContactSharer::enter_room(&mut server_connection, code.room_code, false).await?;
+            let (my_contact, peer_contact_fut) =
+                share_contacts(&mut server_connection, code.room_code.as_bytes(), false).await?;
 
             info!("Your contact is:\n{my_contact}");
 
-            let peer_contact = contact_sharer.get_peer_contact().await?;
+            let peer_contact = peer_contact_fut.await?;
 
             info!("Your mate's contact is:\n{peer_contact}");
 
@@ -226,7 +218,7 @@ async fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
                 gday_hole_punch::try_connect_to_peer(
                     my_contact.local,
                     peer_contact,
-                    &code.shared_secret.to_be_bytes(),
+                    code.shared_secret.as_bytes(),
                 ),
             )
             .await

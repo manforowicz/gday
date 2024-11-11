@@ -1,5 +1,3 @@
-Note: this project is still in early-development, so expect breaking changes.
-
 # gday
 [![Crates.io Version](https://img.shields.io/crates/v/gday)](https://crates.io/crates/gday)
 

@@ -1,5 +1,3 @@
-Note: this crate is still in early-development, so expect breaking changes.
-
 # gday_hole_punch
 [![Crates.io Version](https://img.shields.io/crates/v/gday_hole_punch)](https://crates.io/crates/gday_hole_punch)
 [![docs.rs](https://img.shields.io/docsrs/gday_hole_punch)](https://docs.rs/gday_hole_punch/)

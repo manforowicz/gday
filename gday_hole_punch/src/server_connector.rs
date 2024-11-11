@@ -23,10 +23,11 @@ pub const DEFAULT_SERVERS: &[ServerInfo] = &[ServerInfo {
     prefer: true,
 }];
 
-/// Information about a single Gday server.
+/// Information about a single public Gday server
+/// that serves over TLS on [`DEFAULT_PORT`]
 ///
-/// A public gday server should only serve
-/// encrypted TLS and listen on [`DEFAULT_PORT`].
+/// See [`DEFAULT_SERVERS`] for a list
+/// of [`ServerInfo`]
 #[derive(Debug, Clone)]
 pub struct ServerInfo {
     /// The DNS name of the server.
@@ -66,7 +67,7 @@ impl ServerStream {
         }
     }
 
-    /// Enables SO_REUSEADDR and SO_REUSEPORT
+    /// Enables SO_REUSEADDR and SO_REUSEPORT (if applicable)
     /// so that this socket can be reused for
     /// hole punching.
     fn enable_reuse(&self) {
@@ -130,9 +131,9 @@ impl tokio::io::AsyncWrite for ServerStream {
     }
 }
 
-/// Can hold both an IPv4 and IPv6 [`ServerStream`] to a Gday server.
+/// Connection to a Gday server.
 ///
-/// Methods may panic if `v4` and `v6` don't actually correspond to IPv4 and IPv6 streams.
+/// Can hold an IPv4 and/or IPv6 [`ServerStream`] to a Gday server.
 #[derive(Debug)]
 pub struct ServerConnection {
     pub v4: Option<ServerStream>,
@@ -146,15 +147,15 @@ impl ServerConnection {
     ///
     /// Returns an error if both streams are `None`.
     /// Returns an error if a `v4` is passed where `v6` should, or vice versa.
-    pub(super) fn configure(&self) -> Result<(), Error> {
+    pub(super) fn enable_reuse(&self) -> Result<(), Error> {
         if self.v4.is_none() && self.v6.is_none() {
-            panic!("ServerConnection had None for both v4 and v6 streams.");
+            return Err(Error::ServerConnectionEmpty);
         }
 
         if let Some(stream) = &self.v4 {
             let addr = stream.local_addr()?;
             if !matches!(addr, V4(_)) {
-                panic!("ServerConnection had IPv6 stream where IPv4 stream was expected.");
+                return Err(Error::ServerConnectionMismatch);
             };
             stream.enable_reuse();
         }
@@ -162,7 +163,7 @@ impl ServerConnection {
         if let Some(stream) = &self.v6 {
             let addr = stream.local_addr()?;
             if !matches!(addr, V6(_)) {
-                panic!("ServerConnection had IPv4 stream where IPv6 stream was expected.");
+                return Err(Error::ServerConnectionMismatch);
             };
             stream.enable_reuse();
         }
@@ -186,14 +187,14 @@ impl ServerConnection {
     }
 
     /// Returns the local [`Contact`] of this server stream.
-    pub(super) fn local_contact(&self) -> std::io::Result<Contact> {
+    pub(super) fn local_contact(&self) -> Result<Contact, Error> {
         let mut contact = Contact { v4: None, v6: None };
 
         if let Some(stream) = &self.v4 {
             if let SocketAddr::V4(addr_v4) = stream.local_addr()? {
                 contact.v4 = Some(addr_v4);
             } else {
-                panic!("ServerConnection had IPv6 stream where IPv4 stream was expected.");
+                return Err(Error::ServerConnectionMismatch);
             }
         }
 
@@ -201,7 +202,7 @@ impl ServerConnection {
             if let SocketAddr::V6(addr_v6) = stream.local_addr()? {
                 contact.v6 = Some(addr_v6);
             } else {
-                panic!("ServerConnection had IPv4 stream where IPv6 stream was expected.");
+                return Err(Error::ServerConnectionMismatch);
             }
         }
 
@@ -209,7 +210,9 @@ impl ServerConnection {
     }
 }
 
-/// In random order, sequentially try connecting to the given `servers`.
+/// In random order, sequentially try connecting to `servers`.
+///
+/// You may pass [`DEFAULT_SERVERS`] as `servers`.
 ///
 /// Ignores servers that don't have `prefer == true`.
 /// Connects to port [`DEFAULT_PORT`] via TLS.
@@ -230,7 +233,10 @@ pub async fn connect_to_random_server(
     Ok((conn, preferred[i].id))
 }
 
-/// Try connecting to the server with this `server_id` and returning a [`ServerConnection`].
+/// Tries connecting to the server with this `server_id`
+///
+/// You may pass [`DEFAULT_SERVERS`] as `servers`.
+///
 /// Connects to port [`DEFAULT_PORT`] via TLS.
 /// Gives up after `timeout` time.
 ///
@@ -248,6 +254,7 @@ pub async fn connect_to_server_id(
 }
 
 /// In random order, sequentially tries connecting to the given `domain_names`.
+///
 /// Connects to port [`DEFAULT_PORT`] via TLS.
 /// Tries the next connection after `timeout` time.
 ///
@@ -267,15 +274,14 @@ pub async fn connect_to_random_domain_name(
 
     for i in indices {
         let server = domain_names[i];
-        let streams = match connect_tls(server.to_string(), DEFAULT_PORT, timeout).await {
-            Ok(streams) => streams,
+        match connect_tls(server.to_string(), DEFAULT_PORT, timeout).await {
+            Ok(streams) => return Ok((streams, i)),
             Err(err) => {
                 recent_error = err;
                 warn!("Couldn't connect to \"{server}:{DEFAULT_PORT}\": {recent_error}");
                 continue;
             }
         };
-        return Ok((streams, i));
     }
     Err(recent_error)
 }

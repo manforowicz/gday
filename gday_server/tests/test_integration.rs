@@ -35,19 +35,31 @@ async fn test_integration() {
         let mut stream2 = std::net::TcpStream::connect(server_addr_2).unwrap();
 
         // successfully create a room
-        write_to(ClientMsg::CreateRoom { room_code: 123 }, &mut stream1).unwrap();
+        write_to(
+            ClientMsg::CreateRoom {
+                room_code: [123; 32],
+            },
+            &mut stream1,
+        )
+        .unwrap();
         let response: ServerMsg = read_from(&mut stream1).unwrap();
         assert_eq!(response, ServerMsg::RoomCreated);
 
         // room taken
-        write_to(ClientMsg::CreateRoom { room_code: 123 }, &mut stream1).unwrap();
+        write_to(
+            ClientMsg::CreateRoom {
+                room_code: [123; 32],
+            },
+            &mut stream1,
+        )
+        .unwrap();
         let response: ServerMsg = read_from(&mut stream1).unwrap();
         assert_eq!(response, ServerMsg::ErrorRoomTaken);
 
         // room doesn't exist
         write_to(
             ClientMsg::RecordPublicAddr {
-                room_code: 789,
+                room_code: [234; 32],
                 is_creator: true,
             },
             &mut stream2,
@@ -59,7 +71,7 @@ async fn test_integration() {
         // record public address
         write_to(
             ClientMsg::RecordPublicAddr {
-                room_code: 123,
+                room_code: [123; 32],
                 is_creator: true,
             },
             &mut stream1,
@@ -71,7 +83,7 @@ async fn test_integration() {
         // record public address
         write_to(
             ClientMsg::RecordPublicAddr {
-                room_code: 123,
+                room_code: [123; 32],
                 is_creator: false,
             },
             &mut stream2,
@@ -84,7 +96,7 @@ async fn test_integration() {
         write_to(
             ClientMsg::ReadyToShare {
                 local_contact: local_contact_1,
-                room_code: 123,
+                room_code: [123; 32],
                 is_creator: true,
             },
             &mut stream1,
@@ -99,7 +111,7 @@ async fn test_integration() {
         // can't update client once it is done
         write_to(
             ClientMsg::RecordPublicAddr {
-                room_code: 123,
+                room_code: [123; 32],
                 is_creator: true,
             },
             &mut stream2,
@@ -109,7 +121,13 @@ async fn test_integration() {
         assert_eq!(response, ServerMsg::ErrorUnexpectedMsg);
 
         // successfully create an unrelated room
-        write_to(ClientMsg::CreateRoom { room_code: 456 }, &mut stream2).unwrap();
+        write_to(
+            ClientMsg::CreateRoom {
+                room_code: [234; 32],
+            },
+            &mut stream2,
+        )
+        .unwrap();
         let response: ServerMsg = read_from(&mut stream2).unwrap();
         assert_eq!(response, ServerMsg::RoomCreated);
 
@@ -117,7 +135,7 @@ async fn test_integration() {
         write_to(
             ClientMsg::ReadyToShare {
                 local_contact: local_contact_2,
-                room_code: 123,
+                room_code: [123; 32],
                 is_creator: false,
             },
             &mut stream2,
@@ -144,7 +162,13 @@ async fn test_integration() {
         assert_eq!(peer_contact.local, local_contact_1);
 
         // ensure the room was closed, and can be reopened
-        write_to(ClientMsg::CreateRoom { room_code: 123 }, &mut stream1).unwrap();
+        write_to(
+            ClientMsg::CreateRoom {
+                room_code: [123; 32],
+            },
+            &mut stream1,
+        )
+        .unwrap();
         let response: ServerMsg = read_from(&mut stream1).unwrap();
         assert_eq!(response, ServerMsg::RoomCreated);
     })
@@ -175,25 +199,48 @@ async fn test_request_limit() {
 
         for room_code in 1..=10 {
             // successfully create a room
-            write_to(ClientMsg::CreateRoom { room_code }, &mut stream1).unwrap();
+            write_to(
+                ClientMsg::CreateRoom {
+                    room_code: [room_code; 32],
+                },
+                &mut stream1,
+            )
+            .unwrap();
             let response: ServerMsg = read_from(&mut stream1).unwrap();
             assert_eq!(response, ServerMsg::RoomCreated);
         }
 
         // request limit hit
-        write_to(ClientMsg::CreateRoom { room_code: 11 }, &mut stream1).unwrap();
+        write_to(
+            ClientMsg::CreateRoom {
+                room_code: [11; 32],
+            },
+            &mut stream1,
+        )
+        .unwrap();
         let response: ServerMsg = read_from(&mut stream1).unwrap();
         assert_eq!(response, ServerMsg::ErrorTooManyRequests);
 
         // ensure the server closed the connection
-        let result = write_to(ClientMsg::CreateRoom { room_code: 100 }, &mut stream1);
+        let result = write_to(
+            ClientMsg::CreateRoom {
+                room_code: [100; 32],
+            },
+            &mut stream1,
+        );
         assert!(matches!(
             result,
             Err(gday_contact_exchange_protocol::Error::IO(_))
         ));
 
         // ensure other connections are unaffected
-        write_to(ClientMsg::CreateRoom { room_code: 200 }, &mut stream2).unwrap();
+        write_to(
+            ClientMsg::CreateRoom {
+                room_code: [200; 32],
+            },
+            &mut stream2,
+        )
+        .unwrap();
         let response: ServerMsg = read_from(&mut stream2).unwrap();
         assert_eq!(response, ServerMsg::RoomCreated);
     })

@@ -1,5 +1,3 @@
-//! Note: this crate is still in early-development, so expect breaking changes.
-//!
 //! This protocol lets two users exchange their public and (optionally) private socket addresses via a server.
 //!
 //! On it's own, this library doesn't do anything other than define a shared protocol.
@@ -27,19 +25,19 @@
 //! # let mut tls_ipv4 = std::collections::VecDeque::new();
 //! # let mut tls_ipv6 = std::collections::VecDeque::new();
 //! #
-//! let room_code = 42;
+//! let room_code = *b"32-bytes. May be a password hash";
 //!
 //! // A client tells the server to create a room.
 //! // The server responds with ServerMsg::RoomCreated or
-//! // ServerMsg::ErrorRoomTaken.
+//! // an error message.
 //! let request = ClientMsg::CreateRoom { room_code };
 //! write_to(request, &mut tls_ipv4)?;
 //! let response: ServerMsg = read_from(&mut tls_ipv4)?;
 //!
 //! // Each peer sends ClientMsg::RecordPublicAddr
-//! // from all their endpoints.
+//! // from their IPv4 and/or IPv6 endpoints.
 //! // The server records the client's public addresses from these connections.
-//! // The server responds with ServerMsg::ReceivedAddr
+//! // The server responds with ServerMsg::ReceivedAddr or an error message.
 //! let request = ClientMsg::RecordPublicAddr { room_code, is_creator: true };
 //! write_to(request, &mut tls_ipv4)?;
 //! let response: ServerMsg = read_from(&mut tls_ipv4)?;
@@ -57,7 +55,7 @@
 //! write_to(request, &mut tls_ipv4)?;
 //! let response: ServerMsg = read_from(&mut tls_ipv4)?;
 //!
-//! // Once both clients have sent ClientMsg::ShareContact,
+//! // Once both clients have sent ClientMsg::ReadyToShare,
 //! // the server sends both clients a ServerMsg::PeerContact
 //! // containing the FullContact of the peer.
 //! let response: ServerMsg = read_from(&mut tls_ipv4)?;
@@ -90,18 +88,22 @@ pub const DEFAULT_PORT: u16 = 2311;
 #[non_exhaustive]
 pub enum ClientMsg {
     /// Requests the server to create a new room.
+    /// The server should automatically delete new rooms after roughly 10 minutes.
+    ///
+    /// More than one room can be created per connection.
     ///
     /// Server responds with [`ServerMsg::RoomCreated`] on success
-    /// and [`ServerMsg::ErrorRoomTaken`] if the room already exists.
-    CreateRoom { room_code: u64 },
+    /// or an error [`ServerMsg`] on failure.
+    CreateRoom { room_code: [u8; 32] },
 
     /// Tells the server to record the client's public socket address
     /// of the connection on which this message was sent.
     ///
-    /// Server responds with [`ServerMsg::ReceivedAddr`] on success.
+    /// Server responds with [`ServerMsg::ReceivedAddr`] on success
+    /// or an error [`ServerMsg`] on failure.
     RecordPublicAddr {
         /// The room this client is in.
-        room_code: u64,
+        room_code: [u8; 32],
         /// Whether this is the client that created this room,
         /// or the other client.
         is_creator: bool,
@@ -117,12 +119,16 @@ pub enum ClientMsg {
     /// connection.
     ///
     /// Once the other peer also sends [`ClientMsg::ReadyToShare`],
-    /// the server responds with [`ServerMsg::PeerContact`]
-    /// which contains the peer's contact info.
-    /// The room then closes.
+    /// the server sends both peers a [`ServerMsg::PeerContact`]
+    /// which contains the other peer's contact info.
+    /// The room then closes, but the server doesn't disconnect.
     ReadyToShare {
+        /// The local contact to share.
         local_contact: Contact,
-        room_code: u64,
+        /// The room this client is in.
+        room_code: [u8; 32],
+        /// Whether this is the client that created this room,
+        /// or the other client.
         is_creator: bool,
     },
 }
@@ -133,11 +139,11 @@ pub enum ClientMsg {
 pub enum ServerMsg {
     /// Immediately responds to a [`ClientMsg::CreateRoom`] request.
     /// Indicates that a room with the given ID has been successfully created.
-    /// The room will expire/close in a few minutes.
+    /// The room will expire/close in roughly 10 minutes.
     RoomCreated,
 
     /// Immediately responds to a [`ClientMsg::RecordPublicAddr`]
-    /// to indicate it was successfully recorded.
+    /// to indicate a client's public address was successfully recorded.
     ReceivedAddr,
 
     /// Immediately responds to a [`ClientMsg::ReadyToShare`].
@@ -145,7 +151,7 @@ pub enum ServerMsg {
     ClientContact(FullContact),
 
     /// After both clients in a room have sent [`ClientMsg::ReadyToShare`],
-    /// the server sends with this message.
+    /// the server sends this message.
     /// Contains the other peer's contact info.
     PeerContact(FullContact),
 
@@ -162,8 +168,8 @@ pub enum ServerMsg {
     /// doesn't exist, either because this room timed out, or never existed.
     ErrorNoSuchRoomCode,
 
-    /// The server responds with this if a client sends [`ClientMsg::RecordPublicAddr`]
-    /// after sending [`ClientMsg::ReadyToShare`] on a different connection.
+    /// The server may respond with this if a client sends [`ClientMsg::RecordPublicAddr`]
+    /// after already sending [`ClientMsg::ReadyToShare`].
     ErrorUnexpectedMsg,
 
     /// Rejects a request if an IP address made too many requests.
@@ -194,13 +200,15 @@ impl Display for ServerMsg {
             Self::PeerContact(c) => write!(f, "The server says your peer's contact is {c}."),
             Self::ErrorRoomTaken => write!(
                 f,
-                "Can't create room with this code, because it was already created."
+                "Can't create room with this code, because it's already taken."
             ),
             Self::ErrorPeerTimedOut => write!(
                 f,
-                "Timed out while waiting for peer to finish sending their address."
+                "Timed out while waiting for peer to finish sending their addresses to the server."
             ),
-            Self::ErrorNoSuchRoomCode => write!(f, "No room with this room code has been created."),
+            Self::ErrorNoSuchRoomCode => {
+                write!(f, "No room with this code currently exists on the server.")
+            }
             Self::ErrorUnexpectedMsg => write!(
                 f,
                 "Server received RecordPublicAddr message after a ReadyToShare message. \
@@ -211,13 +219,13 @@ impl Display for ServerMsg {
                 "Exceeded request limit from this IP address. Try again in a minute."
             ),
             Self::ErrorSyntax => write!(f, "Server couldn't parse message syntax from client."),
-            Self::ErrorConnection => write!(f, "Connection error to client."),
-            Self::ErrorInternal => write!(f, "Internal server error."),
+            Self::ErrorConnection => write!(f, "Connection error to server."),
+            Self::ErrorInternal => write!(f, "Server had an internal error."),
         }
     }
 }
 
-/// The addresses of a single network endpoint.
+/// The addresses of a single client network endpoint.
 /// May have IPv6, IPv4, none, or both.
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Clone, Copy, Default)]
 pub struct Contact {
@@ -247,9 +255,9 @@ impl std::fmt::Display for Contact {
     }
 }
 
-/// The public and local endpoints of an client.
+/// The local and public endpoints of an client.
 ///
-/// [`FullContact::public`] is different from [`FullContact::local`] when the entity is behind
+/// [`FullContact::local`] is only different from [`FullContact::public`] when the client is behind
 /// [NAT (network address translation)](https://en.wikipedia.org/wiki/Network_address_translation).
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Clone, Copy, Default)]
 pub struct FullContact {

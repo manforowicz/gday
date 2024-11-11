@@ -60,8 +60,8 @@ impl Room {
 /// is acquired at any given time. This is to prevent deadlock.
 #[derive(Clone, Debug)]
 pub struct State {
-    /// Maps room_code to rooms
-    rooms: Arc<Mutex<HashMap<u64, Room>>>,
+    /// Maps SHA256(room_code) to rooms
+    rooms: Arc<Mutex<HashMap<[u8; 32], Room>>>,
 
     /// Maps IP addresses to the number of requests they sent this minute.
     request_counts: Arc<Mutex<HashMap<IpAddr, u32>>>,
@@ -108,9 +108,9 @@ impl State {
     /// Creates a new room with `room_code`.
     ///
     /// - Returns [`Error::TooManyRequests`] if `origin`'s
-    /// request limit is exceeded.
+    ///   request limit is exceeded.
     /// - Returns [`Error::RoomCodeTaken`] if the room already exists.
-    pub fn create_room(&mut self, room_code: u64, origin: IpAddr) -> Result<(), Error> {
+    pub fn create_room(&mut self, room_code: [u8; 32], origin: IpAddr) -> Result<(), Error> {
         self.increment_request_count(origin)?;
 
         {
@@ -142,10 +142,10 @@ impl State {
     ///
     /// - Returns [`Error::NoSuchRoomCode`] if no room with `room_code` exists.
     /// - Returns [`Error::TooManyRequests`] if `origin`'s
-    /// request limit is exceeded.
+    ///   request limit is exceeded.
     pub fn update_client(
         &mut self,
-        room_code: u64,
+        room_code: [u8; 32],
         is_creator: bool,
         endpoint: SocketAddr,
         public: bool,
@@ -193,10 +193,10 @@ impl State {
     /// once that peer is also ready.
     ///
     /// - Returns [`Error::TooManyRequests`] if the max
-    /// allowable number of requests per minute is exceeded.
+    ///   allowable number of requests per minute is exceeded.
     pub fn set_client_done(
         &mut self,
-        room_code: u64,
+        room_code: [u8; 32],
         is_creator: bool,
         origin: IpAddr,
     ) -> Result<(FullContact, oneshot::Receiver<FullContact>), Error> {
@@ -323,7 +323,7 @@ mod tests {
             },
         };
 
-        const ROOM: u64 = 1234;
+        const ROOM: [u8; 32] = *b"hduejdlameu7493mzajfjdlf;sdafsda";
 
         // Client 1 creates a new room
         state1.create_room(ROOM, origin1).unwrap();
@@ -400,15 +400,15 @@ mod tests {
 
         // 100 requests
         for i in 1..=100 {
-            state1.create_room(i, origin1).unwrap();
+            state1.create_room([i; 32], origin1).unwrap();
 
             // unrelated requests that shouldn't hit limit
-            state2.create_room(i + 1000, origin2).unwrap();
+            state2.create_room([i + 100; 32], origin2).unwrap();
         }
 
         // 101th request should hit limit
         assert!(matches!(
-            state2.create_room(101, origin1),
+            state2.create_room([101; 32], origin1),
             Err(Error::TooManyRequests)
         ));
     }
@@ -423,7 +423,7 @@ mod tests {
 
         let example_endpoint = "12.213.31.13:342".parse().unwrap();
 
-        const ROOM: u64 = 1234;
+        const ROOM: [u8; 32] = *b"jkfd;ew8t9spfjsdiafdjsafadsafdsa";
 
         state1.create_room(ROOM, origin1).unwrap();
 

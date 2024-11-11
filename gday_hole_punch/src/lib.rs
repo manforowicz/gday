@@ -1,6 +1,4 @@
-//! Note: this crate is still in early-development, so expect breaking changes.
-//!
-//! Lets 2 peers behind [NAT (network address translation)](https://en.wikipedia.org/wiki/Network_address_translation)
+//! Lets 2 peers, possibly behind [NAT (network address translation)](https://en.wikipedia.org/wiki/Network_address_translation),
 //! try to establish a direct authenticated TCP connection.
 //! Uses [TCP hole punching](https://en.wikipedia.org/wiki/TCP_hole_punching)
 //! and a helper [gday_server](https://crates.io/crates/gday_server) to do this.
@@ -9,39 +7,41 @@
 //! # Example
 //! ```no_run
 //! # use gday_hole_punch::server_connector;
-//! # use gday_hole_punch::ContactSharer;
 //! # use gday_hole_punch::try_connect_to_peer;
 //! # use gday_hole_punch::PeerCode;
+//! # use gday_hole_punch::share_contacts;
 //! # use std::str::FromStr;
 //! #
 //! # let rt = tokio::runtime::Builder::new_current_thread().build().unwrap();
 //! # rt.block_on( async {
-//! let servers = server_connector::DEFAULT_SERVERS;
 //! let timeout = std::time::Duration::from_secs(5);
-//! let room_code = 123;
-//! let shared_secret = 456;
 //!
 //! //////// Peer 1 ////////
 //!
 //! // Connect to a random server in the default server list
 //! let (mut server_connection, server_id) = server_connector::connect_to_random_server(
-//!     servers,
+//!     server_connector::DEFAULT_SERVERS,
 //!     timeout,
 //! ).await?;
 //!
-//! // PeerCode useful for giving rendezvous info to peer
-//! let peer_code = PeerCode { server_id, room_code, shared_secret };
-//! let code_to_share = peer_code.to_string();
+//! // PeerCode useful for giving rendezvous info to peer,
+//! // over an existing channel like email.
+//! let peer_code = PeerCode {
+//!     server_id,
+//!     room_code: "roomcode".to_string(),
+//!     shared_secret: "shared_secret".to_string()
+//! };
+//! let code_to_share = String::try_from(&peer_code)?;
 //!
 //! // Create a room in the server, and get my contact from it
-//! let (contact_sharer, my_contact) = ContactSharer::enter_room(
+//! let (my_contact, peer_contact_future) = share_contacts(
 //!     &mut server_connection,
-//!     room_code,
+//!     peer_code.room_code.as_bytes(),
 //!     true,
 //! ).await?;
 //!
 //! // Wait for the server to send the peer's contact
-//! let peer_contact = contact_sharer.get_peer_contact().await?;
+//! let peer_contact = peer_contact_future.await?;
 //!
 //! // Use TCP hole-punching to connect to the peer,
 //! // verify their identity with the shared_secret,
@@ -49,33 +49,35 @@
 //! let (tcp_stream, strong_key) = try_connect_to_peer(
 //!     my_contact.local,
 //!     peer_contact,
-//!     &shared_secret.to_be_bytes(),
+//!     peer_code.shared_secret.as_bytes(),
 //! ).await?;
 //!
 //! //////// Peer 2 (on a different computer) ////////
 //!
+//! // Get the peer_code that Peer 1 sent, for example
+//! // over email.
 //! let peer_code = PeerCode::from_str(&code_to_share)?;
 //!
 //! // Connect to the same server as Peer 1
 //! let mut server_connection = server_connector::connect_to_server_id(
-//!     servers,
+//!     server_connector::DEFAULT_SERVERS,
 //!     peer_code.server_id,
 //!     timeout,
 //! ).await?;
 //!
 //! // Join the same room in the server, and get my local contact
-//! let (contact_sharer, my_contact) = ContactSharer::enter_room(
+//! let (my_contact, peer_contact_future) = share_contacts(
 //!     &mut server_connection,
-//!     peer_code.room_code,
+//!     peer_code.room_code.as_bytes(),
 //!     false,
 //! ).await?;
 //!
-//! let peer_contact = contact_sharer.get_peer_contact().await?;
+//! let peer_contact = peer_contact_future.await?;
 //!
 //! let (tcp_stream, strong_key) = try_connect_to_peer(
 //!     my_contact.local,
 //!     peer_contact,
-//!     &peer_code.shared_secret.to_be_bytes(),
+//!     peer_code.shared_secret.as_bytes(),
 //! ).await?;
 //!
 //! # Ok::<(), Box<dyn std::error::Error>>(())
@@ -90,11 +92,10 @@ mod hole_puncher;
 mod peer_code;
 pub mod server_connector;
 
-pub use contact_sharer::ContactSharer;
+pub use contact_sharer::share_contacts;
+use gday_contact_exchange_protocol::ServerMsg;
 pub use hole_puncher::try_connect_to_peer;
 pub use peer_code::PeerCode;
-
-use gday_contact_exchange_protocol::ServerMsg;
 
 /// `gday_hole_punch` error
 #[derive(thiserror::Error, Debug)]
@@ -112,30 +113,36 @@ pub enum Error {
     #[error("Unexpected reply from server: {0}")]
     UnexpectedServerReply(ServerMsg),
 
+    /// Both `v4` and `v6` fields of the given local Contact were None.
+    #[error("Both `v4` and `v6` fields of the given local Contact were None.")]
+    LocalContactEmpty,
+
+    /// Both `v4` and `v6` fields of the given ServerConnection were None.
+    #[error("Both `v4` and `v6` fields of a ServerConnection were None.")]
+    ServerConnectionEmpty,
+
+    /// ServerConnection has mismatched streams. Either v4 had an IPv6 stream, or vice-versa.
+    #[error(
+        "ServerConnection has mismatched streams. Either v4 had an IPv6 stream, or vice-versa."
+    )]
+    ServerConnectionMismatch,
+
     /// Connected to peer, but key exchange failed
     #[error(
         "Connected to peer, but key exchange failed: {0}. \
-        Ensure your peer has the same shared secret."
+        Check for typos in your peer code and try again."
     )]
     SpakeFailed(#[from] spake2::Error),
 
-    /// Connected to peer, but couldn't verify their shared secret.
+    /// Connected to peer, but they had a different shared secret.
     #[error(
-        "Connected to peer, but couldn't verify their shared secret. \
-        Ensure your peer has the same shared secret."
+        "Connected to peer, but they had a different shared secret. \
+        Check for typos in your peer code and try again."
     )]
     PeerAuthenticationFailed,
 
-    /// Couldn't resolve contact exchange server domain name
-    #[error("Couldn't resolve contact exchange server domain name '{0}'")]
-    CouldntResolveServer(String),
-
-    /// TLS error with contact exchange server
-    #[error("TLS error with contact exchange server: {0}")]
-    Rustls(#[from] tokio_rustls::rustls::Error),
-
-    /// No contact exchange server with this ID found in the given list
-    #[error("No contact exchange server with ID '{0}' exists in this server list.")]
+    /// No contact exchange server with this ID found in server list
+    #[error("No contact exchange server with ID '{0}' exists in server list.")]
     ServerIDNotFound(u64),
 
     /// Couldn't connect to any of the contact exchange servers listed
@@ -152,17 +159,20 @@ pub enum Error {
         "Timed out while trying to connect to peer, likely due to an uncooperative \
     NAT (network address translator). \
     Try from a different network, enable IPv6, or switch to a tool that transfers \
-    files over a relay to circumvent NATs, such as magic-wormhole."
+    files over a relay to evade NATs, such as magic-wormhole."
     )]
     HolePunchTimeout,
 
-    /// Couldn't parse [`PeerCode`]
-    #[error("Couldn't parse your code: {0}. Check it for typos!")]
-    CouldntParsePeerCode(#[from] std::num::ParseIntError),
+    /// Couldn't parse server ID of [`PeerCode`]
+    #[error("Couldn't parse server ID in your code: {0}. Check it for typos!")]
+    CouldntParseServerID(#[from] std::num::ParseIntError),
 
-    /// Incorrect checksum when parsing [`PeerCode`]
-    #[error("Your code's checksum (last digit) is incorrect. Check it for typos!")]
-    IncorrectChecksumPeerCode,
+    /// The room_code or shared_secret of the peer code contained a period.
+    #[error(
+        "The room_code or shared_secret of the peer code contained a period. \
+    Period aren't allowed because they're used as code delimeters."
+    )]
+    PeerCodeContainedPeriod,
 
     /// Couldn't parse [`PeerCode`]
     #[error("Wrong number of segments in your code. Check it for typos!")]

@@ -22,5 +22,4 @@ gday_hole_punch = { version = "^0.2.1", path = "../gday_hole_punch" }
 indicatif = "0.17.8"
 log = "0.4.22"
 owo-colors = "4.0.0"
-rand = "0.8.5"
-tokio = { version = "1.39.2", features = ["io-std"] }
+tokio = { version = "1.39.2", features = ["io-std", "rt-multi-thread"] }
