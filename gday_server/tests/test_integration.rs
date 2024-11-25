@@ -16,8 +16,8 @@ async fn test_integration() {
         verbosity: log::LevelFilter::Off,
     };
     let (server_addrs, _joinset) = gday_server::start_server(args).unwrap();
-    let server_addr_1 = server_addrs[0];
-    let server_addr_2 = server_addrs[1];
+    let server_ipv4 = *server_addrs.iter().find(|a| a.is_ipv4()).unwrap();
+    let server_ipv6 = *server_addrs.iter().find(|a| a.is_ipv6()).unwrap();
 
     tokio::task::spawn_blocking(move || {
         let local_contact_1 = Contact {
@@ -31,18 +31,18 @@ async fn test_integration() {
         };
 
         // connect to the server
-        let mut stream1 = std::net::TcpStream::connect(server_addr_1).unwrap();
-        let mut stream2 = std::net::TcpStream::connect(server_addr_2).unwrap();
+        let mut stream_v4 = std::net::TcpStream::connect(server_ipv4).unwrap();
+        let mut stream_v6 = std::net::TcpStream::connect(server_ipv6).unwrap();
 
         // successfully create a room
         write_to(
             ClientMsg::CreateRoom {
                 room_code: [123; 32],
             },
-            &mut stream1,
+            &mut stream_v4,
         )
         .unwrap();
-        let response: ServerMsg = read_from(&mut stream1).unwrap();
+        let response: ServerMsg = read_from(&mut stream_v4).unwrap();
         assert_eq!(response, ServerMsg::RoomCreated);
 
         // room taken
@@ -50,10 +50,10 @@ async fn test_integration() {
             ClientMsg::CreateRoom {
                 room_code: [123; 32],
             },
-            &mut stream1,
+            &mut stream_v4,
         )
         .unwrap();
-        let response: ServerMsg = read_from(&mut stream1).unwrap();
+        let response: ServerMsg = read_from(&mut stream_v4).unwrap();
         assert_eq!(response, ServerMsg::ErrorRoomTaken);
 
         // room doesn't exist
@@ -62,10 +62,10 @@ async fn test_integration() {
                 room_code: [234; 32],
                 is_creator: true,
             },
-            &mut stream2,
+            &mut stream_v6,
         )
         .unwrap();
-        let response: ServerMsg = read_from(&mut stream2).unwrap();
+        let response: ServerMsg = read_from(&mut stream_v6).unwrap();
         assert_eq!(response, ServerMsg::ErrorNoSuchRoomCode);
 
         // record public address
@@ -74,10 +74,10 @@ async fn test_integration() {
                 room_code: [123; 32],
                 is_creator: true,
             },
-            &mut stream1,
+            &mut stream_v4,
         )
         .unwrap();
-        let response: ServerMsg = read_from(&mut stream1).unwrap();
+        let response: ServerMsg = read_from(&mut stream_v4).unwrap();
         assert_eq!(response, ServerMsg::ReceivedAddr);
 
         // record public address
@@ -86,10 +86,10 @@ async fn test_integration() {
                 room_code: [123; 32],
                 is_creator: false,
             },
-            &mut stream2,
+            &mut stream_v6,
         )
         .unwrap();
-        let response: ServerMsg = read_from(&mut stream2).unwrap();
+        let response: ServerMsg = read_from(&mut stream_v6).unwrap();
         assert_eq!(response, ServerMsg::ReceivedAddr);
 
         // set creator to done
@@ -99,10 +99,10 @@ async fn test_integration() {
                 room_code: [123; 32],
                 is_creator: true,
             },
-            &mut stream1,
+            &mut stream_v4,
         )
         .unwrap();
-        let response: ServerMsg = read_from(&mut stream1).unwrap();
+        let response: ServerMsg = read_from(&mut stream_v4).unwrap();
         let ServerMsg::ClientContact(client_contact) = response else {
             panic!("Server replied with {response:?} instead of ClientContact");
         };
@@ -114,10 +114,10 @@ async fn test_integration() {
                 room_code: [123; 32],
                 is_creator: true,
             },
-            &mut stream2,
+            &mut stream_v6,
         )
         .unwrap();
-        let response: ServerMsg = read_from(&mut stream2).unwrap();
+        let response: ServerMsg = read_from(&mut stream_v6).unwrap();
         assert_eq!(response, ServerMsg::ErrorUnexpectedMsg);
 
         // successfully create an unrelated room
@@ -125,10 +125,10 @@ async fn test_integration() {
             ClientMsg::CreateRoom {
                 room_code: [234; 32],
             },
-            &mut stream2,
+            &mut stream_v6,
         )
         .unwrap();
-        let response: ServerMsg = read_from(&mut stream2).unwrap();
+        let response: ServerMsg = read_from(&mut stream_v6).unwrap();
         assert_eq!(response, ServerMsg::RoomCreated);
 
         // set joiner to done
@@ -138,24 +138,24 @@ async fn test_integration() {
                 room_code: [123; 32],
                 is_creator: false,
             },
-            &mut stream2,
+            &mut stream_v6,
         )
         .unwrap();
-        let response: ServerMsg = read_from(&mut stream2).unwrap();
+        let response: ServerMsg = read_from(&mut stream_v6).unwrap();
         let ServerMsg::ClientContact(client_contact) = response else {
             panic!("Server replied with {response:?} instead of ClientContact");
         };
         assert_eq!(client_contact.local, local_contact_2);
 
         // ensure peer contact 1 properly exchanged
-        let response: ServerMsg = read_from(&mut stream1).unwrap();
+        let response: ServerMsg = read_from(&mut stream_v4).unwrap();
         let ServerMsg::PeerContact(peer_contact) = response else {
             panic!("Server replied with {response:?} instead of PeerContact");
         };
         assert_eq!(peer_contact.local, local_contact_2);
 
         // ensure peer contact 2 properly exchanged
-        let response: ServerMsg = read_from(&mut stream2).unwrap();
+        let response: ServerMsg = read_from(&mut stream_v6).unwrap();
         let ServerMsg::PeerContact(peer_contact) = response else {
             panic!("Server replied with {response:?} instead of PeerContact");
         };
@@ -166,10 +166,10 @@ async fn test_integration() {
             ClientMsg::CreateRoom {
                 room_code: [123; 32],
             },
-            &mut stream1,
+            &mut stream_v4,
         )
         .unwrap();
-        let response: ServerMsg = read_from(&mut stream1).unwrap();
+        let response: ServerMsg = read_from(&mut stream_v4).unwrap();
         assert_eq!(response, ServerMsg::RoomCreated);
     })
     .await
@@ -189,13 +189,13 @@ async fn test_request_limit() {
         verbosity: log::LevelFilter::Off,
     };
     let (server_addrs, _joinset) = gday_server::start_server(args).unwrap();
-    let server_addr_1 = server_addrs[0];
-    let server_addr_2 = server_addrs[1];
+    let server_ipv4 = *server_addrs.iter().find(|a| a.is_ipv4()).unwrap();
+    let server_ipv6 = *server_addrs.iter().find(|a| a.is_ipv6()).unwrap();
 
     tokio::task::spawn_blocking(move || {
         // connect to the server
-        let mut stream1 = std::net::TcpStream::connect(server_addr_1).unwrap();
-        let mut stream2 = std::net::TcpStream::connect(server_addr_2).unwrap();
+        let mut stream_v4 = std::net::TcpStream::connect(server_ipv4).unwrap();
+        let mut stream_v6 = std::net::TcpStream::connect(server_ipv6).unwrap();
 
         for room_code in 1..=10 {
             // successfully create a room
@@ -203,10 +203,10 @@ async fn test_request_limit() {
                 ClientMsg::CreateRoom {
                     room_code: [room_code; 32],
                 },
-                &mut stream1,
+                &mut stream_v4,
             )
             .unwrap();
-            let response: ServerMsg = read_from(&mut stream1).unwrap();
+            let response: ServerMsg = read_from(&mut stream_v4).unwrap();
             assert_eq!(response, ServerMsg::RoomCreated);
         }
 
@@ -215,10 +215,10 @@ async fn test_request_limit() {
             ClientMsg::CreateRoom {
                 room_code: [11; 32],
             },
-            &mut stream1,
+            &mut stream_v4,
         )
         .unwrap();
-        let response: ServerMsg = read_from(&mut stream1).unwrap();
+        let response: ServerMsg = read_from(&mut stream_v4).unwrap();
         assert_eq!(response, ServerMsg::ErrorTooManyRequests);
 
         // ensure the server closed the connection
@@ -226,7 +226,7 @@ async fn test_request_limit() {
             ClientMsg::CreateRoom {
                 room_code: [100; 32],
             },
-            &mut stream1,
+            &mut stream_v4,
         );
         assert!(matches!(
             result,
@@ -238,10 +238,10 @@ async fn test_request_limit() {
             ClientMsg::CreateRoom {
                 room_code: [200; 32],
             },
-            &mut stream2,
+            &mut stream_v6,
         )
         .unwrap();
-        let response: ServerMsg = read_from(&mut stream2).unwrap();
+        let response: ServerMsg = read_from(&mut stream_v6).unwrap();
         assert_eq!(response, ServerMsg::RoomCreated);
     })
     .await

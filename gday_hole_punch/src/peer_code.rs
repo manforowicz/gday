@@ -5,7 +5,7 @@ use std::str::FromStr;
 
 /// Info that 2 peers must share before they can exchange contacts.
 ///
-/// Use [`PeerCode::try_into()`] and [`PeerCode::from_str()`]
+/// Use [`String::try_from()`] and [`PeerCode::from_str()`]
 /// to convert to and from a short human-readable code.
 #[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize)]
 pub struct PeerCode {
@@ -38,18 +38,19 @@ pub struct PeerCode {
 impl PeerCode {
     /// Returns a [`PeerCode`] with this `server_id`
     /// and a random `room_code` and `shared_secret`,
-    /// both of length 4 characters.
-    pub fn random(server_id: u64) -> Self {
+    /// both of length `len` characters,
+    /// built from the alphabet `2345689abcdefghjkmnpqrstvwxyz`.
+    pub fn random(server_id: u64, len: usize) -> Self {
         const ALPHABET: &[u8] = b"2345689abcdefghjkmnpqrstvwxyz";
 
         let mut rng = rand::thread_rng();
         let range = rand::distributions::Uniform::new(0, ALPHABET.len());
 
-        let room_code: String = (0..4)
+        let room_code: String = (0..len)
             .map(|_| ALPHABET[rng.sample(range)] as char)
             .collect();
 
-        let shared_secret: String = (0..4)
+        let shared_secret: String = (0..len)
             .map(|_| ALPHABET[rng.sample(range)] as char)
             .collect();
 

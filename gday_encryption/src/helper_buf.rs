@@ -38,17 +38,16 @@ impl HelperBuf {
     }
 
     /// Returns the internal spare capacity after the right cursor.
-    /// - Put data to the spare capacity, then use [`Self::increase_len()`]
+    /// - Copy data to the spare capacity, then use [`Self::increase_len()`]
     pub fn spare_capacity(&mut self) -> &mut [u8] {
         &mut self.inner[self.r_cursor..]
     }
 
     /// Increment the right cursor by `num_bytes`.
-    /// - Do this after putting data to [`Self::spare_capacity()`].
-    /// - Panics if this would put the right cursor beyond the capacity.
+    /// - Do this after copying data to [`Self::spare_capacity()`].
     pub fn increase_len(&mut self, num_bytes: usize) {
         self.r_cursor += num_bytes;
-        assert!(self.r_cursor <= self.inner.len());
+        debug_assert!(self.r_cursor <= self.inner.len());
     }
 
     /// Shifts the stored data to the beginning of the internal buffer.
@@ -85,10 +84,9 @@ impl aead::Buffer for HelperBuf {
 
     /// Shortens the length of [`HelperBuf`] to `len`
     /// by cutting off data at the end.
-    /// - Panics if `len > self.len()`
     fn truncate(&mut self, len: usize) {
         let new_r_cursor = self.l_cursor + len;
-        assert!(new_r_cursor <= self.r_cursor);
+        debug_assert!(new_r_cursor <= self.r_cursor);
         self.r_cursor = new_r_cursor;
     }
 }
@@ -144,10 +142,9 @@ impl<'a> aead::Buffer for HelperBufPart<'a> {
 
     /// Shortens the length of this [`HelperBufPart`] to `len`
     /// by cutting off data at the end.
-    /// - Panics if `len > self.len()`
     fn truncate(&mut self, len: usize) {
         let new_r_cursor = self.start_i + len;
-        assert!(new_r_cursor <= self.parent.r_cursor);
+        debug_assert!(new_r_cursor <= self.parent.r_cursor);
         self.parent.r_cursor = new_r_cursor;
     }
 }

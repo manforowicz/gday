@@ -60,10 +60,11 @@ impl Room {
 /// is acquired at any given time. This is to prevent deadlock.
 #[derive(Clone, Debug)]
 pub struct State {
-    /// Maps SHA256(room_code) to rooms
+    /// Maps room code to rooms
     rooms: Arc<Mutex<HashMap<[u8; 32], Room>>>,
 
-    /// Maps IP addresses to the number of requests they sent this minute.
+    /// Maps IP addresses to the number of critical
+    /// requests they sent this minute.
     request_counts: Arc<Mutex<HashMap<IpAddr, u32>>>,
 
     /// Maximum number of requests an IP address can

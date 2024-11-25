@@ -29,7 +29,7 @@ pub struct FileMetaLocal {
 
 impl FileMeta {
     /// Gets the base path where the file that this
-    /// [`FileMetaLocal`] represents should be saved.
+    /// [`FileMeta`] represents should be saved.
     ///
     /// Returns `save_dir` joined with [`Self::short_path`].
     ///
@@ -153,7 +153,7 @@ impl From<FileMetaLocal> for FileMeta {
 /// gives an unoccupied path.
 async fn get_first_unoccupied_number(path: &Path) -> Result<u32, Error> {
     // if the file doesn't exist
-    if tokio::fs::metadata(path).await.is_err() {
+    if !path.exists() {
         return Ok(0);
     }
 
@@ -250,7 +250,7 @@ pub async fn get_file_metas(paths: &[PathBuf]) -> Result<Vec<FileMetaLocal>, Err
 /// - The [`FileMetaLocal::short_path`] will strip the prefix
 ///   `top_path` from all paths. `top_path` must be a prefix of `path`.
 /// - `path` is the file or directory where recursive traversal begins.
-/// - `files` is a [`HashSet`] to which found files will be inserted.
+/// - `files` is a [`Vec`] to which found files will be inserted.
 fn get_file_metas_helper<'a>(
     top_path: &'a Path,
     path: &'a Path,

@@ -19,6 +19,7 @@ async fn main() {
                 .await
                 .expect("No addresses provided.")
                 .expect("Server thread panicked.");
+            error!("Server crashed.");
         }
         Err(err) => {
             error!("{err}");

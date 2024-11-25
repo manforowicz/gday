@@ -34,7 +34,8 @@ pub struct ServerInfo {
     pub domain_name: &'static str,
     /// The unique ID of the server.
     ///
-    /// Helpful when telling the other peer which server to connect to.
+    /// Used in [`crate::PeerCode`] when telling
+    /// the other peer which server to connect to.
     /// Should NOT be zero, since peers can use that value to represent
     /// a custom server.
     pub id: u64,
@@ -140,7 +141,7 @@ pub struct ServerConnection {
     pub v6: Option<ServerStream>,
 }
 
-// some private helper functions used by ContactSharer
+// some private helper functions used by contact_sharer
 impl ServerConnection {
     /// Enables `SO_REUSEADDR` and `SO_REUSEPORT` so that the ports of
     /// these sockets can be reused for hole punching.
@@ -173,7 +174,7 @@ impl ServerConnection {
     /// Returns a [`Vec`] of all the [`ServerStream`]s in this connection.
     /// Will return `v6` followed by `v4`
     pub(super) fn streams(&mut self) -> Vec<&mut ServerStream> {
-        let mut streams = Vec::new();
+        let mut streams = Vec::with_capacity(2);
 
         if let Some(stream) = &mut self.v6 {
             streams.push(stream);
@@ -187,7 +188,7 @@ impl ServerConnection {
     }
 
     /// Returns the local [`Contact`] of this server stream.
-    pub(super) fn local_contact(&self) -> Result<Contact, Error> {
+    pub fn local_contact(&self) -> Result<Contact, Error> {
         let mut contact = Contact { v4: None, v6: None };
 
         if let Some(stream) = &self.v4 {
@@ -227,8 +228,13 @@ pub async fn connect_to_random_server(
     servers: &[ServerInfo],
     timeout: Duration,
 ) -> Result<(ServerConnection, u64), Error> {
+    // Filter out non-preferred servers
     let preferred: Vec<&ServerInfo> = servers.iter().filter(|s| s.prefer).collect();
+
+    // Get the domain names of the preferred servers
     let preferred_names: Vec<&str> = preferred.iter().map(|s| s.domain_name).collect();
+
+    // Try connecting to the them in a random order
     let (conn, i) = connect_to_random_domain_name(&preferred_names, timeout).await?;
     Ok((conn, preferred[i].id))
 }
@@ -290,7 +296,7 @@ pub async fn connect_to_random_domain_name(
 ///
 /// - Returns a [`ServerConnection`] with all the successful TLS streams.
 /// - Gives up connecting to each TCP address after `timeout` time.
-/// - Returns an error if every attempt failed.
+/// - Returns an error if couldn't connect to any of IPv4 and IPv6.
 /// - Returns an error for any issues with TLS.
 pub async fn connect_tls(
     domain_name: String,
@@ -336,7 +342,7 @@ pub async fn connect_tls(
 ///
 /// - Returns a [`ServerConnection`] with all the successful TCP streams.
 /// - Gives up connecting to each TCP address after `timeout` time.
-/// - Returns an error if every attempt failed.
+/// - Returns an error if couldn't connect to any of IPv4 and IPv6.
 pub async fn connect_tcp(
     addrs: impl ToSocketAddrs + Debug,
     timeout: Duration,

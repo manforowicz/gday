@@ -105,18 +105,6 @@ async fn test_file_offer() {
     assert_eq!(only_new.get_num_not_rejected(), 4);
     assert_eq!(offer.get_transfer_size(&only_new).unwrap(), 23);
 
-    let only_remaining = FileResponseMsg::accept_only_remaining_portions(&offer, dir_path)
-        .await
-        .unwrap();
-    assert_eq!(
-        only_remaining.response,
-        vec![None, None, Some(4), None, Some(1), None]
-    );
-    assert_eq!(only_remaining.get_num_fully_accepted(), 0);
-    assert_eq!(only_remaining.get_num_partially_accepted(), 2);
-    assert_eq!(only_remaining.get_num_not_rejected(), 2);
-    assert_eq!(offer.get_transfer_size(&only_remaining).unwrap(), 8);
-
     let only_new_and_interrupted =
         FileResponseMsg::accept_only_new_and_interrupted(&offer, dir_path)
             .await

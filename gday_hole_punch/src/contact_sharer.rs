@@ -5,19 +5,16 @@ use gday_contact_exchange_protocol::{
 use sha2::Digest;
 use std::future::Future;
 
-/// Enters a new room with `room_code` in the gday server
+/// Shares contacts on `room_code` in the gday server
 /// that `server_connection`is  connected to.
 ///
 /// If `is_creator`, tries creating the room, otherwise tries joining it.
 ///
-/// Sends local socket addresses to the server.
-///
 /// Returns
 /// - Your [`FullContact`], as
 ///   determined by the server
-/// - A future that, when awaited, will evaluate to
+/// - A future that when awaited will evaluate to
 ///   the peer's [`FullContact`].
-
 pub async fn share_contacts<'a>(
     server_connection: &'a mut ServerConnection,
     room_code: &[u8],
@@ -29,6 +26,7 @@ pub async fn share_contacts<'a>(
     ),
     Error,
 > {
+    // Hash the `room_code` to get a 32-bit long code
     let mut hasher = sha2::Sha256::new();
     hasher.update(room_code);
     let room_code: [u8; 32] = hasher.finalize().into();
@@ -57,7 +55,7 @@ pub async fn share_contacts<'a>(
 
 /// Private helper function.
 /// Sends personal contact information the the server, and
-/// returns it's response.
+/// returns its response.
 async fn share_contact(
     connection: &mut ServerConnection,
     room_code: [u8; 32],
@@ -102,7 +100,7 @@ async fn share_contact(
 
 /// Blocks until the Gday server sends the contact information the
 /// other peer submitted. Returns the peer's [`FullContact`], as
-/// determined by the server
+/// determined by the server.
 async fn get_peer_contact(connection: &mut ServerConnection) -> Result<FullContact, Error> {
     // This is the same stream we used to send DoneSending,
     // so the server should respond on it,

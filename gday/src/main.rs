@@ -36,7 +36,7 @@ struct Args {
     #[arg(short, long, requires("server"))]
     port: Option<u16>,
 
-    /// Use raw TCP without TLS.
+    /// Use TCP without TLS.
     #[arg(short, long, requires("server"))]
     unencrypted: bool,
 
@@ -49,13 +49,16 @@ struct Args {
 enum Command {
     /// Send files and/or directories.
     Send {
-        /// Custom shared code of form "server_id.room_code.shared_secret" (base 16).
+        /// Custom shared code of form "server_id.room_code.shared_secret".
         ///
-        /// server_id must be valid, or 0 when custom --server set.
-        ///
-        /// Doesn't require a checksum digit.
-        #[arg(short, long)]
+        /// A server_id of 0 causes a random server to be used.
+        /// server_id ignored when custom --server set.
+        #[arg(short, long, conflicts_with = "length")]
         code: Option<PeerCode>,
+
+        /// Length of the last 2 sections of the randomly-generated shareable code.
+        #[arg(short, long, default_value = "4", conflicts_with = "code")]
+        length: usize,
 
         /// Files and/or directories to send.
         #[arg(required = true, num_args = 1..)]
@@ -65,11 +68,10 @@ enum Command {
     /// Receive files.
     Get {
         /// Directory where to save the files.
-        /// By default, saves them in the current directory.
         #[arg(short, long, default_value = ".")]
         path: PathBuf,
 
-        /// The code that your peer gave you.
+        /// The code your peer gave you (of form "server_id.room_code.shared_secret")
         code: PeerCode,
     },
 }
@@ -94,41 +96,65 @@ async fn main() {
 }
 
 async fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
-    // get the server port
+    // Get the server port
     let port = if let Some(port) = args.port {
         port
     } else {
         server_connector::DEFAULT_PORT
     };
 
-    // use custom server if the user provided one,
-    // otherwise pick a random default server
-    let (mut server_connection, server_id) = if let Some(domain_name) = args.server {
+    // Connect to a custom server if the user chose one.
+    let custom_server = if let Some(domain_name) = args.server {
         if args.unencrypted {
-            (
+            Some(
                 server_connector::connect_tcp(format!("{domain_name}:{port}"), SERVER_TIMEOUT)
                     .await?,
-                0,
             )
         } else {
-            (
-                server_connector::connect_tls(domain_name, port, SERVER_TIMEOUT).await?,
-                0,
-            )
+            Some(server_connector::connect_tls(domain_name, port, SERVER_TIMEOUT).await?)
         }
     } else {
-        server_connector::connect_to_random_server(DEFAULT_SERVERS, SERVER_TIMEOUT).await?
+        None
     };
 
     match args.operation {
-        // sending files
-        crate::Command::Send { paths, code } => {
+        crate::Command::Send {
+            paths,
+            code,
+            length,
+        } => {
+            // If the user chose a custom server
+            let (mut server_connection, server_id) = if let Some(forced_server) = custom_server {
+                (forced_server, 0)
+
+            // If the user chose a custom code
+            } else if let Some(code) = &code {
+                if code.server_id == 0 {
+                    server_connector::connect_to_random_server(DEFAULT_SERVERS, SERVER_TIMEOUT)
+                        .await?
+                } else {
+                    (
+                        server_connector::connect_to_server_id(
+                            DEFAULT_SERVERS,
+                            code.server_id,
+                            SERVER_TIMEOUT,
+                        )
+                        .await?,
+                        code.server_id,
+                    )
+                }
+
+            // Otherwise, pick a random server
+            } else {
+                server_connector::connect_to_random_server(DEFAULT_SERVERS, SERVER_TIMEOUT).await?
+            };
+
             // generate random `room_code` and `shared_secret`
             // if the user didn't provide custom ones
             let peer_code = if let Some(code) = code {
-                code
+                PeerCode { server_id, ..code }
             } else {
-                PeerCode::random(server_id)
+                PeerCode::random(server_id, length)
             };
 
             // get metadata about the files to transfer
@@ -204,6 +230,17 @@ async fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
 
         // receiving files
         crate::Command::Get { path, code } => {
+            let mut server_connection = if let Some(forced_server) = custom_server {
+                forced_server
+            } else {
+                server_connector::connect_to_server_id(
+                    DEFAULT_SERVERS,
+                    code.server_id,
+                    SERVER_TIMEOUT,
+                )
+                .await?
+            };
+
             let (my_contact, peer_contact_fut) =
                 share_contacts(&mut server_connection, code.room_code.as_bytes(), false).await?;
 

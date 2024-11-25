@@ -65,6 +65,11 @@ pub use crate::offer::{
 };
 pub use crate::transfer::{receive_files, send_files, TransferReport};
 
+/// Version of the protocol.
+/// Different numbers wound indicate
+/// incompatible protocol breaking changes.
+pub const PROTOCOL_VERSION: u16 = 1;
+
 /// `gday_file_transfer` error.
 #[derive(Error, Debug)]
 #[non_exhaustive]
@@ -78,7 +83,7 @@ pub enum Error {
     #[error("IO Error: {0}")]
     IO(#[from] std::io::Error),
 
-    /// All 100 suitable filenames for this [`FileMeta`] are occupied.
+    /// All 100 suitable locations to save [`FileMeta`] are occupied.
     ///
     /// Comes from [`FileMeta::get_unoccupied_save_path()`]
     /// or [`FileMeta::get_partial_download_path()`].
@@ -121,4 +126,12 @@ pub enum Error {
         This would make the offered metadata ambiguous."
     )]
     PathsHaveSameName(std::ffi::OsString),
+
+    /// Received a message with an incompatible protocol version.
+    /// Check if this software is up-to-date.
+    #[error(
+        "Received a message with an incompatible protocol version. \
+        Check if this software is up-to-date."
+    )]
+    IncompatibleProtocol,
 }

@@ -168,9 +168,10 @@ pub enum Error {
     CouldntParseServerID(#[from] std::num::ParseIntError),
 
     /// The room_code or shared_secret of the peer code contained a period.
+    /// Periods aren't allowed because they're used as code delimeters.
     #[error(
         "The room_code or shared_secret of the peer code contained a period. \
-    Period aren't allowed because they're used as code delimeters."
+    Periods aren't allowed because they're used as code delimeters."
     )]
     PeerCodeContainedPeriod,
 

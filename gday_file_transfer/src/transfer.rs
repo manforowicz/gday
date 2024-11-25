@@ -5,7 +5,7 @@ use tokio::io::{
 use crate::{Error, FileMeta, FileMetaLocal, FileOfferMsg, FileResponseMsg};
 use std::io::SeekFrom;
 use std::path::Path;
-use std::pin::Pin;
+use std::pin::{pin, Pin};
 use std::task::{ready, Context, Poll};
 
 const FILE_BUFFER_SIZE: usize = 1_000_000;
@@ -31,9 +31,10 @@ pub struct TransferReport {
 pub async fn send_files(
     offer: &[FileMetaLocal],
     response: &FileResponseMsg,
-    writer: impl AsyncWrite + Unpin,
+    writer: impl AsyncWrite,
     progress_callback: impl FnMut(&TransferReport),
 ) -> Result<(), Error> {
+    let writer = pin!(writer);
     let files: Vec<(&FileMetaLocal, u64)> = offer
         .iter()
         .zip(&response.response)
@@ -96,9 +97,10 @@ pub async fn receive_files(
     offer: &FileOfferMsg,
     response: &FileResponseMsg,
     save_path: &Path,
-    reader: impl AsyncRead + Unpin,
+    reader: impl AsyncRead,
     progress_callback: impl FnMut(&TransferReport),
 ) -> Result<(), Error> {
+    let reader = pin!(reader);
     let files: Vec<(&FileMeta, u64)> = offer
         .files
         .iter()
@@ -116,8 +118,12 @@ pub async fn receive_files(
     }
 
     // Wrap the reader to report progress over `progress_tx`
-    let mut reader =
-        ProgressWrapper::new(reader, total_bytes, files.len() as u64, progress_callback);
+    let mut reader = ProgressWrapper::new(
+        tokio::io::BufReader::with_capacity(FILE_BUFFER_SIZE, reader),
+        total_bytes,
+        files.len() as u64,
+        progress_callback,
+    );
 
     // iterate over all the files
     for (offer, start) in files {
@@ -133,11 +139,7 @@ pub async fn receive_files(
             if let Some(parent) = tmp_path.parent() {
                 tokio::fs::create_dir_all(parent).await?;
             }
-            let file = tokio::fs::File::create(&tmp_path).await?;
-
-            // buffer the writer
-            let buf_size = std::cmp::min(FILE_BUFFER_SIZE, offer.len as usize);
-            let mut file = BufWriter::with_capacity(buf_size, file);
+            let mut file = tokio::fs::File::create(&tmp_path).await?;
 
             // only take the length of the file from the reader
             let mut reader = (&mut reader).take(offer.len);
@@ -148,17 +150,13 @@ pub async fn receive_files(
         // resume interrupted download
         } else {
             // open the partially downloaded file in append mode
-            let file = tokio::fs::OpenOptions::new()
+            let mut file = tokio::fs::OpenOptions::new()
                 .append(true)
                 .open(&tmp_path)
                 .await?;
             if file.metadata().await?.len() != start {
                 return Err(Error::UnexpectedFileLen);
             }
-
-            // buffer the writer
-            let buf_size = std::cmp::min(FILE_BUFFER_SIZE, offer.len as usize - start as usize);
-            let mut file = BufWriter::with_capacity(buf_size, file);
 
             // only take the length of the remaining part of the file from the reader
             let mut reader = (&mut reader).take(offer.len - start);

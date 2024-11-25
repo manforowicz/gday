@@ -81,6 +81,7 @@ async fn handle_requests(
             }
             Err(HandleMessageError::UnknownMessage(_)) => {
                 write_to_async(ServerMsg::ErrorSyntax, stream).await?;
+                return result;
             }
             Err(HandleMessageError::IO(_)) => {
                 write_to_async(ServerMsg::ErrorConnection, stream).await?;
