@@ -20,8 +20,9 @@ pub struct TransferReport {
 
 /// Transfers the requested files to `writer`.
 ///
-/// - `offer` is the `Vec` of [`FileMetaLocal`] offered to the peer.
-/// - `response` is the peer's [`FileResponseMsg`].
+/// - `offer` is the `Vec` of [`FileMetaLocal`] you sent to your peer.
+/// - `response` is the [`FileResponseMsg`] received from your peer.
+/// - `writer` is the the IO stream on which the files will be sent.
 /// - `progress_callback` is a function that gets frequently
 ///   called with [`TransferReport`] to report progress.
 ///
@@ -84,7 +85,7 @@ pub async fn send_files(
 /// Receives the requested files from `reader`.
 ///
 /// - `offer` is the [`FileOfferMsg`] offered by the peer.
-/// - `response` is your corresponding [`FileResponseMsg`].
+/// - `response` is the [`FileResponseMsg`] that you've sent in response.
 /// - `save_path` is the directory where the files should be saved.
 /// - `reader` is the IO stream on which the files will be received.
 /// - `progress_callback` is an function that gets frequently

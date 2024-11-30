@@ -36,7 +36,7 @@ fn error_on_invalid_json() {
     let mut pipe = std::collections::VecDeque::new();
 
     // gibberish json
-    pipe.write_all(&[0, 1, 0, 5, 52, 45, 77, 123, 12]).unwrap();
+    pipe.write_all(&[1, 0, 5, 52, 45, 77, 123, 12]).unwrap();
     let result: Result<ServerMsg, Error> = read_from(&mut pipe);
     assert!(matches!(result, Err(Error::JSON(_))));
 }
@@ -46,7 +46,7 @@ fn error_on_incompatible_version() {
     let mut pipe = std::collections::VecDeque::new();
 
     // invalid version
-    pipe.write_all(&[0, 2, 0, 5, 52, 45, 77, 123, 12]).unwrap();
+    pipe.write_all(&[2, 0, 5, 52, 45, 77, 123, 12]).unwrap();
     let result: Result<ServerMsg, Error> = read_from(&mut pipe);
     assert!(matches!(result, Err(Error::IncompatibleProtocol)));
 }
@@ -80,7 +80,7 @@ async fn error_on_invalid_json_async() {
     let (mut writer, mut reader) = tokio::io::duplex(1000);
     // gibberish json
     writer
-        .write_all(&[0, 1, 0, 5, 52, 45, 77, 123, 12])
+        .write_all(&[1, 0, 5, 52, 45, 77, 123, 12])
         .await
         .unwrap();
     let result: Result<ServerMsg, Error> = read_from_async(&mut reader).await;
@@ -92,7 +92,7 @@ async fn error_on_incompatible_version_async() {
     let (mut writer, mut reader) = tokio::io::duplex(1000);
     // gibberish json
     writer
-        .write_all(&[0, 2, 0, 5, 52, 45, 77, 123, 12])
+        .write_all(&[2, 0, 5, 52, 45, 77, 123, 12])
         .await
         .unwrap();
     let result: Result<ServerMsg, Error> = read_from_async(&mut reader).await;

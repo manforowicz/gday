@@ -6,7 +6,7 @@ use sha2::Digest;
 use std::future::Future;
 
 /// Shares contacts on `room_code` in the gday server
-/// that `server_connection`is  connected to.
+/// that `server_connection` is connected to.
 ///
 /// If `is_creator`, tries creating the room, otherwise tries joining it.
 ///

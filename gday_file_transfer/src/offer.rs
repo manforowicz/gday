@@ -167,9 +167,13 @@ impl FileResponseMsg {
 /// and 4 bytes holding the length of the following message (all in big-endian).
 pub fn write_to(msg: impl Serialize, writer: &mut impl Write) -> Result<(), Error> {
     let vec = serde_json::to_vec(&msg)?;
-    let len_bytes = u32::try_from(vec.len())?;
-    writer.write_all(&PROTOCOL_VERSION.to_be_bytes())?;
-    writer.write_all(&len_bytes.to_be_bytes())?;
+    let len = u32::try_from(vec.len())?;
+
+    let mut header = [0; 5];
+    header[0] = PROTOCOL_VERSION;
+    header[1..5].copy_from_slice(&len.to_be_bytes());
+
+    writer.write_all(&header)?;
     writer.write_all(&vec)?;
     writer.flush()?;
     Ok(())
@@ -184,9 +188,13 @@ pub async fn write_to_async(
     writer: &mut (impl AsyncWrite + Unpin),
 ) -> Result<(), Error> {
     let vec = serde_json::to_vec(&msg)?;
-    let len_bytes = u32::try_from(vec.len())?;
-    writer.write_all(&PROTOCOL_VERSION.to_be_bytes()).await?;
-    writer.write_all(&len_bytes.to_be_bytes()).await?;
+    let len = u32::try_from(vec.len())?;
+
+    let mut header = [0; 5];
+    header[0] = PROTOCOL_VERSION;
+    header[1..5].copy_from_slice(&len.to_be_bytes());
+
+    writer.write_all(&header).await?;
     writer.write_all(&vec).await?;
     writer.flush().await?;
     Ok(())
@@ -194,19 +202,15 @@ pub async fn write_to_async(
 
 /// Reads a message from `reader` using [`serde_json`].
 ///
-/// Assumes the message is prefixed with 2 bytes holding the [`PROTOCOL_VERSION`]
-/// and 4 bytes holding the length of the following message (all in big-endian).
+/// Assumes the message is prefixed with 1 byte holding the [`PROTOCOL_VERSION`]
+/// and 4 big-endian bytes holding the length of the following message.
 pub fn read_from<T: DeserializeOwned>(reader: &mut impl Read) -> Result<T, Error> {
-    let mut protocol = [0_u8; 2];
-    reader.read_exact(&mut protocol)?;
-    let protocol = u16::from_be_bytes(protocol);
-    if protocol != PROTOCOL_VERSION {
+    let mut header = [0_u8; 5];
+    reader.read_exact(&mut header)?;
+    if header[0] != PROTOCOL_VERSION {
         return Err(Error::IncompatibleProtocol);
     }
-
-    let mut len = [0_u8; 4];
-    reader.read_exact(&mut len)?;
-    let len = u32::from_be_bytes(len) as usize;
+    let len = u32::from_be_bytes(header[1..5].try_into().unwrap()) as usize;
 
     let mut buf = vec![0; len];
     reader.read_exact(&mut buf)?;
@@ -215,21 +219,17 @@ pub fn read_from<T: DeserializeOwned>(reader: &mut impl Read) -> Result<T, Error
 
 /// Asynchronously reads a message from `reader` using [`serde_json`].
 ///
-/// Assumes the message is prefixed with 2 bytes holding the [`PROTOCOL_VERSION`]
-/// and 4 bytes holding the length of the following message (all in big-endian).
+/// Assumes the message is prefixed with 1 byte holding the [`PROTOCOL_VERSION`]
+/// and 4 big-endian bytes holding the length of the following message.
 pub async fn read_from_async<T: DeserializeOwned>(
     reader: &mut (impl AsyncRead + Unpin),
 ) -> Result<T, Error> {
-    let mut protocol = [0_u8; 2];
-    reader.read_exact(&mut protocol).await?;
-    let protocol = u16::from_be_bytes(protocol);
-    if protocol != PROTOCOL_VERSION {
+    let mut header = [0_u8; 5];
+    reader.read_exact(&mut header).await?;
+    if header[0] != PROTOCOL_VERSION {
         return Err(Error::IncompatibleProtocol);
     }
-
-    let mut len = [0_u8; 4];
-    reader.read_exact(&mut len).await?;
-    let len = u32::from_be_bytes(len) as usize;
+    let len = u32::from_be_bytes(header[1..5].try_into().unwrap()) as usize;
 
     let mut buf = vec![0; len];
     reader.read_exact(&mut buf).await?;

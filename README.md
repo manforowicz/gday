@@ -56,7 +56,7 @@ and file transfer end-to-end encrypted with
 
 - Automatically tries both IPv4 and IPv6.
 
-- Immune to malicious servers impersonating your peer.
+- Resistant to malicious servers impersonating your peer.
 Uses [SPAKE2](https://datatracker.ietf.org/doc/rfc9382/) to derive an
 encryption key from a shared secret.
 

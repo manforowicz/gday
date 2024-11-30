@@ -55,7 +55,7 @@ pub struct Args {
     pub request_limit: u32,
 
     /// Log verbosity. (trace, debug, info, warn, error)
-    #[arg(short, long, default_value = "info")]
+    #[arg(short, long, default_value = "debug")]
     pub verbosity: log::LevelFilter,
 }
 

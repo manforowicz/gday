@@ -1,4 +1,4 @@
-//! This protocol lets two users exchange their public and (optionally) private socket addresses via a server.
+//! Protocol for peers to exchange their socket addresses via a server.
 //!
 //! On it's own, this library doesn't do anything other than define a shared protocol.
 //! In most cases, you should use one of the following crates:
@@ -86,7 +86,7 @@ pub const DEFAULT_PORT: u16 = 2311;
 /// Version of the protocol.
 /// Different numbers wound indicate
 /// incompatible protocol breaking changes.
-pub const PROTOCOL_VERSION: u16 = 1;
+pub const PROTOCOL_VERSION: u8 = 1;
 
 /// A message from client to server.
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Clone, Copy)]
@@ -291,9 +291,13 @@ impl std::fmt::Display for FullContact {
 /// and 2 bytes holding the length of the following message (all in big-endian).
 pub fn write_to(msg: impl Serialize, writer: &mut impl Write) -> Result<(), Error> {
     let vec = serde_json::to_vec(&msg)?;
-    let len_byte = u16::try_from(vec.len())?;
-    writer.write_all(&PROTOCOL_VERSION.to_be_bytes())?;
-    writer.write_all(&len_byte.to_be_bytes())?;
+    let len = u16::try_from(vec.len())?;
+
+    let mut header = [0; 3];
+    header[0] = PROTOCOL_VERSION;
+    header[1..3].copy_from_slice(&len.to_be_bytes());
+
+    writer.write_all(&header)?;
     writer.write_all(&vec)?;
     writer.flush()?;
     Ok(())
@@ -308,9 +312,13 @@ pub async fn write_to_async(
     writer: &mut (impl AsyncWrite + Unpin),
 ) -> Result<(), Error> {
     let vec = serde_json::to_vec(&msg)?;
-    let len_byte = u16::try_from(vec.len())?;
-    writer.write_all(&PROTOCOL_VERSION.to_be_bytes()).await?;
-    writer.write_all(&len_byte.to_be_bytes()).await?;
+    let len = u16::try_from(vec.len())?;
+
+    let mut header = [0; 3];
+    header[0] = PROTOCOL_VERSION;
+    header[1..3].copy_from_slice(&len.to_be_bytes());
+
+    writer.write_all(&header).await?;
     writer.write_all(&vec).await?;
     writer.flush().await?;
     Ok(())
@@ -318,19 +326,15 @@ pub async fn write_to_async(
 
 /// Reads a message from `reader` using [`serde_json`].
 ///
-/// Assumes the message is prefixed with 2 bytes holding the [`PROTOCOL_VERSION`]
-/// and 2 bytes holding the length of the following message (all in big-endian).
+/// Assumes the message is prefixed with 1 byte holding the [`PROTOCOL_VERSION`]
+/// and 2 big-endian bytes holding the length of the following message.
 pub fn read_from<T: DeserializeOwned>(reader: &mut impl Read) -> Result<T, Error> {
-    let mut protocol = [0_u8; 2];
-    reader.read_exact(&mut protocol)?;
-    let protocol = u16::from_be_bytes(protocol);
-    if protocol != PROTOCOL_VERSION {
+    let mut header = [0_u8; 3];
+    reader.read_exact(&mut header)?;
+    if header[0] != PROTOCOL_VERSION {
         return Err(Error::IncompatibleProtocol);
     }
-
-    let mut len = [0_u8; 2];
-    reader.read_exact(&mut len)?;
-    let len = u16::from_be_bytes(len) as usize;
+    let len = u16::from_be_bytes(header[1..3].try_into().unwrap()) as usize;
 
     let mut buf = vec![0; len];
     reader.read_exact(&mut buf)?;
@@ -339,21 +343,17 @@ pub fn read_from<T: DeserializeOwned>(reader: &mut impl Read) -> Result<T, Error
 
 /// Asynchronously reads a message from `reader` using [`serde_json`].
 ///
-/// Assumes the message is prefixed with 2 bytes holding the [`PROTOCOL_VERSION`]
-/// and 2 bytes holding the length of the following message (all in big-endian).
+/// Assumes the message is prefixed with 1 byte holding the [`PROTOCOL_VERSION`]
+/// and 2 big-endian bytes holding the length of the following message.
 pub async fn read_from_async<T: DeserializeOwned>(
     reader: &mut (impl AsyncRead + Unpin),
 ) -> Result<T, Error> {
-    let mut protocol = [0_u8; 2];
-    reader.read_exact(&mut protocol).await?;
-    let protocol = u16::from_be_bytes(protocol);
-    if protocol != PROTOCOL_VERSION {
+    let mut header = [0_u8; 3];
+    reader.read_exact(&mut header).await?;
+    if header[0] != PROTOCOL_VERSION {
         return Err(Error::IncompatibleProtocol);
     }
-
-    let mut len = [0_u8; 2];
-    reader.read_exact(&mut len).await?;
-    let len = u16::from_be_bytes(len) as usize;
+    let len = u16::from_be_bytes(header[1..3].try_into().unwrap()) as usize;
 
     let mut buf = vec![0; len];
     reader.read_exact(&mut buf).await?;
@@ -372,8 +372,8 @@ pub enum Error {
     #[error("IO Error: {0}")]
     IO(#[from] std::io::Error),
 
-    /// Can't send message longer than 2^32 bytes.
-    #[error("Can't send message longer than 2^32 bytes: {0}")]
+    /// Can't send message longer than 2^16 bytes.
+    #[error("Can't send message longer than 2^16 bytes: {0}")]
     MsgTooLong(#[from] std::num::TryFromIntError),
 
     /// Received a message with an incompatible protocol version.

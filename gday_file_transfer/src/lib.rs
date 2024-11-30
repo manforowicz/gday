@@ -26,7 +26,6 @@
 //! # let (stream1, stream2) = tokio::io::duplex(64);
 //! # let mut stream1 = tokio::io::BufReader::new(stream1);
 //! # let mut stream2 = tokio::io::BufReader::new(stream2);
-//!
 //! // Peer A offers files and folders they'd like to send
 //! let paths_to_send = ["folder/to/send/".into(), "a/file.txt".into()];
 //! let files_to_send = get_file_metas(&paths_to_send)?;
@@ -70,7 +69,7 @@ pub use crate::transfer::{receive_files, send_files, TransferReport};
 /// Version of the protocol.
 /// Different numbers wound indicate
 /// incompatible protocol breaking changes.
-pub const PROTOCOL_VERSION: u16 = 1;
+pub const PROTOCOL_VERSION: u8 = 1;
 
 /// `gday_file_transfer` error.
 #[derive(Error, Debug)]

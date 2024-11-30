@@ -2,7 +2,7 @@
 [![Crates.io Version](https://img.shields.io/crates/v/gday_contact_exchange_protocol)](https://crates.io/crates/gday_contact_exchange_protocol)
 [![docs.rs](https://img.shields.io/docsrs/gday_contact_exchange_protocol)](https://docs.rs/gday_contact_exchange_protocol/)
 
-This protocol lets two users exchange their public and (optionally) private socket addresses via a server.
+Protocol for peers to exchange their socket addresses via a server.
 
 See the [documentation](https://docs.rs/gday_contact_exchange_protocol/).
 

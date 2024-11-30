@@ -1,6 +1,4 @@
-//! A simple encrypted wrapper around an IO stream.
-//!
-//! Uses a streaming [chacha20poly1305](https://docs.rs/chacha20poly1305/latest/chacha20poly1305/) cipher.
+//! Simple encrypted ChaCha20Poly1305 wrapper around an async IO stream.
 //!
 //! This library is used by [gday_file_transfer](https://crates.io/crates/gday_file_transfer),
 //! which is used by [gday](https://crates.io/crates/gday).

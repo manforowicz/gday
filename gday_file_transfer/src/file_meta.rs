@@ -15,7 +15,7 @@ pub struct FileMeta {
     pub len: u64,
 }
 
-/// Information about a locally stored file
+/// Information about a locally stored file.
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
 pub struct FileMetaLocal {
     /// The shortened path that will be offered to the peer
@@ -194,7 +194,7 @@ fn suffix_with_number(path: &mut PathBuf, number: u32) {
 /// Returns the [`FileMetaLocal`] of each file, including those in nested directories.
 ///
 /// Returns an error if can't access a path, one path is the prefix
-/// of another path, or two paths end in the same name.
+/// of another path, or two of the given `paths` end in the same name.
 ///
 /// Each file's [`FileMeta::short_path`] will contain the path to the file,
 /// starting at the provided level, ignoring parent directories.
