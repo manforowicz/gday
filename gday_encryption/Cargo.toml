@@ -20,7 +20,7 @@ rand = "0.8.5"
 tokio = { version = "1.41.1", features = ["io-util"] }
 
 [dev-dependencies]
-criterion = { version = "0.5.1", features = ["async_tokio", "tokio"] }
+criterion = { version = "0.5.1", features = ["async_tokio"] }
 tokio = { version = "1.41.1", features = ["net", "rt", "macros"] }
 
 [[bench]]

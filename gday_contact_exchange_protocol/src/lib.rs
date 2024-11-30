@@ -207,7 +207,7 @@ impl Display for ServerMsg {
             Self::PeerContact(c) => write!(f, "The server says your peer's contact is {c}."),
             Self::ErrorRoomTaken => write!(
                 f,
-                "Can't create room with this code, because it's already taken."
+                "Can't create a room with this room code, because it's already taken."
             ),
             Self::ErrorPeerTimedOut => write!(
                 f,

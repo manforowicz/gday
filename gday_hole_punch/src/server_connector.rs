@@ -1,13 +1,14 @@
 //! Functions for connecting to a Gday server.
 use crate::Error;
 use gday_contact_exchange_protocol::Contact;
-use log::{debug, warn};
+use log::{debug, error, warn};
 use rand::seq::SliceRandom;
 use socket2::SockRef;
 use std::fmt::Debug;
 use std::io::ErrorKind;
 use std::net::SocketAddr::{V4, V6};
 use std::{net::SocketAddr, sync::Arc, time::Duration};
+use tokio::io::AsyncWriteExt;
 use tokio::net::{TcpStream, ToSocketAddrs};
 
 pub use gday_contact_exchange_protocol::DEFAULT_PORT;
@@ -209,6 +210,18 @@ impl ServerConnection {
 
         Ok(contact)
     }
+
+    /// Calls shutdown on the underlying streams to gracefully
+    /// close the connection.
+    pub async fn shutdown(&mut self) -> std::io::Result<()> {
+        if let Some(stream) = &mut self.v4 {
+            stream.shutdown().await?;
+        }
+        if let Some(stream) = &mut self.v6 {
+            stream.shutdown().await?;
+        }
+        Ok(())
+    }
 }
 
 /// In random order, sequentially try connecting to `servers`.
@@ -289,6 +302,10 @@ pub async fn connect_to_random_domain_name(
             }
         };
     }
+    error!(
+        "Couldn't connect to any of the {} contact exchange servers.",
+        domain_names.len()
+    );
     Err(recent_error)
 }
 
@@ -367,7 +384,7 @@ pub async fn connect_tcp(
         } else {
             Some(Err(std::io::Error::new(
                 ErrorKind::TimedOut,
-                format!("Timed out while trying to connect to {addrs:?}."),
+                format!("Timed out while trying to connect to server {addrs:?}."),
             )))
         }
     } else {
@@ -381,7 +398,7 @@ pub async fn connect_tcp(
         } else {
             Some(Err(std::io::Error::new(
                 ErrorKind::TimedOut,
-                format!("Timed out while trying to connect to {addrs:?}."),
+                format!("Timed out while trying to connect to server {addrs:?}."),
             )))
         }
     } else {

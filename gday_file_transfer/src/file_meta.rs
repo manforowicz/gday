@@ -1,5 +1,4 @@
 use crate::Error;
-use futures::{future::BoxFuture, FutureExt};
 use os_str_bytes::OsStrBytesExt;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -48,9 +47,9 @@ impl FileMeta {
     ///
     /// If all of these (up to `" (99)"`) are occupied,
     /// returns [`Error::FilenameOccupied`].
-    pub async fn get_unoccupied_save_path(&self, save_dir: &Path) -> Result<PathBuf, Error> {
+    pub fn get_unoccupied_save_path(&self, save_dir: &Path) -> Result<PathBuf, Error> {
         let mut path = self.get_save_path(save_dir);
-        let number = get_first_unoccupied_number(&path).await?;
+        let number = get_first_unoccupied_number(&path)?;
 
         if number != 0 {
             suffix_with_number(&mut path, number);
@@ -68,12 +67,9 @@ impl FileMeta {
     /// will be one less than that of
     /// [`Self::get_unoccupied_save_path()`] (or no suffix
     /// if [`Self::get_unoccupied_save_path()`] has suffix of 1).
-    pub async fn get_last_occupied_save_path(
-        &self,
-        save_dir: &Path,
-    ) -> Result<Option<PathBuf>, Error> {
+    pub fn get_last_occupied_save_path(&self, save_dir: &Path) -> Result<Option<PathBuf>, Error> {
         let mut path = self.get_save_path(save_dir);
-        let number = get_first_unoccupied_number(&path).await?;
+        let number = get_first_unoccupied_number(&path)?;
 
         if number == 0 {
             Ok(None)
@@ -88,8 +84,8 @@ impl FileMeta {
     /// Returns `true` iff a file is already saved at
     /// [`Self::get_last_occupied_save_path()`]
     /// with the same length as [`Self::len`].
-    pub async fn already_exists(&self, save_dir: &Path) -> Result<bool, Error> {
-        if let Some(occupied) = self.get_last_occupied_save_path(save_dir).await? {
+    pub fn already_exists(&self, save_dir: &Path) -> Result<bool, Error> {
+        if let Some(occupied) = self.get_last_occupied_save_path(save_dir)? {
             if let Ok(metadata) = occupied.metadata() {
                 if metadata.is_file() && metadata.len() == self.len {
                     return Ok(true);
@@ -119,13 +115,13 @@ impl FileMeta {
     /// already exists and has a length smaller than [`Self::len`].
     /// If so, returns the length of the partially downloaded file.
     /// If it doesn't exist, returns None.
-    pub async fn partial_download_exists(&self, save_dir: &Path) -> Result<Option<u64>, Error> {
+    pub fn partial_download_exists(&self, save_dir: &Path) -> Result<Option<u64>, Error> {
         let local_path = self.get_partial_download_path(save_dir)?;
 
         // check if the file can be opened
-        if let Ok(file) = tokio::fs::File::open(local_path).await {
+        if let Ok(file) = std::fs::File::open(local_path) {
             // check if its length is less than the meta length
-            if let Ok(local_meta) = file.metadata().await {
+            if let Ok(local_meta) = file.metadata() {
                 let local_len = local_meta.len();
                 if local_len < self.len {
                     return Ok(Some(local_len));
@@ -151,7 +147,7 @@ impl From<FileMetaLocal> for FileMeta {
 /// Otherwise, returns the smallest number, starting at 1, that
 /// when suffixed to `path` (using [`suffix_with_number()`]),
 /// gives an unoccupied path.
-async fn get_first_unoccupied_number(path: &Path) -> Result<u32, Error> {
+fn get_first_unoccupied_number(path: &Path) -> Result<u32, Error> {
     // if the file doesn't exist
     if !path.exists() {
         return Ok(0);
@@ -202,7 +198,7 @@ fn suffix_with_number(path: &mut PathBuf, number: u32) {
 ///
 /// Each file's [`FileMeta::short_path`] will contain the path to the file,
 /// starting at the provided level, ignoring parent directories.
-pub async fn get_file_metas(paths: &[PathBuf]) -> Result<Vec<FileMetaLocal>, Error> {
+pub fn get_file_metas(paths: &[PathBuf]) -> Result<Vec<FileMetaLocal>, Error> {
     // canonicalize the paths to remove symlinks
     let paths = paths
         .iter()
@@ -240,7 +236,7 @@ pub async fn get_file_metas(paths: &[PathBuf]) -> Result<Vec<FileMetaLocal>, Err
         let top_path = path.parent().unwrap_or(Path::new(""));
 
         // add all files in this path to the files set
-        get_file_metas_helper(top_path, &path, &mut files).await?;
+        get_file_metas_helper(top_path, &path, &mut files)?;
     }
 
     // build a vec from the set, and return
@@ -251,41 +247,38 @@ pub async fn get_file_metas(paths: &[PathBuf]) -> Result<Vec<FileMetaLocal>, Err
 ///   `top_path` from all paths. `top_path` must be a prefix of `path`.
 /// - `path` is the file or directory where recursive traversal begins.
 /// - `files` is a [`Vec`] to which found files will be inserted.
-fn get_file_metas_helper<'a>(
-    top_path: &'a Path,
-    path: &'a Path,
-    files: &'a mut Vec<FileMetaLocal>,
-) -> BoxFuture<'a, std::io::Result<()>> {
-    async move {
-        if path.is_dir() {
-            // recursively traverse subdirectories
-            let mut entries = tokio::fs::read_dir(path).await?;
-            while let Some(entry) = entries.next_entry().await? {
-                get_file_metas_helper(top_path, &entry.path(), files).await?;
-            }
-        } else if path.is_file() {
-            // return an error if a file couldn't be opened.
-            std::fs::File::open(path)?;
-
-            // get the shortened path
-            let short_path = path
-                .strip_prefix(top_path)
-                .expect("`top_path` was not a prefix of `path`.")
-                .to_path_buf();
-
-            // get the file's size
-            let len = path.metadata()?.len();
-
-            // insert this file metadata into set
-            let meta = FileMetaLocal {
-                local_path: path.to_path_buf(),
-                short_path,
-                len,
-            };
-            files.push(meta);
+fn get_file_metas_helper(
+    top_path: &Path,
+    path: &Path,
+    files: &mut Vec<FileMetaLocal>,
+) -> std::io::Result<()> {
+    if path.is_dir() {
+        // recursively traverse subdirectories
+        let entries = std::fs::read_dir(path)?;
+        for entry in entries {
+            get_file_metas_helper(top_path, &entry?.path(), files)?;
         }
+    } else if path.is_file() {
+        // return an error if a file couldn't be opened.
+        std::fs::File::open(path)?;
 
-        Ok(())
+        // get the shortened path
+        let short_path = path
+            .strip_prefix(top_path)
+            .expect("`top_path` was not a prefix of `path`.")
+            .to_path_buf();
+
+        // get the file's size
+        let len = path.metadata()?.len();
+
+        // insert this file metadata into set
+        let meta = FileMetaLocal {
+            local_path: path.to_path_buf(),
+            short_path,
+            len,
+        };
+        files.push(meta);
     }
-    .boxed()
+
+    Ok(())
 }

@@ -56,8 +56,8 @@ enum Command {
         #[arg(short, long, conflicts_with = "length")]
         code: Option<PeerCode>,
 
-        /// Length of the last 2 sections of the randomly-generated shareable code.
-        #[arg(short, long, default_value = "4", conflicts_with = "code")]
+        /// Length of room_code and shared_secret to generate.
+        #[arg(short, long, default_value = "5", conflicts_with = "code")]
         length: usize,
 
         /// Files and/or directories to send.
@@ -124,8 +124,8 @@ async fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
             length,
         } => {
             // If the user chose a custom server
-            let (mut server_connection, server_id) = if let Some(forced_server) = custom_server {
-                (forced_server, 0)
+            let (mut server_connection, server_id) = if let Some(custom_server) = custom_server {
+                (custom_server, 0)
 
             // If the user chose a custom code
             } else if let Some(code) = &code {
@@ -158,12 +158,12 @@ async fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
             };
 
             // get metadata about the files to transfer
-            let local_files = gday_file_transfer::get_file_metas(&paths).await?;
+            let local_files = gday_file_transfer::get_file_metas(&paths)?;
             let offer_msg = FileOfferMsg::from(local_files.clone());
 
             // confirm the user wants to send these files
-            if !dialog::confirm_send(&offer_msg).await? {
-                // Send aborted
+            if !dialog::confirm_send(&offer_msg)? {
+                println!("Cancelled.");
                 return Ok(());
             }
 
@@ -204,7 +204,7 @@ async fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
 
             println!("File offer sent to mate. Waiting on response.");
 
-            // receive file offer from peer
+            // receive response from peer
             let response: FileResponseMsg = read_from_async(&mut stream).await?;
 
             // Total number of files accepted
@@ -226,12 +226,15 @@ async fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
             if num_accepted != 0 {
                 transfer::send_files(local_files, response, &mut stream).await?;
             }
+
+            // Gracefully close the server connection
+            server_connection.shutdown().await?;
         }
 
         // receiving files
         crate::Command::Get { path, code } => {
-            let mut server_connection = if let Some(forced_server) = custom_server {
-                forced_server
+            let mut server_connection = if let Some(custom_server) = custom_server {
+                custom_server
             } else {
                 server_connector::connect_to_server_id(
                     DEFAULT_SERVERS,
@@ -268,7 +271,7 @@ async fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
             // receive file offer from peer
             let offer: FileOfferMsg = read_from_async(&mut stream).await?;
 
-            let response = ask_receive(&offer, &path).await?;
+            let response = ask_receive(&offer, &path)?;
 
             // respond to the file offer
             write_to_async(&response, &mut stream).await?;
@@ -278,6 +281,9 @@ async fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
             } else {
                 transfer::receive_files(offer, response, &path, &mut stream).await?;
             }
+
+            // Gracefully close the server connection
+            server_connection.shutdown().await?;
         }
     }
 

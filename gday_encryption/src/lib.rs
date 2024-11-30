@@ -99,7 +99,8 @@ pub struct EncryptedStream<T> {
 
     /// Data to be sent. Encrypted only when [`Self::flushing`].
     /// - Invariant: the first 2 bytes are always
-    ///   reserved for the length header
+    ///   reserved for the length
+    /// - Invariant: Data can only be appended when `flushing` is false.
     to_send: HelperBuf,
 
     /// Is the content of `to_send` encrypted and ready to write?
@@ -113,7 +114,7 @@ impl<T> EncryptedStream<T> {
     /// - The `key` must be a cryptographically random secret.
     /// - The `nonce` shouldn't be reused, but doesn't need to be secret.
     ///
-    /// - See [`Self::encrypt_connection()`] if you'd like an auto-generated nonce.
+    /// - See [`Self::encrypt_connection()`] if you'd like an auto-generatcan't createed nonce.
     pub fn new(io_stream: T, key: &[u8; 32], nonce: &[u8; 7]) -> Self {
         let mut to_send = HelperBuf::with_capacity(u16::MAX as usize + 2);
         // add 2 bytes for length header to uphold invariant
@@ -170,7 +171,7 @@ impl<T: AsyncRead> AsyncRead for EncryptedStream<T> {
         buf: &mut tokio::io::ReadBuf<'_>,
     ) -> Poll<std::io::Result<()>> {
         // if we're out of decrypted data, read more
-        if self.as_mut().decrypted.is_empty() {
+        if self.decrypted.is_empty() {
             ready!(self.as_mut().inner_read(cx))?;
         }
 
@@ -183,7 +184,7 @@ impl<T: AsyncRead> AsyncRead for EncryptedStream<T> {
     }
 }
 
-impl<T: AsyncBufRead> AsyncBufRead for EncryptedStream<T> {
+impl<T: AsyncRead> AsyncBufRead for EncryptedStream<T> {
     fn consume(self: std::pin::Pin<&mut EncryptedStream<T>>, amt: usize) {
         self.project().decrypted.consume(amt);
     }
@@ -219,9 +220,10 @@ impl<T: AsyncWrite> AsyncWrite for EncryptedStream<T> {
             .extend_from_slice(&buf[0..bytes_taken])
             .expect("unreachable");
 
-        // if `to_send` is full, flush it
+        // if `to_send` is full, start the process
+        // of flushing it
         if me.to_send.spare_capacity().len() - TAG_SIZE == 0 {
-            ready!(self.flush_write_buf(cx))?;
+            let _ = self.flush_write_buf(cx)?;
         }
         Poll::Ready(Ok(bytes_taken))
     }
@@ -310,6 +312,7 @@ impl<T: AsyncWrite> EncryptedStream<T> {
         // If we're just starting a flush,
         // encrypt the data.
         if !*me.flushing {
+            *me.flushing = true;
             // encrypt in place
             let mut msg = me.to_send.split_off_aead_buf(2);
             me.encryptor

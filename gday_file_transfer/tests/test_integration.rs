@@ -62,26 +62,26 @@ async fn test_file_metas_errors() {
 
     // trying to get metadata about file that doesn't exist
     assert!(matches!(
-        get_file_metas(&[dir_path.join("dir/non-existent.txt")]).await,
+        get_file_metas(&[dir_path.join("dir/non-existent.txt")]),
         Err(gday_file_transfer::Error::IO(..))
     ));
 
     // both paths end in the same name.
     // this would cause confusion with FileMetaLocal.short_path
     assert!(matches!(
-        get_file_metas(&[dir_path.join("file1"), dir_path.join("dir/file1")]).await,
+        get_file_metas(&[dir_path.join("file1"), dir_path.join("dir/file1")]),
         Err(gday_file_transfer::Error::PathsHaveSameName(..))
     ));
 
     // one path is prefix of another. that's an error!
     assert!(matches!(
-        get_file_metas(&[dir_path.to_path_buf(), dir_path.join("dir")]).await,
+        get_file_metas(&[dir_path.to_path_buf(), dir_path.join("dir")]),
         Err(gday_file_transfer::Error::PathIsPrefix(..))
     ));
 
     // one path is prefix of another. that's an error!
     assert!(matches!(
-        get_file_metas(&[dir_path.join("dir"), dir_path.to_path_buf()]).await,
+        get_file_metas(&[dir_path.join("dir"), dir_path.to_path_buf()]),
         Err(gday_file_transfer::Error::PathIsPrefix(..))
     ));
 }
@@ -93,9 +93,7 @@ async fn test_get_file_metas_1() {
     let test_dir = make_test_dir();
     let dir_path = test_dir.path();
     let dir_name = PathBuf::from(dir_path.file_name().unwrap());
-    let mut result = gday_file_transfer::get_file_metas(&[dir_path.to_path_buf()])
-        .await
-        .unwrap();
+    let mut result = gday_file_transfer::get_file_metas(&[dir_path.to_path_buf()]).unwrap();
 
     let mut expected = [
         FileMetaLocal {
@@ -166,7 +164,6 @@ async fn test_get_file_metas_2() {
         dir_path.join("dir/subdir2/file1"),
         dir_path.join("dir/subdir2/file2.txt"),
     ])
-    .await
     .unwrap();
 
     let mut expected = [
@@ -228,7 +225,7 @@ async fn file_transfer() {
             dir_a_path.join("file2.txt"),
             dir_a_path.join("dir/subdir1"),
         ];
-        let file_metas = get_file_metas(&paths).await.unwrap();
+        let file_metas = get_file_metas(&paths).unwrap();
         let file_offer = FileOfferMsg::from(file_metas.clone());
 
         // send offer, and read response
@@ -266,9 +263,8 @@ async fn file_transfer() {
     // read the file offer message
     let file_offer: FileOfferMsg = read_from_async(&mut stream_b).await.unwrap();
 
-    let response_msg = FileResponseMsg::accept_only_new_and_interrupted(&file_offer, dir_b.path())
-        .await
-        .unwrap();
+    let response_msg =
+        FileResponseMsg::accept_only_new_and_interrupted(&file_offer, dir_b.path()).unwrap();
 
     assert_eq!(response_msg.get_num_not_rejected(), 3);
     assert_eq!(response_msg.get_num_partially_accepted(), 1);
@@ -280,7 +276,7 @@ async fn file_transfer() {
         &file_offer,
         &response_msg,
         dir_b.path(),
-        &mut stream_b,
+        tokio::io::BufReader::new(stream_b),
         |_| {},
     )
     .await

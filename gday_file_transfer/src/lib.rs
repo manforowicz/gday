@@ -23,11 +23,13 @@
 //! # let rt = tokio::runtime::Builder::new_current_thread().build().unwrap();
 //! # rt.block_on( async {
 //!
-//! # let (mut stream1, mut stream2) = tokio::io::duplex(64);
-//! #
+//! # let (stream1, stream2) = tokio::io::duplex(64);
+//! # let mut stream1 = tokio::io::BufReader::new(stream1);
+//! # let mut stream2 = tokio::io::BufReader::new(stream2);
+//!
 //! // Peer A offers files and folders they'd like to send
 //! let paths_to_send = ["folder/to/send/".into(), "a/file.txt".into()];
-//! let files_to_send = get_file_metas(&paths_to_send).await?;
+//! let files_to_send = get_file_metas(&paths_to_send)?;
 //! let offer_msg = FileOfferMsg::from(files_to_send.clone());
 //! write_to_async(offer_msg, &mut stream1).await?;
 //!
@@ -36,7 +38,7 @@
 //! let response_msg = FileResponseMsg::accept_only_new_and_interrupted(
 //!     &offer_msg,
 //!     Path::new("save/the/files/here/"),
-//! ).await?;
+//! )?;
 //! write_to_async(response_msg, &mut stream2).await?;
 //!
 //! // Peer A sends the accepted files

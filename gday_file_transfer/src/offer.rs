@@ -94,14 +94,14 @@ impl FileResponseMsg {
     /// by partially accepting files.
     ///
     /// Rejects all other files.
-    pub async fn accept_only_full_new_files(
+    pub fn accept_only_full_new_files(
         offer: &FileOfferMsg,
         save_dir: &Path,
     ) -> Result<Self, Error> {
         let mut response = Vec::with_capacity(offer.files.len());
 
         for file_meta in &offer.files {
-            if file_meta.already_exists(save_dir).await? {
+            if file_meta.already_exists(save_dir)? {
                 // reject
                 response.push(None);
             } else {
@@ -119,16 +119,16 @@ impl FileResponseMsg {
     ///   or have a different size.
     ///
     /// Rejects all other files.
-    pub async fn accept_only_new_and_interrupted(
+    pub fn accept_only_new_and_interrupted(
         offer: &FileOfferMsg,
         save_dir: &Path,
     ) -> Result<FileResponseMsg, Error> {
         let mut response = Vec::with_capacity(offer.files.len());
 
         for offered in &offer.files {
-            if let Some(existing_size) = offered.partial_download_exists(save_dir).await? {
+            if let Some(existing_size) = offered.partial_download_exists(save_dir)? {
                 response.push(Some(existing_size));
-            } else if offered.already_exists(save_dir).await? {
+            } else if offered.already_exists(save_dir)? {
                 response.push(None);
             } else {
                 response.push(Some(0));

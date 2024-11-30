@@ -22,3 +22,6 @@ version = "0.2.1"
 [profile.dist]
 inherits = "release"
 lto = "thin"
+
+[profile.release]
+debug = true

@@ -146,7 +146,7 @@ pub enum Error {
     ServerIDNotFound(u64),
 
     /// Couldn't connect to any of the contact exchange servers listed
-    #[error("Couldn't connect to any of the contact exchange servers listed.")]
+    #[error("Couldn't connect to any of the contact exchange servers in the list.")]
     CouldntConnectToServers,
 
     /// Invalid server DNS name for TLS
@@ -158,24 +158,25 @@ pub enum Error {
     #[error(
         "Timed out while trying to connect to peer, likely due to an uncooperative \
     NAT (network address translator). \
-    Try from a different network, enable IPv6, or switch to a tool that transfers \
-    files over a relay to evade NATs, such as magic-wormhole."
+    Enable IPv6 or try from a different network. \
+    Or use a tool such as magic-wormhole that transfers \
+    over a relay to evade NATs."
     )]
     HolePunchTimeout,
 
     /// Couldn't parse server ID of [`PeerCode`]
-    #[error("Couldn't parse server ID in your code: {0}. Check it for typos!")]
+    #[error("Couldn't parse the server ID in your code: {0}. Check it for typos!")]
     CouldntParseServerID(#[from] std::num::ParseIntError),
 
     /// The room_code or shared_secret of the peer code contained a period.
-    /// Periods aren't allowed because they're used as code delimeters.
+    /// Periods aren't allowed because they're used as delimeters.
     #[error(
         "The room_code or shared_secret of the peer code contained a period. \
-    Periods aren't allowed because they're used as code delimeters."
+    Periods aren't allowed because they're used as delimeters."
     )]
     PeerCodeContainedPeriod,
 
-    /// Couldn't parse [`PeerCode`]
+    /// Wrong number of settings in [`PeerCode`].
     #[error("Wrong number of segments in your code. Check it for typos!")]
     WrongNumberOfSegmentsPeerCode,
 }

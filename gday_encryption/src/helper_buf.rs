@@ -53,9 +53,11 @@ impl HelperBuf {
     /// Shifts the stored data to the beginning of the internal buffer.
     /// Maximizes `spare_capacity_len()` without changing anything else.
     pub fn left_align(&mut self) {
-        self.inner.copy_within(self.l_cursor..self.r_cursor, 0);
-        self.r_cursor -= self.l_cursor;
-        self.l_cursor = 0;
+        if self.l_cursor != 0 {
+            self.inner.copy_within(self.l_cursor..self.r_cursor, 0);
+            self.r_cursor -= self.l_cursor;
+            self.l_cursor = 0;
+        }
     }
 
     /// Returns a mutable [`aead::Buffer`] view into the part of this

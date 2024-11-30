@@ -1,6 +1,6 @@
 # systemd service that runs a gday_server
 #
-# Put your gday_server executable in ~/gday_server/gday_server.
+# Put your gday_server executable in /root/gday_server.
 #
 # Save this file as:
 # '/etc/systemd/system/gday_server.service'
@@ -21,7 +21,7 @@
 # 'sudo journalctl -u gday_server -f'
 #
 # View stderr and stdout log files in real time:
-# 'tail -f ~/gday_server/stdout.log'
+# 'tail -f /root/logs/stderr.log'
 
 
 [Unit]
@@ -35,20 +35,21 @@ After=network.target
 [Service]
 
 # Command to execute (modify as needed)
-ExecStart=/home/ubuntu/gday_server/gday_server --key /etc/letsencrypt/live/gday.manforowicz.com/privkey.pem --certificate /etc/letsencrypt/live/gday.manforowicz.com/fullchain.pem
+ExecStart=/root/gday_server --key /etc/letsencrypt/live/gday.manforowicz.com/privkey.pem --certificate /etc/letsencrypt/live/gday.manforowicz.com/fullchain.pem
 
 # Auto-restart the service if it crashes
 Restart=always
 
 # How long to wait between restarts
+# (to avoid wasting resources if inifinite crash loop occurs)
 RestartSec=20
 
 # Run the service as root, so it can access the certificates
 User=root
 
 # Pipe stdout and stderr into custom log files (modify as needed)
-StandardOutput=append:/home/ubuntu/gday_server/stdout.log
-StandardError=append:/home/ubuntu/gday_server/stderr.log
+StandardOutput=append:/root/logs/stdout.log
+StandardError=append:/root/logs/stderr.log
 
 
 [Install]
