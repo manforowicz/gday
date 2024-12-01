@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 
-# Custom script for starting a tmux 2-pane asciinema recording.
-# Intended for recording gday demos.
+# Script for recording gday demos.
 # Requires: asciinema, tmux
+
+# Creates temporary folders and
+# starts a tmux 2-pane asciinema recording.
+
 # Use ctrl+b <arrow key> to switch between panes.
 # Press ctrl+d multiple times to end the recording.
 

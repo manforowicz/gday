@@ -33,7 +33,7 @@ Options:
   -a, --addresses <ADDRESSES>          Socket addresses on which to listen [default: 0.0.0.0:2311 [::]:2311]
   -t, --timeout <TIMEOUT>              Number of seconds before a new room is deleted [default: 600]
   -r, --request-limit <REQUEST_LIMIT>  Max number of create room requests and requests with an invalid room code an IP address can send per minute before they're rejected [default: 10]
-  -v, --verbosity <VERBOSITY>          Log verbosity. (trace, debug, info, warn, error) [default: info]
+  -v, --verbosity <VERBOSITY>          Log verbosity. (trace, debug, info, warn, error) [default: debug]
   -h, --help                           Print help
   -V, --version                        Print version
 ```

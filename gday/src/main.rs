@@ -17,7 +17,7 @@ use owo_colors::OwoColorize;
 use std::path::PathBuf;
 
 /// How long to try hole punching before giving up.
-const HOLE_PUNCH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+const HOLE_PUNCH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
 /// How long to try connecting to a server before giving up.
 const SERVER_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
@@ -26,7 +26,7 @@ const SERVER_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 #[command(author, version, about)]
 struct Args {
     #[command(subcommand)]
-    operation: Command,
+    command: Command,
 
     /// Use a custom gday server with this domain name.
     #[arg(short, long)]
@@ -36,7 +36,7 @@ struct Args {
     #[arg(short, long, requires("server"))]
     port: Option<u16>,
 
-    /// Use TCP without TLS.
+    /// Connect to server with TCP instead of TLS.
     #[arg(short, long, requires("server"))]
     unencrypted: bool,
 
@@ -49,6 +49,10 @@ struct Args {
 enum Command {
     /// Send files and/or directories.
     Send {
+        /// Files and/or directories to send.
+        #[arg(required = true, num_args = 1..)]
+        paths: Vec<PathBuf>,
+
         /// Custom shared code of form "server_id.room_code.shared_secret".
         ///
         /// A server_id of 0 causes a random server to be used.
@@ -59,20 +63,16 @@ enum Command {
         /// Length of room_code and shared_secret to generate.
         #[arg(short, long, default_value = "5", conflicts_with = "code")]
         length: usize,
-
-        /// Files and/or directories to send.
-        #[arg(required = true, num_args = 1..)]
-        paths: Vec<PathBuf>,
     },
 
     /// Receive files.
     Get {
+        /// The code your peer gave you (of form "server_id.room_code.shared_secret")
+        code: PeerCode,
+
         /// Directory where to save the files.
         #[arg(short, long, default_value = ".")]
         path: PathBuf,
-
-        /// The code your peer gave you (of form "server_id.room_code.shared_secret")
-        code: PeerCode,
     },
 }
 
@@ -117,7 +117,7 @@ async fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
         None
     };
 
-    match args.operation {
+    match args.command {
         crate::Command::Send {
             paths,
             code,
@@ -195,6 +195,9 @@ async fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
             .await
             .map_err(|_| gday_hole_punch::Error::HolePunchTimeout)??;
 
+            // Gracefully close the server connection
+            server_connection.shutdown().await?;
+
             let mut stream = EncryptedStream::encrypt_connection(stream, &shared_key).await?;
 
             info!("Established authenticated encrypted connection with peer.");
@@ -226,9 +229,6 @@ async fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
             if num_accepted != 0 {
                 transfer::send_files(local_files, response, &mut stream).await?;
             }
-
-            // Gracefully close the server connection
-            server_connection.shutdown().await?;
         }
 
         // receiving files
@@ -264,6 +264,9 @@ async fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
             .await
             .map_err(|_| gday_hole_punch::Error::HolePunchTimeout)??;
 
+            // Gracefully close the server connection
+            server_connection.shutdown().await?;
+
             let mut stream = EncryptedStream::encrypt_connection(stream, &shared_key).await?;
 
             info!("Established authenticated encrypted connection with peer.");
@@ -281,9 +284,6 @@ async fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
             } else {
                 transfer::receive_files(offer, response, &path, &mut stream).await?;
             }
-
-            // Gracefully close the server connection
-            server_connection.shutdown().await?;
         }
     }
 

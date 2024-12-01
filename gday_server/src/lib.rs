@@ -102,7 +102,6 @@ pub fn start_server(args: Args) -> Result<(Vec<SocketAddr>, JoinSet<()>), Error>
 
     // log the addresses being listened on
     info!("Listening on these addresses: {addresses:?}");
-
     info!("Is encrypted?: {}", tls_acceptor.is_some());
     info!(
         "Critical requests per minute per IP address limit: {}",
@@ -134,18 +133,19 @@ async fn run_single_server(
 ) {
     loop {
         // try to accept another connection
-        let (stream, addr) = match tcp_listener.accept().await {
+        let (stream, origin) = match tcp_listener.accept().await {
             Ok(ok) => ok,
             Err(err) => {
                 warn!("Error accepting incoming TCP connection: {err}.");
                 continue;
             }
         };
-        debug!("Accepted incoming TCP connection from {addr}.");
+        debug!("Accepted incoming TCP connection from {origin}.");
 
         // spawn a thread to handle the connection
         tokio::spawn(handle_connection(
             stream,
+            origin,
             tls_acceptor.clone(),
             state.clone(),
         ));
@@ -185,11 +185,6 @@ fn get_tcp_listener(addr: SocketAddr) -> Result<tokio::net::TcpListener, Error> 
             source,
         })?;
 
-    socket.set_nonblocking(true).map_err(|source| Error {
-        msg: "Couldn't set TCP socket to non blocking".to_string(),
-        source,
-    })?;
-
     socket.bind(&addr.into()).map_err(|source| Error {
         msg: format!("Couldn't bind socket to address {addr}"),
         source,
@@ -201,6 +196,11 @@ fn get_tcp_listener(addr: SocketAddr) -> Result<tokio::net::TcpListener, Error> 
     })?;
 
     let listener: std::net::TcpListener = socket.into();
+
+    listener.set_nonblocking(true).map_err(|source| Error {
+        msg: "Couldn't set TCP socket to non blocking".to_string(),
+        source,
+    })?;
 
     // convert to a tokio listener
     let listener = tokio::net::TcpListener::from_std(listener).map_err(|source| Error {

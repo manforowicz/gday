@@ -150,6 +150,5 @@ fn get_server_msg_examples() -> Vec<ServerMsg> {
         ServerMsg::ErrorNoSuchRoomCode,
         ServerMsg::ErrorTooManyRequests,
         ServerMsg::ErrorSyntax,
-        ServerMsg::ErrorConnection,
     ]
 }

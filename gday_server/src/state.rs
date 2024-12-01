@@ -257,7 +257,7 @@ impl State {
         if *conns_count >= *self.max_requests_per_minute {
             Err(Error::TooManyRequests)
         } else {
-            *conns_count += 1;
+            *conns_count = conns_count.saturating_add(1);
             Ok(())
         }
     }

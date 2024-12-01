@@ -1,6 +1,6 @@
 use crate::state::{self, State};
 use gday_contact_exchange_protocol::{read_from_async, write_to_async, ClientMsg, ServerMsg};
-use log::{info, warn};
+use log::{error, info, warn};
 use std::net::SocketAddr;
 use tokio::{
     io::{AsyncRead, AsyncWrite},
@@ -14,18 +14,10 @@ use tokio_rustls::TlsAcceptor;
 /// Logs information and errors with [`log`].
 pub async fn handle_connection(
     mut tcp_stream: TcpStream,
+    origin: SocketAddr,
     tls_acceptor: Option<TlsAcceptor>,
     state: State,
 ) {
-    // try establishing a TLS connectio
-    let origin = match tcp_stream.peer_addr() {
-        Ok(origin) => origin,
-        Err(err) => {
-            warn!("Couldn't get client's IP address: {err}");
-            return;
-        }
-    };
-
     if let Some(tls_acceptor) = tls_acceptor {
         let mut tls_stream = match tls_acceptor.accept(tcp_stream).await {
             Ok(tls_stream) => tls_stream,
@@ -34,17 +26,9 @@ pub async fn handle_connection(
                 return;
             }
         };
-        handle_requests(&mut tls_stream, state, origin)
-            .await
-            .unwrap_or_else(|err| {
-                info!("Dropping connection with '{origin}' because: {err}");
-            });
+        let _ = handle_requests(&mut tls_stream, state, origin).await;
     } else {
-        handle_requests(&mut tcp_stream, state, origin)
-            .await
-            .unwrap_or_else(|err| {
-                info!("Dropping connection with '{origin}' because: {err}");
-            });
+        let _ = handle_requests(&mut tcp_stream, state, origin).await;
     }
 }
 
@@ -60,31 +44,38 @@ async fn handle_requests(
         match result {
             Ok(()) => (),
             Err(HandleMessageError::State(state::Error::NoSuchRoomCode)) => {
+                warn!("Replying with ServerMsg::ErrorNoSuchRoomCode.");
                 write_to_async(ServerMsg::ErrorNoSuchRoomCode, stream).await?;
             }
             Err(HandleMessageError::Receiver(_)) => {
+                warn!("Replying with ServerMsg::ErrorPeerTimedOut.");
                 write_to_async(ServerMsg::ErrorPeerTimedOut, stream).await?;
             }
             Err(HandleMessageError::State(state::Error::RoomCodeTaken)) => {
+                warn!("Replying with ServerMsg::ErrorRoomTaken.");
                 write_to_async(ServerMsg::ErrorRoomTaken, stream).await?;
             }
             Err(HandleMessageError::State(state::Error::TooManyRequests)) => {
+                warn!("Replying with ServerMsg::ErrorTooManyRequests and disconnecting.");
                 write_to_async(ServerMsg::ErrorTooManyRequests, stream).await?;
                 return result;
             }
             Err(HandleMessageError::State(state::Error::CantUpdateDoneClient)) => {
+                warn!("Replying with ServerMsg::ErrorUnexpectedMsg.");
                 write_to_async(ServerMsg::ErrorUnexpectedMsg, stream).await?;
             }
-            Err(HandleMessageError::Protocol(_)) => {
+            Err(HandleMessageError::Protocol(ref err)) => {
+                warn!("Replying with ServerMsg::ErrorSyntax and disconnecting, because: {err}");
                 write_to_async(ServerMsg::ErrorSyntax, stream).await?;
                 return result;
             }
-            Err(HandleMessageError::UnknownMessage(_)) => {
+            Err(HandleMessageError::UnknownMessage(msg)) => {
+                warn!("Replying with ServerMsg::ErrorSyntax because received unknown message: {msg:?}");
                 write_to_async(ServerMsg::ErrorSyntax, stream).await?;
                 return result;
             }
             Err(HandleMessageError::IO(_)) => {
-                write_to_async(ServerMsg::ErrorConnection, stream).await?;
+                info!("'{origin}' disconnected.");
                 return result;
             }
         }
@@ -150,11 +141,15 @@ async fn handle_message(
             // responds to the client with their own contact info
             write_to_async(ServerMsg::ClientContact(client_contact), stream).await?;
 
+            info!("Sent client '{origin}' their contact of '{client_contact}'.");
+
             // wait for the peer to be done sending as well
             let peer_contact = rx.await?;
 
             // send the peer's contact info to this client
             write_to_async(ServerMsg::PeerContact(peer_contact), stream).await?;
+
+            info!("Sent client '{origin}' their peer's contact of '{client_contact}'.");
         }
         unknown_msg => return Err(HandleMessageError::UnknownMessage(unknown_msg)),
     }

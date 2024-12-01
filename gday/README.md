@@ -75,7 +75,7 @@ Commands:
 Options:
   -s, --server <SERVER>        Use a custom gday server with this domain name
   -p, --port <PORT>            Connect to a custom server port
-  -u, --unencrypted            Use TCP without TLS
+  -u, --unencrypted            Connect to server with TCP instead of TLS
   -v, --verbosity <VERBOSITY>  Verbosity. (trace, debug, info, warn, error) [default: warn]
   -h, --help                   Print help
   -V, --version                Print version

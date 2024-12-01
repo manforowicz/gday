@@ -51,7 +51,7 @@ This may not work on very restrictive NATs. If that happens, enable IPv6 or move
 
 - Server connection encrypted with
 [TLS](https://en.wikipedia.org/wiki/Transport_Layer_Security)
-and file transfer end-to-end encrypted with
+and file transfer is over TCP that's end-to-end encrypted with
 [ChaCha20Poly1305](https://en.wikipedia.org/wiki/ChaCha20-Poly1305).
 
 - Automatically tries both IPv4 and IPv6.
@@ -75,7 +75,7 @@ Commands:
 Options:
   -s, --server <SERVER>        Use a custom gday server with this domain name
   -p, --port <PORT>            Connect to a custom server port
-  -u, --unencrypted            Use TCP without TLS
+  -u, --unencrypted            Connect to server with TCP instead of TLS
   -v, --verbosity <VERBOSITY>  Verbosity. (trace, debug, info, warn, error) [default: warn]
   -h, --help                   Print help
   -V, --version                Print version

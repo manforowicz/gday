@@ -187,10 +187,6 @@ pub enum ServerMsg {
     /// The server then closes the connection.
     ErrorSyntax,
 
-    /// The server responds with this if it has any sort of connection error.
-    /// The server then closes the connection.
-    ErrorConnection,
-
     /// The server responds with this if it has an internal error.
     /// The server then closes the connection.
     ErrorInternal,
@@ -226,7 +222,6 @@ impl Display for ServerMsg {
                 "Exceeded request limit from this IP address. Try again in a minute."
             ),
             Self::ErrorSyntax => write!(f, "Server couldn't parse message syntax from client."),
-            Self::ErrorConnection => write!(f, "Connection error to server."),
             Self::ErrorInternal => write!(f, "Server had an internal error."),
         }
     }
