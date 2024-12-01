@@ -32,7 +32,7 @@
 //! // an error message.
 //! let request = ClientMsg::CreateRoom { room_code };
 //! write_to(request, &mut tls_ipv4)?;
-//! let response: ServerMsg = read_from(&mut tls_ipv4)?;
+//! let ServerMsg::RoomCreated = read_from(&mut tls_ipv4)? else { panic!() };
 //!
 //! // Both peers sends ClientMsg::RecordPublicAddr
 //! // from their IPv4 and/or IPv6 endpoints.
@@ -40,9 +40,9 @@
 //! // The server responds with ServerMsg::ReceivedAddr or an error message.
 //! let request = ClientMsg::RecordPublicAddr { room_code, is_creator: true };
 //! write_to(request, &mut tls_ipv4)?;
-//! let response: ServerMsg = read_from(&mut tls_ipv4)?;
+//! let ServerMsg::ReceivedAddr = read_from(&mut tls_ipv4)? else { panic!() };
 //! write_to(request, &mut tls_ipv6)?;
-//! let response: ServerMsg = read_from(&mut tls_ipv6)?;
+//! let ServerMsg::ReceivedAddr = read_from(&mut tls_ipv6)? else { panic!() };
 //!
 //! // Both peers share their local address with the server.
 //! // The server immediately responds with ServerMsg::ClientContact,
@@ -53,12 +53,12 @@
 //! };
 //! let request = ClientMsg::ReadyToShare { local_contact, room_code, is_creator: true };
 //! write_to(request, &mut tls_ipv4)?;
-//! let response: ServerMsg = read_from(&mut tls_ipv4)?;
+//! let ServerMsg::ClientContact(my_contact) = read_from(&mut tls_ipv4)? else { panic!() };
 //!
 //! // Once both clients have sent ClientMsg::ReadyToShare,
 //! // the server sends both clients a ServerMsg::PeerContact
 //! // containing the FullContact of the peer.
-//! let response: ServerMsg = read_from(&mut tls_ipv4)?;
+//! let ServerMsg::PeerContact(peer_contact) = read_from(&mut tls_ipv4)? else { panic!() };
 //!
 //! // The server then closes the room, and the peers disconnect.
 //!

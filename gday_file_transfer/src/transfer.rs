@@ -1,6 +1,4 @@
-use tokio::io::{
-    AsyncBufRead, AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt,
-};
+use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt};
 
 use crate::{Error, FileMeta, FileMetaLocal, FileOfferMsg, FileResponseMsg};
 use std::io::{ErrorKind, Seek, SeekFrom};
@@ -146,9 +144,6 @@ pub async fn receive_files(
             if file.metadata()?.len() != start {
                 return Err(Error::UnexpectedFileLen);
             }
-
-            // only take the length of the remaining part of the file from the reader
-            let mut reader = (&mut reader).take(offer.len - start);
 
             net_to_file(&mut reader, &mut file, offer.len - start).await?;
         }

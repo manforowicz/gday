@@ -22,7 +22,6 @@
 //! #
 //! # let rt = tokio::runtime::Builder::new_current_thread().build().unwrap();
 //! # rt.block_on( async {
-//!
 //! # let (stream1, stream2) = tokio::io::duplex(64);
 //! # let mut stream1 = tokio::io::BufReader::new(stream1);
 //! # let mut stream2 = tokio::io::BufReader::new(stream2);
