@@ -16,7 +16,7 @@ authors = ["Marcin Anforowicz"]
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/manforowicz/gday/"
-version = "0.2.1"
+version = "0.3.0-rc1"
 
 # The profile that 'dist' will build with
 [profile.dist]
