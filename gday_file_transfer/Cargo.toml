@@ -14,14 +14,13 @@ version.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-futures = "0.3.30"
 os_str_bytes = "7.0.0"
-pin-project = "1.1.5"
-rand = "0.8.5"
-serde = { version = "1.0.204", features = ["derive"] }
-serde_json = "1.0.120"
-thiserror = "1.0.61"
-tokio = { version = "1.39.2", features = ["fs", "net", "io-util", "rt", "macros"] }
+pin-project = "1.1.7"
+serde = { version = "1.0.215", features = ["derive"] }
+serde_json = "1.0.133"
+thiserror = "2.0.3"
+tokio = { version = "1.41.1", features = ["io-util"] }
 
 [dev-dependencies]
-tempfile = "3.10.1"
+tempfile = "3.14.0"
+tokio = { version = "1.41.1", features = ["macros"] }

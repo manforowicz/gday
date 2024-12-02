@@ -1,13 +1,11 @@
 #![forbid(unsafe_code)]
 #![warn(clippy::all)]
-use std::io::Write;
-
-use tokio::io::AsyncWriteExt;
-
 use gday_contact_exchange_protocol::{
     read_from, read_from_async, write_to, write_to_async, ClientMsg, Contact, Error, FullContact,
     ServerMsg,
 };
+use std::io::Write;
+use tokio::io::AsyncWriteExt;
 
 /// Test serializing and deserializing messages.
 #[test]
@@ -38,9 +36,19 @@ fn error_on_invalid_json() {
     let mut pipe = std::collections::VecDeque::new();
 
     // gibberish json
-    pipe.write_all(&[0, 0, 0, 5, 52, 45, 77, 123, 12]).unwrap();
+    pipe.write_all(&[1, 0, 5, 52, 45, 77, 123, 12]).unwrap();
     let result: Result<ServerMsg, Error> = read_from(&mut pipe);
     assert!(matches!(result, Err(Error::JSON(_))));
+}
+
+#[test]
+fn error_on_incompatible_version() {
+    let mut pipe = std::collections::VecDeque::new();
+
+    // invalid version
+    pipe.write_all(&[2, 0, 5, 52, 45, 77, 123, 12]).unwrap();
+    let result: Result<ServerMsg, Error> = read_from(&mut pipe);
+    assert!(matches!(result, Err(Error::IncompatibleProtocol)));
 }
 
 /// Test serializing and deserializing messages asynchronously.
@@ -72,23 +80,37 @@ async fn error_on_invalid_json_async() {
     let (mut writer, mut reader) = tokio::io::duplex(1000);
     // gibberish json
     writer
-        .write_all(&[0, 0, 0, 5, 52, 45, 77, 123, 12])
+        .write_all(&[1, 0, 5, 52, 45, 77, 123, 12])
         .await
         .unwrap();
     let result: Result<ServerMsg, Error> = read_from_async(&mut reader).await;
     assert!(matches!(result, Err(Error::JSON(_))));
 }
 
+#[tokio::test]
+async fn error_on_incompatible_version_async() {
+    let (mut writer, mut reader) = tokio::io::duplex(1000);
+    // gibberish json
+    writer
+        .write_all(&[2, 0, 5, 52, 45, 77, 123, 12])
+        .await
+        .unwrap();
+    let result: Result<ServerMsg, Error> = read_from_async(&mut reader).await;
+    assert!(matches!(result, Err(Error::IncompatibleProtocol)));
+}
+
 /// Get a [`Vec`] of example [`ClientMsg`]s.
 fn get_client_msg_examples() -> Vec<ClientMsg> {
     vec![
-        ClientMsg::CreateRoom { room_code: 452932 },
+        ClientMsg::CreateRoom {
+            room_code: *b"fjdsafdssds89fph9ewafhusdp9afhas",
+        },
         ClientMsg::RecordPublicAddr {
-            room_code: 2345,
+            room_code: *b"fdsjafp89rejfnsdi;ofnsdo;jfsadif",
             is_creator: true,
         },
         ClientMsg::ReadyToShare {
-            room_code: 24325423,
+            room_code: *b"jfdsi9uapfj89erpajf98sdpfajisdaf",
             is_creator: false,
             local_contact: Contact {
                 v4: Some("31.31.65.31:324".parse().unwrap()),
@@ -128,6 +150,5 @@ fn get_server_msg_examples() -> Vec<ServerMsg> {
         ServerMsg::ErrorNoSuchRoomCode,
         ServerMsg::ErrorTooManyRequests,
         ServerMsg::ErrorSyntax,
-        ServerMsg::ErrorConnection,
     ]
 }

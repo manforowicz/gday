@@ -1,58 +1,65 @@
-Note: this project is still in early-development, so expect breaking changes.
-
 # gday
 [![Crates.io Version](https://img.shields.io/crates/v/gday)](https://crates.io/crates/gday)
 
 Command line tool to securely send files (without a relay or port forwarding).
 
 <pre>
-<b style="color:lime;">peer_1:</b> gday send image.jpg folder
-<i>&lt;Asks for confirmation&gt;</i>
-Tell your mate to run "gday get <b>1.1C30.C71E.A</b>".
-<b>Transfer complete.</b>
+<b style="color:lime;">peer_1:</b> gday send file.mp4 folder
+Tell your mate to run "gday get <b>1.n5xn8.wvqsf</b>".
 </pre>
 
 <pre>
-<b style="color:lime;">peer_2:</b> gday get <b>1.1C30.C71E.A</b>
-<i>&lt;Asks for confirmation&gt;</i>
+<b style="color:lime;">peer_2:</b> gday get <b>1.n5xn8.wvqsf</b>
 <b>Transfer complete.</b>
 </pre>
 
-[![asciicast](https://asciinema.org/a/1jjPVyccHweqgwA5V3un4tCnU.svg)](https://asciinema.org/a/1jjPVyccHweqgwA5V3un4tCnU)
+[![asciicast](https://asciinema.org/a/Z8OJJr8xHRAJh6fuqocNcm9Zu.svg)](https://asciinema.org/a/Z8OJJr8xHRAJh6fuqocNcm9Zu)
 
 ## Installation
 
 To run the executable directly:
 
-1. Go to [releases](https://github.com/manforowicz/gday/releases)
-and download the correct file for your platform.
+1. Download an executable from [releases](https://github.com/manforowicz/gday/releases).
 2. Extract it (on Linux: `tar xf <file>`).
 3. Run it: `./gday`
 
 To install with **cargo**:
 ```
-$ cargo install gday
+cargo install gday
 ```
 
 To install with **brew**:
 ```
-$ brew install manforowicz/tap/gday
+brew install manforowicz/tap/gday
 ```
 
 ## Features
-- File transfer is always direct, without relay servers.
-A server is only used to exchange socket addresses at the beginning.
+
 - No limit on the size of files and folders sent.
+
+- Files are sent directly, without relay servers.
+A server is only used to exchange socket addresses at the beginning.
+
+- Automatically resumes interrupted transfers. Just `gday send` the same files, and partial downloads will be detected and resumed.
+
 - Doesn't require port forwarding.
 Instead, uses [TCP Hole Punching](https://bford.info/pub/net/p2pnat/) to traverse
 [NATs](https://en.wikipedia.org/wiki/Network_address_translation).
-Note: this may not work on very restrictive NATs.
-- Server connection encrypted with [TLS](https://docs.rs/rustls/)
-and file transfer encrypted with [ChaCha20Poly1305](https://docs.rs/chacha20poly1305/).
+This may not work on very restrictive NATs. If that happens, enable IPv6 or move to a different network.
+
+- If a contact exchange server is down, just uses a different one from the default list. Or specify your own with `--server`.
+
+- Server connection encrypted with
+[TLS](https://en.wikipedia.org/wiki/Transport_Layer_Security)
+and file transfer end-to-end encrypted with
+[ChaCha20Poly1305](https://en.wikipedia.org/wiki/ChaCha20-Poly1305).
+
 - Automatically tries both IPv4 and IPv6.
-- Immune to malicious servers impersonating your peer.
-Uses [SPAKE2](https://docs.rs/spake2/) password authenticated key exchange
-to derive an encryption key from a shared secret.
+
+- Resistant to malicious servers impersonating your peer.
+Uses [SPAKE2](https://datatracker.ietf.org/doc/rfc9382/) to derive an
+encryption key from a shared secret.
+
 - No `unsafe` Rust in this repository.
 
 
@@ -68,7 +75,7 @@ Commands:
 Options:
   -s, --server <SERVER>        Use a custom gday server with this domain name
   -p, --port <PORT>            Connect to a custom server port
-  -u, --unencrypted            Use raw TCP without TLS
+  -u, --unencrypted            Connect to server with TCP instead of TLS
   -v, --verbosity <VERBOSITY>  Verbosity. (trace, debug, info, warn, error) [default: warn]
   -h, --help                   Print help
   -V, --version                Print version

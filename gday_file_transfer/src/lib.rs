@@ -1,5 +1,3 @@
-//! Note: this crate is still in early-development, so expect breaking changes.
-//!
 //! This library lets you offer and transfer files to another peer,
 //! assuming you already have a reliable connection established.
 //!
@@ -24,12 +22,12 @@
 //! #
 //! # let rt = tokio::runtime::Builder::new_current_thread().build().unwrap();
 //! # rt.block_on( async {
-//!
-//! # let (mut stream1, mut stream2) = tokio::io::duplex(64);
-//! #
+//! # let (stream1, stream2) = tokio::io::duplex(64);
+//! # let mut stream1 = tokio::io::BufReader::new(stream1);
+//! # let mut stream2 = tokio::io::BufReader::new(stream2);
 //! // Peer A offers files and folders they'd like to send
 //! let paths_to_send = ["folder/to/send/".into(), "a/file.txt".into()];
-//! let files_to_send = get_file_metas(&paths_to_send).await?;
+//! let files_to_send = get_file_metas(&paths_to_send)?;
 //! let offer_msg = FileOfferMsg::from(files_to_send.clone());
 //! write_to_async(offer_msg, &mut stream1).await?;
 //!
@@ -38,7 +36,7 @@
 //! let response_msg = FileResponseMsg::accept_only_new_and_interrupted(
 //!     &offer_msg,
 //!     Path::new("save/the/files/here/"),
-//! ).await?;
+//! )?;
 //! write_to_async(response_msg, &mut stream2).await?;
 //!
 //! // Peer A sends the accepted files
@@ -67,6 +65,11 @@ pub use crate::offer::{
 };
 pub use crate::transfer::{receive_files, send_files, TransferReport};
 
+/// Version of the protocol.
+/// Different numbers wound indicate
+/// incompatible protocol breaking changes.
+pub const PROTOCOL_VERSION: u8 = 1;
+
 /// `gday_file_transfer` error.
 #[derive(Error, Debug)]
 #[non_exhaustive]
@@ -80,7 +83,7 @@ pub enum Error {
     #[error("IO Error: {0}")]
     IO(#[from] std::io::Error),
 
-    /// All 100 suitable filenames for this [`FileMeta`] are occupied.
+    /// All 100 suitable locations to save [`FileMeta`] are occupied.
     ///
     /// Comes from [`FileMeta::get_unoccupied_save_path()`]
     /// or [`FileMeta::get_partial_download_path()`].
@@ -123,4 +126,12 @@ pub enum Error {
         This would make the offered metadata ambiguous."
     )]
     PathsHaveSameName(std::ffi::OsString),
+
+    /// Received a message with an incompatible protocol version.
+    /// Check if this software is up-to-date.
+    #[error(
+        "Received a message with an incompatible protocol version. \
+        Check if this software is up-to-date."
+    )]
+    IncompatibleProtocol,
 }

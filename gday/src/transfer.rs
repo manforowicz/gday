@@ -8,15 +8,16 @@ pub async fn send_files(
     response: FileResponseMsg,
     writer: &mut EncryptedStream<tokio::net::TcpStream>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let progress_bar = create_progress_bar();
+    let len = FileOfferMsg::from(offer.clone()).get_transfer_size(&response)?;
+    let progress_bar = create_progress_bar(len);
     let mut current_file = String::from("Starting...");
 
     let update_progress = |report: &TransferReport| {
         progress_bar.set_position(report.processed_bytes);
-        progress_bar.set_length(report.total_bytes);
         if current_file.as_str() != report.current_file.to_string_lossy() {
-            current_file = report.current_file.to_string_lossy().to_string();
-            progress_bar.set_message(format!("Receiving {}", current_file));
+            current_file.clear();
+            current_file.push_str(&report.current_file.to_string_lossy());
+            progress_bar.set_message(format!("Sending {}", current_file));
         }
     };
 
@@ -26,7 +27,7 @@ pub async fn send_files(
             Ok(())
         }
         Err(err) => {
-            progress_bar.abandon_with_message("Transfer failed.");
+            progress_bar.abandon_with_message("Send failed.");
             Err(err.into())
         }
     }
@@ -42,14 +43,15 @@ pub async fn receive_files(
     save_dir: &std::path::Path,
     reader: &mut EncryptedStream<tokio::net::TcpStream>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let progress_bar = create_progress_bar();
-    let mut current_file = String::from("Starting...");
+    let len = offer.get_transfer_size(&response)?;
+    let progress_bar = create_progress_bar(len);
+    let mut current_file = String::new();
 
     let update_progress = |report: &TransferReport| {
         progress_bar.set_position(report.processed_bytes);
-        progress_bar.set_length(report.total_bytes);
         if current_file.as_str() != report.current_file.to_string_lossy() {
-            current_file = report.current_file.to_string_lossy().to_string();
+            current_file.clear();
+            current_file.push_str(&report.current_file.to_string_lossy());
             progress_bar.set_message(format!("Receiving {}", current_file));
         }
     };
@@ -64,20 +66,20 @@ pub async fn receive_files(
             Ok(())
         }
         Err(err) => {
-            progress_bar.abandon_with_message("Transfer failed.");
+            progress_bar.abandon_with_message("Receive failed.");
             Err(err.into())
         }
     }
 }
 
 /// Create a stylded [`ProgressBar`].
-fn create_progress_bar() -> ProgressBar {
+fn create_progress_bar(len: u64) -> ProgressBar {
     let style = ProgressStyle::with_template(
         "{msg} [{wide_bar}] {bytes}/{total_bytes} | {bytes_per_sec} | eta: {eta}",
     )
     .expect("Progress bar style string was invalid.");
     let draw = ProgressDrawTarget::stderr_with_hz(2);
-    ProgressBar::with_draw_target(None, draw)
+    ProgressBar::with_draw_target(Some(len), draw)
         .with_style(style)
         .with_message("starting...")
 }

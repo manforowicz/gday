@@ -1,8 +1,4 @@
-//! A simple encrypted wrapper around an IO stream.
-//! TODO: UPDATE FOR ASYNC
-//! TODO: Optimization when inner is bufread
-//!
-//! Uses a streaming [chacha20poly1305](https://docs.rs/chacha20poly1305/latest/chacha20poly1305/) cipher.
+//! Simple encrypted ChaCha20Poly1305 wrapper around an async IO stream.
 //!
 //! This library is used by [gday_file_transfer](https://crates.io/crates/gday_file_transfer),
 //! which is used by [gday](https://crates.io/crates/gday).
@@ -89,19 +85,24 @@ pub struct EncryptedStream<T> {
 
     /// Encrypted data received from the inner IO stream.
     /// - Invariant: Never stores a complete chunk(s).
-    /// As soon as full chunks are read, moves and decrypts them
+    ///
+    /// As soon as full chunk(s) are read, moves and decrypts them
     /// into `decrypted`.
     received: HelperBuf,
 
     /// Data that has been decrypted from `received`.
     /// - Invariant: This must be empty when calling
-    /// [`Self::inner_read()`]
+    ///   [`Self::inner_read()`]
     decrypted: HelperBuf,
 
-    /// Data to be sent. Encrypted only when flushing.
+    /// Data to be sent. Encrypted only when [`Self::flushing`].
     /// - Invariant: the first 2 bytes are always
-    /// reserved for the length header
+    ///   reserved for the length
+    /// - Invariant: Data can only be appended when `flushing` is false.
     to_send: HelperBuf,
+
+    /// Is the content of `to_send` encrypted and ready to write?
+    flushing: bool,
 }
 
 impl<T> EncryptedStream<T> {
@@ -111,7 +112,7 @@ impl<T> EncryptedStream<T> {
     /// - The `key` must be a cryptographically random secret.
     /// - The `nonce` shouldn't be reused, but doesn't need to be secret.
     ///
-    /// - See [`Self::encrypt_connection()`] if you'd like an auto-generated nonce.
+    /// - See [`Self::encrypt_connection()`] if you'd like an auto-generatcan't createed nonce.
     pub fn new(io_stream: T, key: &[u8; 32], nonce: &[u8; 7]) -> Self {
         let mut to_send = HelperBuf::with_capacity(u16::MAX as usize + 2);
         // add 2 bytes for length header to uphold invariant
@@ -124,6 +125,7 @@ impl<T> EncryptedStream<T> {
             received: HelperBuf::with_capacity(u16::MAX as usize + 2),
             decrypted: HelperBuf::with_capacity(u16::MAX as usize + 2),
             to_send,
+            flushing: false,
         }
     }
 }
@@ -167,7 +169,7 @@ impl<T: AsyncRead> AsyncRead for EncryptedStream<T> {
         buf: &mut tokio::io::ReadBuf<'_>,
     ) -> Poll<std::io::Result<()>> {
         // if we're out of decrypted data, read more
-        if self.as_mut().decrypted.is_empty() {
+        if self.decrypted.is_empty() {
             ready!(self.as_mut().inner_read(cx))?;
         }
 
@@ -180,7 +182,7 @@ impl<T: AsyncRead> AsyncRead for EncryptedStream<T> {
     }
 }
 
-impl<T: AsyncBufRead> AsyncBufRead for EncryptedStream<T> {
+impl<T: AsyncRead> AsyncBufRead for EncryptedStream<T> {
     fn consume(self: std::pin::Pin<&mut EncryptedStream<T>>, amt: usize) {
         self.project().decrypted.consume(amt);
     }
@@ -204,15 +206,22 @@ impl<T: AsyncWrite> AsyncWrite for EncryptedStream<T> {
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<Result<usize, std::io::Error>> {
+        // Finish up any flushes before proceeding.
+        if self.flushing {
+            ready!(self.as_mut().flush_write_buf(cx))?;
+        }
+
         let me = self.as_mut().project();
+
         let bytes_taken = std::cmp::min(buf.len(), me.to_send.spare_capacity().len() - TAG_SIZE);
         me.to_send
             .extend_from_slice(&buf[0..bytes_taken])
             .expect("unreachable");
 
-        // if `to_send` is full, flush it
+        // if `to_send` is full, start the process
+        // of flushing it
         if me.to_send.spare_capacity().len() - TAG_SIZE == 0 {
-            ready!(self.flush_write_buf(cx))?;
+            let _ = self.flush_write_buf(cx)?;
         }
         Poll::Ready(Ok(bytes_taken))
     }
@@ -240,7 +249,7 @@ impl<T: AsyncRead> EncryptedStream<T> {
         let mut me = self.project();
 
         // ensure we have the full buffer to decrypt into
-        assert!(me.decrypted.is_empty());
+        debug_assert!(me.decrypted.is_empty());
 
         // maximize room to receive more data
         me.received.left_align();
@@ -297,24 +306,33 @@ impl<T: AsyncWrite> EncryptedStream<T> {
     /// Encrypts and fully flushes [`Self::to_send`].
     fn flush_write_buf(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
         let mut me = self.project();
-        // encrypt in place
-        let mut msg = me.to_send.split_off_aead_buf(2);
-        me.encryptor
-            .encrypt_next_in_place(&[], &mut msg)
-            .map_err(|_| std::io::Error::new(ErrorKind::InvalidData, "Encryption error"))?;
 
-        let len = u16::try_from(msg.len())
-            .expect("unreachable: Length of message buffer should always fit in u16")
-            .to_be_bytes();
+        // If we're just starting a flush,
+        // encrypt the data.
+        if !*me.flushing {
+            *me.flushing = true;
+            // encrypt in place
+            let mut msg = me.to_send.split_off_aead_buf(2);
+            me.encryptor
+                .encrypt_next_in_place(&[], &mut msg)
+                .map_err(|_| std::io::Error::new(ErrorKind::InvalidData, "Encryption error"))?;
 
-        // write length to header
-        me.to_send[0..2].copy_from_slice(&len);
+            let len = u16::try_from(msg.len())
+                .expect("unreachable: Length of message buffer should always fit in u16")
+                .to_be_bytes();
+
+            // write length to header
+            me.to_send[0..2].copy_from_slice(&len);
+        }
 
         // write until empty
         while !me.to_send.is_empty() {
             let bytes_written = ready!(me.inner.as_mut().poll_write(cx, me.to_send))?;
             me.to_send.consume(bytes_written);
         }
+
+        // if we've reached this point, flushing has finished
+        *me.flushing = false;
 
         // make space for new header
         me.to_send

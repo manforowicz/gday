@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 #![warn(clippy::all)]
 
-use gday_hole_punch::{server_connector, try_connect_to_peer, ContactSharer, PeerCode};
+use gday_hole_punch::{server_connector, share_contacts, try_connect_to_peer, PeerCode};
 use std::str::FromStr;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
@@ -31,8 +31,8 @@ async fn test_integration() {
         // Rendezvous settings
         let peer_code = PeerCode {
             server_id: 0,
-            room_code: 123,
-            shared_secret: 456,
+            room_code: "123".to_string(),
+            shared_secret: "456".to_string(),
         };
 
         // Connect to the server
@@ -41,17 +41,17 @@ async fn test_integration() {
             .unwrap();
 
         // Create a room in the server, and get my contact from it
-        let (contact_sharer, my_contact) =
-            ContactSharer::enter_room(&mut server_connection, peer_code.room_code, true)
+        let (my_contact, peer_contact_fut) =
+            share_contacts(&mut server_connection, peer_code.room_code.as_bytes(), true)
                 .await
                 .unwrap();
 
         // Send PeerCode to peer
-        let code_to_share = peer_code.to_string();
+        let code_to_share = String::try_from(&peer_code).unwrap();
         code_tx.send(code_to_share).unwrap();
 
         // Wait for the server to send the peer's contact
-        let peer_contact = contact_sharer.get_peer_contact().await.unwrap();
+        let peer_contact = peer_contact_fut.await.unwrap();
 
         // Use TCP hole-punching to connect to the peer,
         // verify their identity with the shared_secret,
@@ -59,7 +59,7 @@ async fn test_integration() {
         let (mut tcp_stream, strong_key) = try_connect_to_peer(
             my_contact.local,
             peer_contact,
-            &peer_code.shared_secret.to_be_bytes(),
+            peer_code.shared_secret.as_bytes(),
         )
         .await
         .unwrap();
@@ -83,19 +83,22 @@ async fn test_integration() {
         .unwrap();
 
     // Join the same room in the server, and get my local contact
-    let (contact_sharer, my_contact) =
-        ContactSharer::enter_room(&mut server_connection, peer_code.room_code, false)
-            .await
-            .unwrap();
+    let (my_contact, peer_contact_fut) = share_contacts(
+        &mut server_connection,
+        peer_code.room_code.as_bytes(),
+        false,
+    )
+    .await
+    .unwrap();
 
     // Get peer's contact
-    let peer_contact = contact_sharer.get_peer_contact().await.unwrap();
+    let peer_contact = peer_contact_fut.await.unwrap();
 
     // Use hole-punching to connect to peer.
     let (mut tcp_stream, strong_key) = try_connect_to_peer(
         my_contact.local,
         peer_contact,
-        &peer_code.shared_secret.to_be_bytes(),
+        peer_code.shared_secret.as_bytes(),
     )
     .await
     .unwrap();

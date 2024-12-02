@@ -1,4 +1,4 @@
-use crate::{Error, FileMeta, FileMetaLocal};
+use crate::{Error, FileMeta, FileMetaLocal, PROTOCOL_VERSION};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{
     io::{Read, Write},
@@ -60,7 +60,7 @@ impl From<Vec<FileMetaLocal>> for FileOfferMsg {
 /// - `None` indicates that the corresponding file is rejected.
 /// - `Some(0)` indicates that the corresponding file is fully accepted.
 /// - `Some(k)` indicates that the corresponding file is accepted,
-/// except for the first `k` bytes.
+///   except for the first `k` bytes.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct FileResponseMsg {
     /// The accepted files. `Some(start_byte)` element accepts the offered
@@ -94,14 +94,14 @@ impl FileResponseMsg {
     /// by partially accepting files.
     ///
     /// Rejects all other files.
-    pub async fn accept_only_full_new_files(
+    pub fn accept_only_full_new_files(
         offer: &FileOfferMsg,
         save_dir: &Path,
     ) -> Result<Self, Error> {
         let mut response = Vec::with_capacity(offer.files.len());
 
         for file_meta in &offer.files {
-            if file_meta.already_exists(save_dir).await? {
+            if file_meta.already_exists(save_dir)? {
                 // reject
                 response.push(None);
             } else {
@@ -112,44 +112,23 @@ impl FileResponseMsg {
         Ok(Self { response })
     }
 
-    /// Returns a [`FileResponseMsg`] that would
-    /// accept only the remaining portions of files
-    /// whose downloads to `save_dir` have been previously interrupted.
-    ///
-    /// Rejects all other files.
-    pub async fn accept_only_remaining_portions(
-        offer: &FileOfferMsg,
-        save_dir: &Path,
-    ) -> Result<Self, Error> {
-        let mut response = Vec::with_capacity(offer.files.len());
-
-        for offered in &offer.files {
-            if let Some(existing_size) = offered.partial_download_exists(save_dir).await? {
-                response.push(Some(existing_size));
-            } else {
-                response.push(None);
-            }
-        }
-        Ok(Self { response })
-    }
-
     /// Get a [`FileResponseMsg`] that would:
     /// - Accept the remaining portions of files whose
-    /// downloads to `save_dir` have been previously interrupted,
+    ///   downloads to `save_dir` have been previously interrupted,
     /// - AND files that are not yet in `save_dir`,
-    /// or have a different size.
+    ///   or have a different size.
     ///
     /// Rejects all other files.
-    pub async fn accept_only_new_and_interrupted(
+    pub fn accept_only_new_and_interrupted(
         offer: &FileOfferMsg,
         save_dir: &Path,
     ) -> Result<FileResponseMsg, Error> {
         let mut response = Vec::with_capacity(offer.files.len());
 
         for offered in &offer.files {
-            if let Some(existing_size) = offered.partial_download_exists(save_dir).await? {
+            if let Some(existing_size) = offered.partial_download_exists(save_dir)? {
                 response.push(Some(existing_size));
-            } else if offered.already_exists(save_dir).await? {
+            } else if offered.already_exists(save_dir)? {
                 response.push(None);
             } else {
                 response.push(Some(0));
@@ -184,11 +163,17 @@ impl FileResponseMsg {
 
 /// Writes `msg` to `writer` using [`serde_json`], and flushes.
 ///
-/// Prefixes the message with 4 big-endian bytes that hold its length.
+/// Prefixes the message with 2 bytes holding the [`PROTOCOL_VERSION`]
+/// and 4 bytes holding the length of the following message (all in big-endian).
 pub fn write_to(msg: impl Serialize, writer: &mut impl Write) -> Result<(), Error> {
     let vec = serde_json::to_vec(&msg)?;
-    let len_byte = u32::try_from(vec.len())?;
-    writer.write_all(&len_byte.to_be_bytes())?;
+    let len = u32::try_from(vec.len())?;
+
+    let mut header = [0; 5];
+    header[0] = PROTOCOL_VERSION;
+    header[1..5].copy_from_slice(&len.to_be_bytes());
+
+    writer.write_all(&header)?;
     writer.write_all(&vec)?;
     writer.flush()?;
     Ok(())
@@ -196,14 +181,20 @@ pub fn write_to(msg: impl Serialize, writer: &mut impl Write) -> Result<(), Erro
 
 /// Asynchronously writes `msg` to `writer` using [`serde_json`], and flushes.
 ///
-/// Prefixes the message with a 4 big-endian bytes that hold its length.
+/// Prefixes the message with 2 bytes holding the [`PROTOCOL_VERSION`]
+/// and 4 bytes holding the length of the following message (all in big-endian).
 pub async fn write_to_async(
     msg: impl Serialize,
     writer: &mut (impl AsyncWrite + Unpin),
 ) -> Result<(), Error> {
     let vec = serde_json::to_vec(&msg)?;
-    let len_byte = u32::try_from(vec.len())?;
-    writer.write_all(&len_byte.to_be_bytes()).await?;
+    let len = u32::try_from(vec.len())?;
+
+    let mut header = [0; 5];
+    header[0] = PROTOCOL_VERSION;
+    header[1..5].copy_from_slice(&len.to_be_bytes());
+
+    writer.write_all(&header).await?;
     writer.write_all(&vec).await?;
     writer.flush().await?;
     Ok(())
@@ -211,11 +202,15 @@ pub async fn write_to_async(
 
 /// Reads a message from `reader` using [`serde_json`].
 ///
-/// Assumes the message is prefixed with 4 big-endian bytes that holds its length.
+/// Assumes the message is prefixed with 1 byte holding the [`PROTOCOL_VERSION`]
+/// and 4 big-endian bytes holding the length of the following message.
 pub fn read_from<T: DeserializeOwned>(reader: &mut impl Read) -> Result<T, Error> {
-    let mut len = [0_u8; 4];
-    reader.read_exact(&mut len)?;
-    let len = u32::from_be_bytes(len) as usize;
+    let mut header = [0_u8; 5];
+    reader.read_exact(&mut header)?;
+    if header[0] != PROTOCOL_VERSION {
+        return Err(Error::IncompatibleProtocol);
+    }
+    let len = u32::from_be_bytes(header[1..5].try_into().unwrap()) as usize;
 
     let mut buf = vec![0; len];
     reader.read_exact(&mut buf)?;
@@ -224,13 +219,17 @@ pub fn read_from<T: DeserializeOwned>(reader: &mut impl Read) -> Result<T, Error
 
 /// Asynchronously reads a message from `reader` using [`serde_json`].
 ///
-/// Assumes the message is prefixed with 4 big-endian bytes that hold its length.
+/// Assumes the message is prefixed with 1 byte holding the [`PROTOCOL_VERSION`]
+/// and 4 big-endian bytes holding the length of the following message.
 pub async fn read_from_async<T: DeserializeOwned>(
     reader: &mut (impl AsyncRead + Unpin),
 ) -> Result<T, Error> {
-    let mut len = [0_u8; 4];
-    reader.read_exact(&mut len).await?;
-    let len = u32::from_be_bytes(len) as usize;
+    let mut header = [0_u8; 5];
+    reader.read_exact(&mut header).await?;
+    if header[0] != PROTOCOL_VERSION {
+        return Err(Error::IncompatibleProtocol);
+    }
+    let len = u32::from_be_bytes(header[1..5].try_into().unwrap()) as usize;
 
     let mut buf = vec![0; len];
     reader.read_exact(&mut buf).await?;

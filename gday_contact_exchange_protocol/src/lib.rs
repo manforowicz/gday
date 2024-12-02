@@ -1,6 +1,4 @@
-//! Note: this crate is still in early-development, so expect breaking changes.
-//!
-//! This protocol lets two users exchange their public and (optionally) private socket addresses via a server.
+//! Protocol for peers to exchange their socket addresses via a server.
 //!
 //! On it's own, this library doesn't do anything other than define a shared protocol.
 //! In most cases, you should use one of the following crates:
@@ -14,7 +12,7 @@
 //!
 //! # Example
 //! First, both peers connect with TLS on both IPv4 and IPv6 (if possible)
-//! to a gday server with [`DEFAULT_PORT`].
+//! to a gday server on [`DEFAULT_PORT`].
 //! Then they exchange contacts like so:
 //! ```no_run
 //! # use gday_contact_exchange_protocol::{
@@ -27,47 +25,47 @@
 //! # let mut tls_ipv4 = std::collections::VecDeque::new();
 //! # let mut tls_ipv6 = std::collections::VecDeque::new();
 //! #
-//! let room_code = 42;
+//! let room_code = *b"32-bytes. May be a password hash";
 //!
-//! // A client tells the server to create a room.
+//! // One client tells the server to create a room.
 //! // The server responds with ServerMsg::RoomCreated or
-//! // ServerMsg::ErrorRoomTaken.
+//! // an error message.
 //! let request = ClientMsg::CreateRoom { room_code };
 //! write_to(request, &mut tls_ipv4)?;
-//! let response: ServerMsg = read_from(&mut tls_ipv4)?;
+//! let ServerMsg::RoomCreated = read_from(&mut tls_ipv4)? else { panic!() };
 //!
-//! // Each peer sends ClientMsg::RecordPublicAddr
-//! // from all their endpoints.
+//! // Both peers sends ClientMsg::RecordPublicAddr
+//! // from their IPv4 and/or IPv6 endpoints.
 //! // The server records the client's public addresses from these connections.
-//! // The server responds with ServerMsg::ReceivedAddr
+//! // The server responds with ServerMsg::ReceivedAddr or an error message.
 //! let request = ClientMsg::RecordPublicAddr { room_code, is_creator: true };
 //! write_to(request, &mut tls_ipv4)?;
-//! let response: ServerMsg = read_from(&mut tls_ipv4)?;
+//! let ServerMsg::ReceivedAddr = read_from(&mut tls_ipv4)? else { panic!() };
 //! write_to(request, &mut tls_ipv6)?;
-//! let response: ServerMsg = read_from(&mut tls_ipv6)?;
+//! let ServerMsg::ReceivedAddr = read_from(&mut tls_ipv6)? else { panic!() };
 //!
 //! // Both peers share their local address with the server.
 //! // The server immediately responds with ServerMsg::ClientContact,
-//! // containing each client's FullContact.
+//! // containing the client's FullContact.
 //! let local_contact = Contact {
-//!     v4: todo!("local v4 addr"),
-//!     v6: todo!("local v6 addr")
+//!     v4: Some("1.8.3.1:2304".parse()?),
+//!     v6: Some("[ab:41::b:43]:92".parse()?),
 //! };
 //! let request = ClientMsg::ReadyToShare { local_contact, room_code, is_creator: true };
 //! write_to(request, &mut tls_ipv4)?;
-//! let response: ServerMsg = read_from(&mut tls_ipv4)?;
+//! let ServerMsg::ClientContact(my_contact) = read_from(&mut tls_ipv4)? else { panic!() };
 //!
-//! // Once both clients have sent ClientMsg::ShareContact,
+//! // Once both clients have sent ClientMsg::ReadyToShare,
 //! // the server sends both clients a ServerMsg::PeerContact
 //! // containing the FullContact of the peer.
-//! let response: ServerMsg = read_from(&mut tls_ipv4)?;
+//! let ServerMsg::PeerContact(peer_contact) = read_from(&mut tls_ipv4)? else { panic!() };
 //!
 //! // The server then closes the room, and the peers disconnect.
 //!
 //! // The peers then connect directly to each other using a library
 //! // such as gday_hole_punch.
 //! #
-//! # Ok::<(), gday_contact_exchange_protocol::Error>(())
+//! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 //!
 #![forbid(unsafe_code)]
@@ -85,23 +83,33 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 /// using encrypted TLS should listen on.
 pub const DEFAULT_PORT: u16 = 2311;
 
+/// Version of the protocol.
+/// Different numbers wound indicate
+/// incompatible protocol breaking changes.
+pub const PROTOCOL_VERSION: u8 = 1;
+
 /// A message from client to server.
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Clone, Copy)]
 #[non_exhaustive]
 pub enum ClientMsg {
     /// Requests the server to create a new room.
     ///
-    /// Server responds with [`ServerMsg::RoomCreated`] on success
-    /// and [`ServerMsg::ErrorRoomTaken`] if the room already exists.
-    CreateRoom { room_code: u64 },
-
-    /// Tells the server to record the client's public socket address
-    /// of the connection on which this message was sent.
+    /// The server should automatically delete new rooms after roughly 10 minutes.
     ///
-    /// Server responds with [`ServerMsg::ReceivedAddr`] on success.
+    /// More than one room can be created per connection.
+    ///
+    /// Server responds with [`ServerMsg::RoomCreated`] on success
+    /// or [`ServerMsg::ErrorRoomTaken`] in the unlikely case that this room is taken.
+    CreateRoom { room_code: [u8; 32] },
+
+    /// Tells the server to record this client's public socket address
+    /// from the connection on which this message was sent.
+    ///
+    /// Server responds with [`ServerMsg::ReceivedAddr`] on success
+    /// or an error [`ServerMsg`] on failure.
     RecordPublicAddr {
         /// The room this client is in.
-        room_code: u64,
+        room_code: [u8; 32],
         /// Whether this is the client that created this room,
         /// or the other client.
         is_creator: bool,
@@ -117,12 +125,16 @@ pub enum ClientMsg {
     /// connection.
     ///
     /// Once the other peer also sends [`ClientMsg::ReadyToShare`],
-    /// the server responds with [`ServerMsg::PeerContact`]
-    /// which contains the peer's contact info.
-    /// The room then closes.
+    /// the server sends both peers a [`ServerMsg::PeerContact`]
+    /// which contains the other peer's contact info.
+    /// The room then closes, but the server doesn't disconnect.
     ReadyToShare {
+        /// The local contact to share.
         local_contact: Contact,
-        room_code: u64,
+        /// The room this client is in.
+        room_code: [u8; 32],
+        /// Whether this is the client that created this room,
+        /// or the other client.
         is_creator: bool,
     },
 }
@@ -133,11 +145,11 @@ pub enum ClientMsg {
 pub enum ServerMsg {
     /// Immediately responds to a [`ClientMsg::CreateRoom`] request.
     /// Indicates that a room with the given ID has been successfully created.
-    /// The room will expire/close in a few minutes.
+    /// The room will automatically close in roughly 10 minutes.
     RoomCreated,
 
     /// Immediately responds to a [`ClientMsg::RecordPublicAddr`]
-    /// to indicate it was successfully recorded.
+    /// to indicate a client's public address was successfully recorded.
     ReceivedAddr,
 
     /// Immediately responds to a [`ClientMsg::ReadyToShare`].
@@ -145,7 +157,7 @@ pub enum ServerMsg {
     ClientContact(FullContact),
 
     /// After both clients in a room have sent [`ClientMsg::ReadyToShare`],
-    /// the server sends with this message.
+    /// the server sends this message.
     /// Contains the other peer's contact info.
     PeerContact(FullContact),
 
@@ -155,15 +167,15 @@ pub enum ServerMsg {
 
     /// If only one client sends [`ClientMsg::ReadyToShare`] before the room
     /// times out, the server replies with this message instead of
-    /// [`ServerMsg::PeerContact`]
+    /// [`ServerMsg::PeerContact`].
     ErrorPeerTimedOut,
 
     /// The server responds with this if the `room_code` of a [`ClientMsg`]
     /// doesn't exist, either because this room timed out, or never existed.
     ErrorNoSuchRoomCode,
 
-    /// The server responds with this if a client sends [`ClientMsg::RecordPublicAddr`]
-    /// after sending [`ClientMsg::ReadyToShare`] on a different connection.
+    /// The server may respond with this if a client sends [`ClientMsg::RecordPublicAddr`]
+    /// after already sending [`ClientMsg::ReadyToShare`].
     ErrorUnexpectedMsg,
 
     /// Rejects a request if an IP address made too many requests.
@@ -171,12 +183,9 @@ pub enum ServerMsg {
     ErrorTooManyRequests,
 
     /// The server responds with this if it receives a [`ClientMsg`]
-    /// it doesn't understand. The server then closes the connection.
-    ErrorSyntax,
-
-    /// The server responds with this if it has any sort of connection error.
+    /// it doesn't understand.
     /// The server then closes the connection.
-    ErrorConnection,
+    ErrorSyntax,
 
     /// The server responds with this if it has an internal error.
     /// The server then closes the connection.
@@ -194,13 +203,15 @@ impl Display for ServerMsg {
             Self::PeerContact(c) => write!(f, "The server says your peer's contact is {c}."),
             Self::ErrorRoomTaken => write!(
                 f,
-                "Can't create room with this code, because it was already created."
+                "Can't create a room with this room code, because it's already taken."
             ),
             Self::ErrorPeerTimedOut => write!(
                 f,
-                "Timed out while waiting for peer to finish sending their address."
+                "Timed out while waiting for peer to finish sending their addresses to the server."
             ),
-            Self::ErrorNoSuchRoomCode => write!(f, "No room with this room code has been created."),
+            Self::ErrorNoSuchRoomCode => {
+                write!(f, "No room with this code currently exists on the server.")
+            }
             Self::ErrorUnexpectedMsg => write!(
                 f,
                 "Server received RecordPublicAddr message after a ReadyToShare message. \
@@ -211,13 +222,12 @@ impl Display for ServerMsg {
                 "Exceeded request limit from this IP address. Try again in a minute."
             ),
             Self::ErrorSyntax => write!(f, "Server couldn't parse message syntax from client."),
-            Self::ErrorConnection => write!(f, "Connection error to client."),
-            Self::ErrorInternal => write!(f, "Internal server error."),
+            Self::ErrorInternal => write!(f, "Server had an internal error."),
         }
     }
 }
 
-/// The addresses of a single network endpoint.
+/// The addresses of a single client.
 /// May have IPv6, IPv4, none, or both.
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Clone, Copy, Default)]
 pub struct Contact {
@@ -247,9 +257,9 @@ impl std::fmt::Display for Contact {
     }
 }
 
-/// The public and local endpoints of an client.
+/// The local and public endpoints of an client.
 ///
-/// [`FullContact::public`] is different from [`FullContact::local`] when the entity is behind
+/// [`FullContact::local`] is only different from [`FullContact::public`] when the client is behind
 /// [NAT (network address translation)](https://en.wikipedia.org/wiki/Network_address_translation).
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Clone, Copy, Default)]
 pub struct FullContact {
@@ -272,11 +282,17 @@ impl std::fmt::Display for FullContact {
 
 /// Writes `msg` to `writer` using [`serde_json`], and flushes.
 ///
-/// Prefixes the message with 4 big-endian bytes that hold its length.
+/// Prefixes the message with 2 bytes holding the [`PROTOCOL_VERSION`]
+/// and 2 bytes holding the length of the following message (all in big-endian).
 pub fn write_to(msg: impl Serialize, writer: &mut impl Write) -> Result<(), Error> {
     let vec = serde_json::to_vec(&msg)?;
-    let len_byte = u32::try_from(vec.len())?;
-    writer.write_all(&len_byte.to_be_bytes())?;
+    let len = u16::try_from(vec.len())?;
+
+    let mut header = [0; 3];
+    header[0] = PROTOCOL_VERSION;
+    header[1..3].copy_from_slice(&len.to_be_bytes());
+
+    writer.write_all(&header)?;
     writer.write_all(&vec)?;
     writer.flush()?;
     Ok(())
@@ -284,14 +300,20 @@ pub fn write_to(msg: impl Serialize, writer: &mut impl Write) -> Result<(), Erro
 
 /// Asynchronously writes `msg` to `writer` using [`serde_json`], and flushes.
 ///
-/// Prefixes the message with a 4 big-endian bytes that hold its length.
+/// Prefixes the message with 2 bytes holding the [`PROTOCOL_VERSION`]
+/// and 2 bytes holding the length of the following message (all in big-endian).
 pub async fn write_to_async(
     msg: impl Serialize,
     writer: &mut (impl AsyncWrite + Unpin),
 ) -> Result<(), Error> {
     let vec = serde_json::to_vec(&msg)?;
-    let len_byte = u32::try_from(vec.len())?;
-    writer.write_all(&len_byte.to_be_bytes()).await?;
+    let len = u16::try_from(vec.len())?;
+
+    let mut header = [0; 3];
+    header[0] = PROTOCOL_VERSION;
+    header[1..3].copy_from_slice(&len.to_be_bytes());
+
+    writer.write_all(&header).await?;
     writer.write_all(&vec).await?;
     writer.flush().await?;
     Ok(())
@@ -299,11 +321,15 @@ pub async fn write_to_async(
 
 /// Reads a message from `reader` using [`serde_json`].
 ///
-/// Assumes the message is prefixed with 4 big-endian bytes that holds its length.
+/// Assumes the message is prefixed with 1 byte holding the [`PROTOCOL_VERSION`]
+/// and 2 big-endian bytes holding the length of the following message.
 pub fn read_from<T: DeserializeOwned>(reader: &mut impl Read) -> Result<T, Error> {
-    let mut len = [0_u8; 4];
-    reader.read_exact(&mut len)?;
-    let len = u32::from_be_bytes(len) as usize;
+    let mut header = [0_u8; 3];
+    reader.read_exact(&mut header)?;
+    if header[0] != PROTOCOL_VERSION {
+        return Err(Error::IncompatibleProtocol);
+    }
+    let len = u16::from_be_bytes(header[1..3].try_into().unwrap()) as usize;
 
     let mut buf = vec![0; len];
     reader.read_exact(&mut buf)?;
@@ -312,13 +338,17 @@ pub fn read_from<T: DeserializeOwned>(reader: &mut impl Read) -> Result<T, Error
 
 /// Asynchronously reads a message from `reader` using [`serde_json`].
 ///
-/// Assumes the message is prefixed with 4 big-endian bytes that hold its length.
+/// Assumes the message is prefixed with 1 byte holding the [`PROTOCOL_VERSION`]
+/// and 2 big-endian bytes holding the length of the following message.
 pub async fn read_from_async<T: DeserializeOwned>(
     reader: &mut (impl AsyncRead + Unpin),
 ) -> Result<T, Error> {
-    let mut len = [0_u8; 4];
-    reader.read_exact(&mut len).await?;
-    let len = u32::from_be_bytes(len) as usize;
+    let mut header = [0_u8; 3];
+    reader.read_exact(&mut header).await?;
+    if header[0] != PROTOCOL_VERSION {
+        return Err(Error::IncompatibleProtocol);
+    }
+    let len = u16::from_be_bytes(header[1..3].try_into().unwrap()) as usize;
 
     let mut buf = vec![0; len];
     reader.read_exact(&mut buf).await?;
@@ -337,7 +367,15 @@ pub enum Error {
     #[error("IO Error: {0}")]
     IO(#[from] std::io::Error),
 
-    /// Can't send message longer than 2^32 bytes.
-    #[error("Can't send message longer than 2^32 bytes: {0}")]
+    /// Can't send message longer than 2^16 bytes.
+    #[error("Can't send message longer than 2^16 bytes: {0}")]
     MsgTooLong(#[from] std::num::TryFromIntError),
+
+    /// Received a message with an incompatible protocol version.
+    /// Check if this software is up-to-date.
+    #[error(
+        "Received a message with an incompatible protocol version. \
+        Check if this software is up-to-date."
+    )]
+    IncompatibleProtocol,
 }

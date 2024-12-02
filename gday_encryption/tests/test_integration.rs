@@ -38,6 +38,9 @@ async fn test_transfers() {
             stream_a.write_all(chunk).await.unwrap();
             stream_a.flush().await.unwrap();
         }
+        // Ensure calling shutdown multiple times works
+        stream_a.shutdown().await.unwrap();
+        stream_a.shutdown().await.unwrap();
     });
 
     // Stream that will receive the test data sent to the loopback address.
@@ -52,6 +55,10 @@ async fn test_transfers() {
         stream_b.read_exact(&mut received).await.unwrap();
         assert_eq!(*chunk, received);
     }
+
+    // EOF should return 0
+    assert_eq!(stream_b.read(&mut [0, 0, 0]).await.unwrap(), 0);
+    assert_eq!(stream_b.read(&mut [0, 0, 0]).await.unwrap(), 0);
 }
 
 /// Test bufread
@@ -88,6 +95,9 @@ async fn test_bufread() {
             stream_a.write_all(chunk).await.unwrap();
             stream_a.flush().await.unwrap();
         }
+
+        stream_a.shutdown().await.unwrap();
+        stream_a.shutdown().await.unwrap();
     });
 
     // Stream that will receive the test data sent to the loopback address.
@@ -105,6 +115,10 @@ async fn test_bufread() {
         assert_ne!(bytes_read, 0);
     }
     assert_eq!(received, bytes);
+
+    // EOF should return 0
+    assert_eq!(stream_b.read(&mut [0, 0, 0]).await.unwrap(), 0);
+    assert_eq!(stream_b.read(&mut [0, 0, 0]).await.unwrap(), 0);
 }
 
 /// Confirm there are no infinite loops on EOF

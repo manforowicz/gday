@@ -9,20 +9,15 @@ use crate::dialog::ask_receive;
 use clap::{Parser, Subcommand};
 use gday_encryption::EncryptedStream;
 use gday_file_transfer::{read_from_async, write_to_async, FileOfferMsg, FileResponseMsg};
-use gday_hole_punch::PeerCode;
-use gday_hole_punch::{
-    server_connector::{self, DEFAULT_SERVERS},
-    ContactSharer,
-};
+use gday_hole_punch::server_connector::{self, DEFAULT_SERVERS};
+use gday_hole_punch::{share_contacts, PeerCode};
 use log::error;
 use log::info;
 use owo_colors::OwoColorize;
-use rand::Rng;
 use std::path::PathBuf;
-use std::str::FromStr;
 
 /// How long to try hole punching before giving up.
-const HOLE_PUNCH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+const HOLE_PUNCH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
 /// How long to try connecting to a server before giving up.
 const SERVER_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
@@ -31,7 +26,7 @@ const SERVER_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 #[command(author, version, about)]
 struct Args {
     #[command(subcommand)]
-    operation: Command,
+    command: Command,
 
     /// Use a custom gday server with this domain name.
     #[arg(short, long)]
@@ -41,7 +36,7 @@ struct Args {
     #[arg(short, long, requires("server"))]
     port: Option<u16>,
 
-    /// Use raw TCP without TLS.
+    /// Connect to server with TCP instead of TLS.
     #[arg(short, long, requires("server"))]
     unencrypted: bool,
 
@@ -54,28 +49,30 @@ struct Args {
 enum Command {
     /// Send files and/or directories.
     Send {
-        /// Custom shared code of form "server_id.room_code.shared_secret" (base 16).
-        ///
-        /// server_id must be valid, or 0 when custom --server set.
-        ///
-        /// Doesn't require a checksum digit.
-        #[arg(short, long)]
-        code: Option<String>,
-
         /// Files and/or directories to send.
         #[arg(required = true, num_args = 1..)]
         paths: Vec<PathBuf>,
+
+        /// Custom shared code of form "server_id.room_code.shared_secret".
+        ///
+        /// A server_id of 0 causes a random server to be used.
+        /// server_id ignored when custom --server set.
+        #[arg(short, long, conflicts_with = "length")]
+        code: Option<PeerCode>,
+
+        /// Length of room_code and shared_secret to generate.
+        #[arg(short, long, default_value = "5", conflicts_with = "code")]
+        length: usize,
     },
 
     /// Receive files.
     Get {
+        /// The code your peer gave you (of form "server_id.room_code.shared_secret")
+        code: PeerCode,
+
         /// Directory where to save the files.
-        /// By default, saves them in the current directory.
         #[arg(short, long, default_value = ".")]
         path: PathBuf,
-
-        /// The code that your peer gave you.
-        code: String,
     },
 }
 
@@ -99,69 +96,91 @@ async fn main() {
 }
 
 async fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
-    // get the server port
+    // Get the server port
     let port = if let Some(port) = args.port {
         port
     } else {
         server_connector::DEFAULT_PORT
     };
 
-    // use custom server if the user provided one,
-    // otherwise pick a random default server
-    let (mut server_connection, server_id) = if let Some(domain_name) = args.server {
+    // Connect to a custom server if the user chose one.
+    let custom_server = if let Some(domain_name) = args.server {
         if args.unencrypted {
-            (
+            Some(
                 server_connector::connect_tcp(format!("{domain_name}:{port}"), SERVER_TIMEOUT)
                     .await?,
-                0,
             )
         } else {
-            (
-                server_connector::connect_tls(domain_name, port, SERVER_TIMEOUT).await?,
-                0,
-            )
+            Some(server_connector::connect_tls(domain_name, port, SERVER_TIMEOUT).await?)
         }
     } else {
-        server_connector::connect_to_random_server(DEFAULT_SERVERS, SERVER_TIMEOUT).await?
+        None
     };
 
-    match args.operation {
-        // sending files
-        crate::Command::Send { paths, code } => {
+    match args.command {
+        crate::Command::Send {
+            paths,
+            code,
+            length,
+        } => {
+            // If the user chose a custom server
+            let (mut server_connection, server_id) = if let Some(custom_server) = custom_server {
+                (custom_server, 0)
+
+            // If the user chose a custom code
+            } else if let Some(code) = &code {
+                if code.server_id == 0 {
+                    server_connector::connect_to_random_server(DEFAULT_SERVERS, SERVER_TIMEOUT)
+                        .await?
+                } else {
+                    (
+                        server_connector::connect_to_server_id(
+                            DEFAULT_SERVERS,
+                            code.server_id,
+                            SERVER_TIMEOUT,
+                        )
+                        .await?,
+                        code.server_id,
+                    )
+                }
+
+            // Otherwise, pick a random server
+            } else {
+                server_connector::connect_to_random_server(DEFAULT_SERVERS, SERVER_TIMEOUT).await?
+            };
+
             // generate random `room_code` and `shared_secret`
             // if the user didn't provide custom ones
             let peer_code = if let Some(code) = code {
-                PeerCode::from_str(&code)?
+                PeerCode { server_id, ..code }
             } else {
-                let mut rng = rand::thread_rng();
-                PeerCode {
-                    server_id,
-                    room_code: rng.gen_range(0..u16::MAX as u64),
-                    shared_secret: rng.gen_range(0..u16::MAX as u64),
-                }
+                PeerCode::random(server_id, length)
             };
 
             // get metadata about the files to transfer
-            let local_files = gday_file_transfer::get_file_metas(&paths).await?;
+            let local_files = gday_file_transfer::get_file_metas(&paths)?;
             let offer_msg = FileOfferMsg::from(local_files.clone());
 
             // confirm the user wants to send these files
-            if !dialog::confirm_send(&offer_msg).await? {
-                // Send aborted
+            if !dialog::confirm_send(&offer_msg)? {
+                println!("Cancelled.");
                 return Ok(());
             }
 
             // create a room in the server
-            let (contact_sharer, my_contact) =
-                ContactSharer::enter_room(&mut server_connection, peer_code.room_code, true)
+            let (my_contact, peer_contact_fut) =
+                share_contacts(&mut server_connection, peer_code.room_code.as_bytes(), true)
                     .await?;
 
             info!("Your contact is:\n{my_contact}");
 
-            println!("Tell your mate to run \"gday get {}\"", peer_code.bold());
+            println!(
+                "Tell your mate to run \"gday get {}\"",
+                String::try_from(&peer_code)?.bold()
+            );
 
             // get peer's contact
-            let peer_contact = contact_sharer.get_peer_contact().await?;
+            let peer_contact = peer_contact_fut.await?;
             info!("Your mate's contact is:\n{peer_contact}");
 
             // connect to the peer
@@ -170,11 +189,14 @@ async fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
                 gday_hole_punch::try_connect_to_peer(
                     my_contact.local,
                     peer_contact,
-                    &peer_code.shared_secret.to_be_bytes(),
+                    peer_code.shared_secret.as_bytes(),
                 ),
             )
             .await
             .map_err(|_| gday_hole_punch::Error::HolePunchTimeout)??;
+
+            // Gracefully close the server connection
+            server_connection.shutdown().await?;
 
             let mut stream = EncryptedStream::encrypt_connection(stream, &shared_key).await?;
 
@@ -185,7 +207,7 @@ async fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
 
             println!("File offer sent to mate. Waiting on response.");
 
-            // receive file offer from peer
+            // receive response from peer
             let response: FileResponseMsg = read_from_async(&mut stream).await?;
 
             // Total number of files accepted
@@ -211,13 +233,23 @@ async fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
 
         // receiving files
         crate::Command::Get { path, code } => {
-            let code = PeerCode::from_str(&code)?;
-            let (contact_sharer, my_contact) =
-                ContactSharer::enter_room(&mut server_connection, code.room_code, false).await?;
+            let mut server_connection = if let Some(custom_server) = custom_server {
+                custom_server
+            } else {
+                server_connector::connect_to_server_id(
+                    DEFAULT_SERVERS,
+                    code.server_id,
+                    SERVER_TIMEOUT,
+                )
+                .await?
+            };
+
+            let (my_contact, peer_contact_fut) =
+                share_contacts(&mut server_connection, code.room_code.as_bytes(), false).await?;
 
             info!("Your contact is:\n{my_contact}");
 
-            let peer_contact = contact_sharer.get_peer_contact().await?;
+            let peer_contact = peer_contact_fut.await?;
 
             info!("Your mate's contact is:\n{peer_contact}");
 
@@ -226,11 +258,14 @@ async fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
                 gday_hole_punch::try_connect_to_peer(
                     my_contact.local,
                     peer_contact,
-                    &code.shared_secret.to_be_bytes(),
+                    code.shared_secret.as_bytes(),
                 ),
             )
             .await
             .map_err(|_| gday_hole_punch::Error::HolePunchTimeout)??;
+
+            // Gracefully close the server connection
+            server_connection.shutdown().await?;
 
             let mut stream = EncryptedStream::encrypt_connection(stream, &shared_key).await?;
 
@@ -239,7 +274,7 @@ async fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
             // receive file offer from peer
             let offer: FileOfferMsg = read_from_async(&mut stream).await?;
 
-            let response = ask_receive(&offer, &path).await?;
+            let response = ask_receive(&offer, &path)?;
 
             // respond to the file offer
             write_to_async(&response, &mut stream).await?;

@@ -1,34 +1,30 @@
-# GitHub workflow for automatically
-# testing code on push to main
-# and pull requests.
+# GitHub workflow which automatically
+# tests code on pushes and pull requests.
 
 name: Cargo Build & Test
 
 on:
   push:
-    branches:
-      - main
   pull_request:
-    types: [synchronize]
 
 env: 
   CARGO_TERM_COLOR: always
 
 jobs:
   build_and_test:
-    name: Rust project - latest
+    name: Rust Build & Test
     runs-on: ubuntu-latest
     strategy:
       matrix:
         toolchain:
-          # - stable
-          - beta
-          # - nightly
+          - stable
+          # - beta
+          - nightly
     steps:
       - uses: actions/checkout@v3
 
       - name: Update rustup
-        run: rustup update stable && rustup default stable
+        run: rustup update
 
       - name: Build
         run: cargo build --verbose
@@ -46,7 +42,7 @@ jobs:
         run: cargo fmt --check --verbose
       
       - name: Install cargo audit
-        run: cargo install cargo-audit
+        run: cargo install --locked cargo-audit
 
       - name: Audit dependencies
         run: cargo audit

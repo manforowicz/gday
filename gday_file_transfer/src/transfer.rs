@@ -1,14 +1,10 @@
-use tokio::io::{
-    AsyncBufRead, AsyncRead, AsyncReadExt, AsyncSeekExt, AsyncWrite, AsyncWriteExt, BufWriter,
-};
+use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt};
 
 use crate::{Error, FileMeta, FileMetaLocal, FileOfferMsg, FileResponseMsg};
-use std::io::SeekFrom;
+use std::io::{ErrorKind, Seek, SeekFrom};
 use std::path::Path;
-use std::pin::Pin;
+use std::pin::{pin, Pin};
 use std::task::{ready, Context, Poll};
-
-const FILE_BUFFER_SIZE: usize = 1_000_000;
 
 /// Holds the status of a file transfer
 #[derive(Debug, Clone)]
@@ -22,18 +18,20 @@ pub struct TransferReport {
 
 /// Transfers the requested files to `writer`.
 ///
-/// - `offer` is the `Vec` of [`FileMetaLocal`] offered to the peer.
-/// - `response` is the peer's [`FileResponseMsg`].
+/// - `offer` is the `Vec` of [`FileMetaLocal`] you sent to your peer.
+/// - `response` is the [`FileResponseMsg`] received from your peer.
+/// - `writer` is the the IO stream on which the files will be sent.
 /// - `progress_callback` is a function that gets frequently
-/// called with [`TransferReport`] to report progress.
+///   called with [`TransferReport`] to report progress.
 ///
 /// Transfers the accepted files in order, sequentially, back-to-back.
 pub async fn send_files(
     offer: &[FileMetaLocal],
     response: &FileResponseMsg,
-    writer: impl AsyncWrite + Unpin,
+    writer: impl AsyncWrite,
     progress_callback: impl FnMut(&TransferReport),
 ) -> Result<(), Error> {
+    let writer = pin!(writer);
     let files: Vec<(&FileMetaLocal, u64)> = offer
         .iter()
         .zip(&response.response)
@@ -50,28 +48,28 @@ pub async fn send_files(
     }
 
     // Wrap the writer to report progress over `progress_tx`
-    let mut writer = ProgressWrapper::new(
-        BufWriter::with_capacity(FILE_BUFFER_SIZE, writer),
-        total_bytes,
-        files.len() as u64,
-        progress_callback,
-    );
+    let mut writer =
+        ProgressWrapper::new(writer, total_bytes, files.len() as u64, progress_callback);
+
+    // 64 KiB copy buffer
+    let mut buf = vec![0; 0x10000];
 
     // iterate over all the files
     for (offer, start) in files {
         // report the file path
         writer.progress.current_file.clone_from(&offer.short_path);
 
-        let mut file = tokio::fs::File::open(&offer.local_path).await?;
+        let mut file = std::fs::File::open(&offer.local_path)?;
 
         // confirm file length matches metadata length
-        if file.metadata().await?.len() != offer.len {
+        if file.metadata()?.len() != offer.len {
             return Err(Error::UnexpectedFileLen);
         }
 
         // copy the file into the writer
-        file.seek(SeekFrom::Start(start)).await?;
-        tokio::io::copy(&mut file, &mut writer).await?;
+        file.seek(SeekFrom::Start(start))?;
+
+        file_to_net(&mut file, &mut writer, offer.len - start, &mut buf).await?;
 
         // report the number of processed files
         writer.progress.processed_files += 1;
@@ -85,20 +83,21 @@ pub async fn send_files(
 /// Receives the requested files from `reader`.
 ///
 /// - `offer` is the [`FileOfferMsg`] offered by the peer.
-/// - `response` is your corresponding [`FileResponseMsg`].
+/// - `response` is the [`FileResponseMsg`] that you've sent in response.
 /// - `save_path` is the directory where the files should be saved.
 /// - `reader` is the IO stream on which the files will be received.
 /// - `progress_callback` is an function that gets frequently
-/// called with [`TransferReport`] to report progress.
+///   called with [`TransferReport`] to report progress.
 ///
 /// The accepted files must be sent in order, sequentially, back-to-back.
 pub async fn receive_files(
     offer: &FileOfferMsg,
     response: &FileResponseMsg,
     save_path: &Path,
-    reader: impl AsyncRead + Unpin,
+    reader: impl AsyncBufRead,
     progress_callback: impl FnMut(&TransferReport),
 ) -> Result<(), Error> {
+    let reader = pin!(reader);
     let files: Vec<(&FileMeta, u64)> = offer
         .files
         .iter()
@@ -131,45 +130,89 @@ pub async fn receive_files(
         if start == 0 {
             // create a directory and TMP file
             if let Some(parent) = tmp_path.parent() {
-                tokio::fs::create_dir_all(parent).await?;
+                std::fs::create_dir_all(parent)?;
             }
-            let file = tokio::fs::File::create(&tmp_path).await?;
-
-            // buffer the writer
-            let buf_size = std::cmp::min(FILE_BUFFER_SIZE, offer.len as usize);
-            let mut file = BufWriter::with_capacity(buf_size, file);
-
-            // only take the length of the file from the reader
-            let mut reader = (&mut reader).take(offer.len);
+            let mut file = std::fs::File::create(&tmp_path)?;
 
             // copy from the reader into the file
-            tokio::io::copy(&mut reader, &mut file).await?;
+            net_to_file(&mut reader, &mut file, offer.len).await?;
 
         // resume interrupted download
         } else {
             // open the partially downloaded file in append mode
-            let file = tokio::fs::OpenOptions::new()
-                .append(true)
-                .open(&tmp_path)
-                .await?;
-            if file.metadata().await?.len() != start {
+            let mut file = std::fs::OpenOptions::new().append(true).open(&tmp_path)?;
+            if file.metadata()?.len() != start {
                 return Err(Error::UnexpectedFileLen);
             }
 
-            // buffer the writer
-            let buf_size = std::cmp::min(FILE_BUFFER_SIZE, offer.len as usize - start as usize);
-            let mut file = BufWriter::with_capacity(buf_size, file);
-
-            // only take the length of the remaining part of the file from the reader
-            let mut reader = (&mut reader).take(offer.len - start);
-
-            // copy from the reader into the file
-            tokio::io::copy(&mut reader, &mut file).await?;
+            net_to_file(&mut reader, &mut file, offer.len - start).await?;
         }
         reader.progress.processed_files += 1;
-        tokio::fs::rename(tmp_path, offer.get_unoccupied_save_path(save_path).await?).await?;
+        std::fs::rename(tmp_path, offer.get_unoccupied_save_path(save_path)?)?;
     }
 
+    Ok(())
+}
+
+/// We're using this instead of [`tokio::io::copy()`].
+///
+/// [`tokio::io::copy()`] spawns a task on a thread
+/// during every file read/write. This occurs 1000s of times,
+/// introducing unnecessary overhead.
+///
+/// This function is similar, but uses standard blocking
+/// reads from `src`. This is made on the assumption that each read
+/// won't block everything for too long, so this
+/// function should still be cancellable.
+async fn file_to_net(
+    mut src: impl std::io::Read,
+    mut dst: impl tokio::io::AsyncWrite + Unpin,
+    mut amt: u64,
+    buf: &mut [u8],
+) -> std::io::Result<()> {
+    while amt > 0 {
+        let to_read = std::cmp::min(amt, buf.len() as u64) as usize;
+        let bytes_read = src.read(&mut buf[0..to_read])?;
+        if bytes_read == 0 {
+            return Err(std::io::Error::new(
+                ErrorKind::UnexpectedEof,
+                "Peer interrupted transfer.",
+            ));
+        }
+        amt -= bytes_read as u64;
+        dst.write_all(&buf[0..to_read]).await?;
+    }
+    Ok(())
+}
+
+/// We're using this instead of [`tokio::io::copy_buf()`].
+///
+/// [`tokio::io::copy_buf()`] spawns a task on a thread
+/// during every file read/write. This occurs 1000s of times,
+/// introducing unnecessary overhead.
+///
+/// This function is similar, but uses standard blocking
+/// writes to `dst`. This is made on the assumption that each write
+/// won't block everything for too long, so this
+/// function should still be cancellable.
+async fn net_to_file(
+    mut src: impl tokio::io::AsyncBufRead + Unpin,
+    mut dst: impl std::io::Write,
+    mut amt: u64,
+) -> std::io::Result<()> {
+    while amt > 0 {
+        let buf = src.fill_buf().await?;
+        if buf.is_empty() {
+            return Err(std::io::Error::new(
+                ErrorKind::UnexpectedEof,
+                "Peer interrupted transfer.",
+            ));
+        }
+        let to_write = std::cmp::min(amt, buf.len() as u64) as usize;
+        let written = dst.write(&buf[0..to_write])?;
+        src.consume(written);
+        amt -= written as u64;
+    }
     Ok(())
 }
 

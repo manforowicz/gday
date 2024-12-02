@@ -1,10 +1,9 @@
 # Contributing
 
-I'm eager to hear all your feedback and suggestions!
-Just open a [GitHub issue](https://github.com/manforowicz/gday/issues)
-and include as many details as you can.
-For example, try running with `--verbosity debug` or `--verbosity trace`
-and paste the log into your issue.
+Open a [GitHub issue](https://github.com/manforowicz/gday/issues)
+to report issues and suggest features.
+Try running with `--verbosity debug` or `--verbosity trace`
+and pasting the log into your issue.
 
 ## Contributing code
 
