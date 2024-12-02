@@ -18,7 +18,7 @@ clap = { version = "4.5.21", features = ["derive"] }
 socket2 = { version = "0.5.8" }
 tokio = { version = "1.41.1", features = ["rt-multi-thread", "macros", "net", "time", "sync"] }
 tokio-rustls = { version = "0.26.0" }
-gday_contact_exchange_protocol = { version = "0.2.1", path = "../gday_contact_exchange_protocol" }
+gday_contact_exchange_protocol = { version = "0.3.0", path = "../gday_contact_exchange_protocol" }
 thiserror = "2.0.3"
 log = "0.4.22"
 env_logger = "0.11.5"
