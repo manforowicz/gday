@@ -175,9 +175,8 @@ fn get_tcp_listener(addr: SocketAddr) -> Result<tokio::net::TcpListener, Error> 
 
     // sets the keepalive to 10 minutes
     let tcp_keepalive = TcpKeepalive::new()
-        .with_time(Duration::from_secs(600))
-        .with_interval(Duration::from_secs(10))
-        .with_retries(6);
+        .with_time(Duration::from_secs(60))
+        .with_interval(Duration::from_secs(10));
     socket
         .set_tcp_keepalive(&tcp_keepalive)
         .map_err(|source| Error {

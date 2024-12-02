@@ -19,3 +19,7 @@ publish-jobs = ["homebrew"]
 pr-run-mode = "plan"
 # The archive format to use for non-windows builds (defaults .tar.xz)
 unix-archive = ".tar.gz"
+
+# aws-lc-sys may require clang to build on Linux.
+[dist.dependencies.apt]
+clang = '*'
