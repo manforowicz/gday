@@ -18,7 +18,7 @@ use std::{fs::File, path::PathBuf};
 /// - dir/subdir1/file1
 /// - dir/subdir1/file2.txt
 /// - dir/subdir2/file1
-/// - dir/subdir2/file2.txt
+/// - dir/subdir2/file2.tar.gz
 fn make_test_dir() -> tempfile::TempDir {
     let temp_dir = tempfile::tempdir().unwrap();
     let dir_path = temp_dir.path();
@@ -47,8 +47,8 @@ fn make_test_dir() -> tempfile::TempDir {
     let mut f = File::create_new(dir_path.join("dir/subdir2/file1")).unwrap();
     write!(f, "This is dir/subdir2/file1").unwrap();
 
-    let mut f = File::create_new(dir_path.join("dir/subdir2/file2.txt")).unwrap();
-    write!(f, "This is dir/subdir2/file2.txt").unwrap();
+    let mut f = File::create_new(dir_path.join("dir/subdir2/file2.tar.gz")).unwrap();
+    write!(f, "This is dir/subdir2/file2.tar.gz").unwrap();
 
     temp_dir
 }
@@ -58,7 +58,7 @@ fn make_test_dir() -> tempfile::TempDir {
 #[tokio::test]
 async fn test_file_metas_errors() {
     let test_dir = make_test_dir();
-    let dir_path = test_dir.path();
+    let dir_path = test_dir.path().canonicalize().unwrap();
 
     // trying to get metadata about file that doesn't exist
     assert!(matches!(
@@ -84,6 +84,18 @@ async fn test_file_metas_errors() {
         get_file_metas(&[dir_path.join("dir"), dir_path.to_path_buf()]),
         Err(gday_file_transfer::Error::PathIsPrefix(..))
     ));
+
+    // one path is prefix of another. that's an error!
+    assert!(matches!(
+        get_file_metas(&[dir_path.join("dir"), dir_path.join("dir/subdir1/file2.txt")]),
+        Err(gday_file_transfer::Error::PathIsPrefix(..))
+    ));
+
+    // one path is prefix of another. that's an error!
+    assert!(matches!(
+        get_file_metas(&[dir_path.join("dir/subdir1/file2.txt"), dir_path.join("dir")]),
+        Err(gday_file_transfer::Error::PathIsPrefix(..))
+    ));
 }
 
 /// Confirm that [`get_file_metas()`] returns
@@ -91,7 +103,7 @@ async fn test_file_metas_errors() {
 #[tokio::test]
 async fn test_get_file_metas_1() {
     let test_dir = make_test_dir();
-    let dir_path = test_dir.path();
+    let dir_path = test_dir.path().canonicalize().unwrap();
     let dir_name = PathBuf::from(dir_path.file_name().unwrap());
     let mut result = gday_file_transfer::get_file_metas(&[dir_path.to_path_buf()]).unwrap();
 
@@ -136,10 +148,10 @@ async fn test_get_file_metas_1() {
             len: dir_path.join("dir/subdir2/file1").metadata().unwrap().len(),
         },
         FileMetaLocal {
-            short_path: dir_name.join("dir/subdir2/file2.txt"),
-            local_path: dir_path.join("dir/subdir2/file2.txt"),
+            short_path: dir_name.join("dir/subdir2/file2.tar.gz"),
+            local_path: dir_path.join("dir/subdir2/file2.tar.gz"),
             len: dir_path
-                .join("dir/subdir2/file2.txt")
+                .join("dir/subdir2/file2.tar.gz")
                 .metadata()
                 .unwrap()
                 .len(),
@@ -157,12 +169,12 @@ async fn test_get_file_metas_1() {
 #[tokio::test]
 async fn test_get_file_metas_2() {
     let test_dir = make_test_dir();
-    let dir_path = test_dir.path();
+    let dir_path = test_dir.path().canonicalize().unwrap();
 
     let mut result = gday_file_transfer::get_file_metas(&[
         dir_path.join("dir/subdir1/"),
         dir_path.join("dir/subdir2/file1"),
-        dir_path.join("dir/subdir2/file2.txt"),
+        dir_path.join("dir/subdir2/file2.tar.gz"),
     ])
     .unwrap();
 
@@ -187,10 +199,10 @@ async fn test_get_file_metas_2() {
             len: dir_path.join("dir/subdir2/file1").metadata().unwrap().len(),
         },
         FileMetaLocal {
-            short_path: PathBuf::from("file2.txt"),
-            local_path: dir_path.join("dir/subdir2/file2.txt"),
+            short_path: PathBuf::from("file2.tar.gz"),
+            local_path: dir_path.join("dir/subdir2/file2.tar.gz"),
             len: dir_path
-                .join("dir/subdir2/file2.txt")
+                .join("dir/subdir2/file2.tar.gz")
                 .metadata()
                 .unwrap()
                 .len(),
@@ -213,7 +225,7 @@ async fn file_transfer() {
     // dir_a contains test files, some of which
     // will be sent
     let dir_a = make_test_dir();
-    let dir_a_path = dir_a.path().to_path_buf();
+    let dir_a_path = dir_a.path().canonicalize().unwrap();
 
     // A thread that will send data to the loopback address
     tokio::spawn(async move {
@@ -238,23 +250,26 @@ async fn file_transfer() {
             .unwrap();
     });
 
+    let dir_a_path = dir_a.path().canonicalize().unwrap();
+
     // dir_b will receive the files in
     let dir_b = tempfile::tempdir().unwrap();
+    let dir_b_path = dir_b.path().canonicalize().unwrap();
 
     // create pre-existing file1 and file1 (1)
-    let mut f = File::create_new(dir_b.path().join("file1")).unwrap();
+    let mut f = File::create_new(dir_b_path.join("file1")).unwrap();
     write!(f, "This is a pre-existing file1").unwrap();
-    let mut f = File::create_new(dir_b.path().join("file1 (1)")).unwrap();
+    let mut f = File::create_new(dir_b_path.join("file1 (1)")).unwrap();
     write!(f, "This is file1").unwrap();
 
     // create pre-existing file2.txt
-    let mut f = File::create_new(dir_b.path().join("file2.txt")).unwrap();
+    let mut f = File::create_new(dir_b_path.join("file2.txt")).unwrap();
     write!(f, "This is a pre-existing file2.txt").unwrap();
 
     // create a partially downloaded file, whose transfer
     // should be resumed
-    create_dir_all(dir_b.path().join("subdir1")).unwrap();
-    let mut f = File::create_new(dir_b.path().join("subdir1/file2.txt.part29")).unwrap();
+    create_dir_all(dir_b_path.join("subdir1")).unwrap();
+    let mut f = File::create_new(dir_b_path.join("subdir1/file2.txt.part29")).unwrap();
     write!(f, "This is dir/subdi").unwrap();
 
     // Stream that will receive the files from the loopback address.
@@ -264,7 +279,7 @@ async fn file_transfer() {
     let file_offer: FileOfferMsg = read_from_async(&mut stream_b).await.unwrap();
 
     let response_msg =
-        FileResponseMsg::accept_only_new_and_interrupted(&file_offer, dir_b.path()).unwrap();
+        FileResponseMsg::accept_only_new_and_interrupted(&file_offer, &dir_b_path).unwrap();
 
     assert_eq!(response_msg.get_num_not_rejected(), 3);
     assert_eq!(response_msg.get_num_partially_accepted(), 1);
@@ -275,7 +290,7 @@ async fn file_transfer() {
     receive_files(
         &file_offer,
         &response_msg,
-        dir_b.path(),
+        &dir_b_path,
         tokio::io::BufReader::new(stream_b),
         |_| {},
     )
@@ -285,33 +300,33 @@ async fn file_transfer() {
     // confirm that the offered and accepted
     // files were downloaded
     assert_eq!(
-        fs::read(dir_a.path().join("dir/subdir1/file1")).unwrap(),
-        fs::read(dir_b.path().join("subdir1/file1")).unwrap()
+        fs::read(dir_a_path.join("dir/subdir1/file1")).unwrap(),
+        fs::read(dir_b_path.join("subdir1/file1")).unwrap()
     );
     assert_eq!(
-        fs::read(dir_a.path().join("dir/subdir1/file2.txt")).unwrap(),
-        fs::read(dir_b.path().join("subdir1/file2.txt")).unwrap()
+        fs::read(dir_a_path.join("dir/subdir1/file2.txt")).unwrap(),
+        fs::read(dir_b_path.join("subdir1/file2.txt")).unwrap()
     );
 
     // assert that existing files weren't modified
     assert_eq!(
-        fs::read(dir_b.path().join("file1")).unwrap(),
+        fs::read(dir_b_path.join("file1")).unwrap(),
         b"This is a pre-existing file1"
     );
     assert_eq!(
-        fs::read(dir_b.path().join("file1 (1)")).unwrap(),
+        fs::read(dir_b_path.join("file1 (1)")).unwrap(),
         b"This is file1"
     );
     assert_eq!(
-        fs::read(dir_b.path().join("file2.txt")).unwrap(),
+        fs::read(dir_b_path.join("file2.txt")).unwrap(),
         b"This is a pre-existing file2.txt"
     );
 
     // confirm that files rejected or not offered
     // weren't downloaded
-    assert!(fs::read(dir_b.path().join("dir/file1")).is_err());
-    assert!(fs::read(dir_b.path().join("dir/file1 (2)")).is_err());
-    assert!(fs::read(dir_b.path().join("dir/file2.txt")).is_err());
-    assert!(fs::read(dir_b.path().join("dir/subdir2/file1")).is_err());
-    assert!(fs::read(dir_b.path().join("dir/subdir2/file2.txt")).is_err());
+    assert!(fs::read(dir_b_path.join("dir/file1")).is_err());
+    assert!(fs::read(dir_b_path.join("dir/file1 (2)")).is_err());
+    assert!(fs::read(dir_b_path.join("dir/file2.txt")).is_err());
+    assert!(fs::read(dir_b_path.join("dir/subdir2/file1")).is_err());
+    assert!(fs::read(dir_b_path.join("dir/subdir2/file2.txt")).is_err());
 }
