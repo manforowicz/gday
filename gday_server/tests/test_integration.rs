@@ -228,10 +228,10 @@ async fn test_request_limit() {
             },
             &mut stream_v4,
         );
-        assert!(matches!(
-            result,
-            Err(gday_contact_exchange_protocol::Error::IO(_))
-        ));
+        assert!(
+            matches!(result, Err(gday_contact_exchange_protocol::Error::IO(_))),
+            "Expected Error::IO, got {result:?}."
+        );
 
         // ensure other connections are unaffected
         write_to(
