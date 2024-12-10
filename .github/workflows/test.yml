@@ -5,7 +5,7 @@ name: Cargo Build & Test
 
 on:
   push:
-  pull_request:
+  # pull_request:
 
 env: 
   CARGO_TERM_COLOR: always
@@ -13,12 +13,16 @@ env:
 jobs:
   build_and_test:
     name: Rust Build & Test
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+          - macos-latest
         toolchain:
           - stable
-          # - beta
+          - beta
           - nightly
     steps:
       - uses: actions/checkout@v3
