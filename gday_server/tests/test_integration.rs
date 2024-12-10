@@ -1,6 +1,8 @@
 #![forbid(unsafe_code)]
 #![warn(clippy::all)]
 
+use std::io::Read;
+
 use gday_contact_exchange_protocol::{read_from, write_to, ClientMsg, Contact, ServerMsg};
 
 #[tokio::test]
@@ -222,16 +224,7 @@ async fn test_request_limit() {
         assert_eq!(response, ServerMsg::ErrorTooManyRequests);
 
         // ensure the server closed the connection
-        let result = write_to(
-            ClientMsg::CreateRoom {
-                room_code: [100; 32],
-            },
-            &mut stream_v4,
-        );
-        assert!(
-            matches!(result, Err(gday_contact_exchange_protocol::Error::IO(_))),
-            "Expected Error::IO, got {result:?}."
-        );
+        assert_eq!(stream_v4.read(&mut [0, 0]).unwrap(), 0);
 
         // ensure other connections are unaffected
         write_to(
