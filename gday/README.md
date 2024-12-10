@@ -120,10 +120,19 @@ Options:
         <td>✅</td>
         <td>✅</td>
     </tr>
-        <tr>
+    <tr>
         <td><a href="https://github.com/psantosl/p2pcopy">p2pcopy</a></td>
         <td>✅</td>
         <td>✅</td>
+        <td>❌</td>
+        <td>✅</td>
+        <td>❌</td>
+        <td>❌</td>
+    </tr>
+    <tr>
+        <td><a href="https://github.com/CramBL/quick-file-transfer">qft</a></td>
+        <td>✅</td>
+        <td>❌</td>
         <td>❌</td>
         <td>✅</td>
         <td>❌</td>
@@ -204,6 +213,32 @@ Options:
 </table>
 
 Open an [issue](https://github.com/manforowicz/gday/issues) to add more projects to this list.
+
+## Technical Overview
+
+1. **Peer A** randomly generates a _"room code"_ and a _"shared secret"_.
+
+2. **Peer A** randomly selects a **gday server** ID and connects to it over TLS.
+
+3. **Peer A** sends its _room code_ and its local IP address and port number to the **gday server**.
+
+4. **Peer A** combines the server's ID, _room code_, and _shared secret_ into a code of form `"1.n5xn8.wvqsf"`.
+
+5. **Peer A** tells this code to **Peer B**, possibly via phone call or text message.
+
+6. **Peer B** also sends this _room code_ and its local IP address and port number to the **gday server**.
+
+7. The **gday server** sends both peers the public and local IP addresses and ports of the other peer.
+
+8. From the same local port that they used to connect to the server, each peer tries a few times to connect over TCP to both the local and public socket addresses of the other peer.
+
+9. Once any of the connection attempts succeeds, they use password-authenticated key exchange to derive a strong shared key from their _shared secret_, and use it to encrypt their TCP connection with chacha20poly1305.
+
+10. **Peer A** sends **Peer B** a list of offered files and their sizes.
+
+11. **Peer B** checks for files left over from any previous interrupted downloads, and replies with the file portions it would like to receive.
+
+12. **Peer A** sends all the accepted files to **Peer B**, back-to-back.
 
 ## Related
 - [gday](https://crates.io/crates/gday) - Command line tool for sending files.
