@@ -27,10 +27,10 @@ pub async fn handle_connection(
             }
         };
         let _ = handle_requests(&mut tls_stream, state, origin).await;
+        // Graceful TLS termination
         let _ = tls_stream.shutdown().await;
     } else {
         let _ = handle_requests(&mut tcp_stream, state, origin).await;
-        let _ = tcp_stream.shutdown().await;
     }
 }
 
