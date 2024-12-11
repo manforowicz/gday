@@ -1,0 +1,45 @@
+# GitHub workflow which runs on pushes.
+# Does multiple checks with nightly Rust on Linux.
+
+name: All Checks
+
+on:
+  push:
+
+env: 
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build_and_test:
+    name: All Checks
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        toolchain:
+          - nightly
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Update rustup
+        run: rustup update
+
+      - name: Build
+        run: cargo build --verbose
+
+      - name: Test
+        run: cargo test --verbose
+
+      - name: Clippy
+        run: cargo clippy --verbose
+
+      - name: Check documentation 
+        run: cargo doc --no-deps --verbose
+
+      - name: Check formatting
+        run: cargo fmt --check --verbose
+      
+      - name: Install cargo audit
+        run: cargo install --locked cargo-audit
+
+      - name: Audit dependencies
+        run: cargo audit

@@ -1,29 +1,26 @@
-# GitHub workflow which automatically
-# tests code on pushes and pull requests.
+# GitHub workflow which runs on pushes.
+# Does a build and test with stable Rust on 3 different platforms.
 
-name: Cargo Build & Test
+name: Stable Build & Test
 
 on:
   push:
-  # pull_request:
 
 env: 
   CARGO_TERM_COLOR: always
 
 jobs:
   build_and_test:
-    name: Rust Build & Test
+    name: Stable Build & Test
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os:
-         # - ubuntu-latest
-         # - windows-latest
+          - ubuntu-latest
+          - windows-latest
           - macos-latest
         toolchain:
           - stable
-         # - beta
-         # - nightly
     steps:
       - uses: actions/checkout@v3
 
@@ -35,18 +32,3 @@ jobs:
 
       - name: Test
         run: cargo test --verbose
-
-      - name: Clippy
-        run: cargo clippy --verbose
-
-      - name: Check documentation 
-        run: cargo doc --no-deps --verbose
-
-      - name: Check formatting
-        run: cargo fmt --check --verbose
-      
-      - name: Install cargo audit
-        run: cargo install --locked cargo-audit
-
-      - name: Audit dependencies
-        run: cargo audit
