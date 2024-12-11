@@ -22,7 +22,7 @@ async fn test_transfers() {
     let chunk_size = 200_000;
 
     // Listens on the loopback address
-    let listener = tokio::net::TcpListener::bind("[::]:0").await.unwrap();
+    let listener = tokio::net::TcpListener::bind("[::1]:0").await.unwrap();
     let pipe_addr = listener.local_addr().unwrap();
 
     // A thread that will send data to the loopback address
@@ -77,7 +77,7 @@ async fn test_bufread() {
     let chunk_size = 200_000;
 
     // Listens on the loopback address
-    let listener = tokio::net::TcpListener::bind("[::]:0").await.unwrap();
+    let listener = tokio::net::TcpListener::bind("[::1]:0").await.unwrap();
     let pipe_addr = listener.local_addr().unwrap();
 
     // A thread that will send data to the loopback address

@@ -12,7 +12,7 @@ async fn test_integration() {
         key: None,
         certificate: None,
         unencrypted: true,
-        addresses: vec!["0.0.0.0:0".parse().unwrap(), "[::]:0".parse().unwrap()],
+        addresses: vec!["127.0.0.1:0".parse().unwrap(), "[::1]:0".parse().unwrap()],
         timeout: 3600,
         request_limit: 10,
         verbosity: log::LevelFilter::Off,
