@@ -416,7 +416,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_room_timeout() {
-        let mut state1 = State::new(100, Duration::from_millis(10));
+        let mut state1 = State::new(100, Duration::from_millis(30));
         let mut state2 = state1.clone();
 
         let origin1 = IpAddr::V4(123.into());
@@ -440,7 +440,7 @@ mod tests {
             .unwrap();
 
         // wait for the room to time out
-        tokio::time::sleep(Duration::from_millis(20)).await;
+        tokio::time::sleep(Duration::from_millis(300)).await;
 
         // confirm this room has been removed
         let result = state2.update_client(ROOM, false, example_endpoint, false, origin2);

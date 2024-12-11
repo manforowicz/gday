@@ -195,7 +195,7 @@ async fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
             .await
             .map_err(|_| gday_hole_punch::Error::HolePunchTimeout)??;
 
-            // Gracefully close the server connection
+            // Gracefully terminate TLS
             server_connection.shutdown().await?;
 
             let mut stream = EncryptedStream::encrypt_connection(stream, &shared_key).await?;
@@ -264,7 +264,7 @@ async fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
             .await
             .map_err(|_| gday_hole_punch::Error::HolePunchTimeout)??;
 
-            // Gracefully close the server connection
+            // Gracefully terminate TLS
             server_connection.shutdown().await?;
 
             let mut stream = EncryptedStream::encrypt_connection(stream, &shared_key).await?;

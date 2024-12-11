@@ -129,7 +129,7 @@ pub struct HelperBufPart<'a> {
     start_i: usize,
 }
 
-impl<'a> aead::Buffer for HelperBufPart<'a> {
+impl aead::Buffer for HelperBufPart<'_> {
     /// Extends the [`HelperBufPart`] with `other`.
     /// - Returns an [`aead::Error`] if there's not enough capacity.
     fn extend_from_slice(&mut self, other: &[u8]) -> aead::Result<()> {
@@ -153,7 +153,7 @@ impl<'a> aead::Buffer for HelperBufPart<'a> {
 
 // The 4 following impls let the user treat this
 // struct as a slice with the data-containing portion
-impl<'a> Deref for HelperBufPart<'a> {
+impl Deref for HelperBufPart<'_> {
     type Target = [u8];
 
     fn deref(&self) -> &Self::Target {
@@ -161,19 +161,19 @@ impl<'a> Deref for HelperBufPart<'a> {
     }
 }
 
-impl<'a> DerefMut for HelperBufPart<'a> {
+impl DerefMut for HelperBufPart<'_> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.parent.inner[self.start_i..self.parent.r_cursor]
     }
 }
 
-impl<'a> AsRef<[u8]> for HelperBufPart<'a> {
+impl AsRef<[u8]> for HelperBufPart<'_> {
     fn as_ref(&self) -> &[u8] {
         &self.parent.inner[self.start_i..self.parent.r_cursor]
     }
 }
 
-impl<'a> AsMut<[u8]> for HelperBufPart<'a> {
+impl AsMut<[u8]> for HelperBufPart<'_> {
     fn as_mut(&mut self) -> &mut [u8] {
         &mut self.parent.inner[self.start_i..self.parent.r_cursor]
     }

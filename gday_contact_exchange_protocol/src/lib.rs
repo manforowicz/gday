@@ -282,7 +282,7 @@ impl std::fmt::Display for FullContact {
 
 /// Writes `msg` to `writer` using [`serde_json`], and flushes.
 ///
-/// Prefixes the message with 2 bytes holding the [`PROTOCOL_VERSION`]
+/// Prefixes the message with 1 byte holding the [`PROTOCOL_VERSION`]
 /// and 2 bytes holding the length of the following message (all in big-endian).
 pub fn write_to(msg: impl Serialize, writer: &mut impl Write) -> Result<(), Error> {
     let vec = serde_json::to_vec(&msg)?;
@@ -300,7 +300,7 @@ pub fn write_to(msg: impl Serialize, writer: &mut impl Write) -> Result<(), Erro
 
 /// Asynchronously writes `msg` to `writer` using [`serde_json`], and flushes.
 ///
-/// Prefixes the message with 2 bytes holding the [`PROTOCOL_VERSION`]
+/// Prefixes the message with 1 byte holding the [`PROTOCOL_VERSION`]
 /// and 2 bytes holding the length of the following message (all in big-endian).
 pub async fn write_to_async(
     msg: impl Serialize,

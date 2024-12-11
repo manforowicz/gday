@@ -3,7 +3,7 @@ use gday_contact_exchange_protocol::{read_from_async, write_to_async, ClientMsg,
 use log::{error, info, warn};
 use std::net::SocketAddr;
 use tokio::{
-    io::{AsyncRead, AsyncWrite},
+    io::{AsyncRead, AsyncWrite, AsyncWriteExt},
     net::TcpStream,
 };
 use tokio_rustls::TlsAcceptor;
@@ -27,6 +27,8 @@ pub async fn handle_connection(
             }
         };
         let _ = handle_requests(&mut tls_stream, state, origin).await;
+        // Graceful TLS termination
+        let _ = tls_stream.shutdown().await;
     } else {
         let _ = handle_requests(&mut tcp_stream, state, origin).await;
     }
