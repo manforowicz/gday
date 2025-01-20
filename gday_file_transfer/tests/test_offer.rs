@@ -1,4 +1,4 @@
-use gday_file_transfer::{FileMetaLocal, FileOfferMsg, FileResponseMsg};
+use gday_file_transfer::{FileOfferMsg, FileRequestMsg, LocalFileMetadata};
 use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
@@ -36,35 +36,35 @@ async fn test_file_offer() {
     let sender_path = PathBuf::from("/random/example/");
 
     let offer_files = vec![
-        FileMetaLocal {
+        LocalFileMetadata {
             short_path: PathBuf::from("completely_exists.tar.gz"),
             local_path: sender_path.join("completely_exists.tar.gz"),
-            len: 3,
+            size: 3,
         },
-        FileMetaLocal {
+        LocalFileMetadata {
             short_path: PathBuf::from("wrong_size_exists.tar.gz"),
             local_path: sender_path.join("wrong_size_exists.tar.gz"),
-            len: 2,
+            size: 2,
         },
-        FileMetaLocal {
+        LocalFileMetadata {
             short_path: PathBuf::from("just_partial.tar.gz"),
             local_path: sender_path.join("just_partial.tar.gz"),
-            len: 9,
+            size: 9,
         },
-        FileMetaLocal {
+        LocalFileMetadata {
             short_path: PathBuf::from("partial_wrong_size.tar.gz"),
             local_path: sender_path.join("partial_wrong_size.tar.gz"),
-            len: 10,
+            size: 10,
         },
-        FileMetaLocal {
+        LocalFileMetadata {
             short_path: PathBuf::from("exists_and_has_partial.tar.gz"),
             local_path: sender_path.join("exists_and_has_partial.tar.gz"),
-            len: 4,
+            size: 4,
         },
-        FileMetaLocal {
+        LocalFileMetadata {
             short_path: PathBuf::from("completely_unseen_file.tar.gz"),
             local_path: sender_path.join("completely_unseen_file.tar.gz"),
-            len: 2,
+            size: 2,
         },
     ];
 
@@ -73,9 +73,9 @@ async fn test_file_offer() {
     let offered_size = offer.get_total_offered_size();
     assert_eq!(offered_size, 30);
 
-    let accept_all = FileResponseMsg::accept_all_files(&offer);
+    let accept_all = FileRequestMsg::accept_all_files(&offer);
     assert_eq!(
-        accept_all.response,
+        accept_all.request,
         vec![Some(0), Some(0), Some(0), Some(0), Some(0), Some(0)]
     );
     assert_eq!(accept_all.get_num_fully_accepted(), 6);
@@ -83,9 +83,9 @@ async fn test_file_offer() {
     assert_eq!(accept_all.get_num_not_rejected(), 6);
     assert_eq!(offer.get_transfer_size(&accept_all).unwrap(), 30);
 
-    let reject_all = FileResponseMsg::reject_all_files(&offer);
+    let reject_all = FileRequestMsg::reject_all_files(&offer);
     assert_eq!(
-        reject_all.response,
+        reject_all.request,
         vec![None, None, None, None, None, None,]
     );
     assert_eq!(reject_all.get_num_fully_accepted(), 0);
@@ -93,9 +93,9 @@ async fn test_file_offer() {
     assert_eq!(reject_all.get_num_not_rejected(), 0);
     assert_eq!(offer.get_transfer_size(&reject_all).unwrap(), 0);
 
-    let only_new = FileResponseMsg::accept_only_full_new_files(&offer, dir_path).unwrap();
+    let only_new = FileRequestMsg::accept_only_full_new_files(&offer, dir_path).unwrap();
     assert_eq!(
-        only_new.response,
+        only_new.request,
         vec![None, Some(0), Some(0), Some(0), None, Some(0)]
     );
     assert_eq!(only_new.get_num_fully_accepted(), 4);
@@ -104,9 +104,9 @@ async fn test_file_offer() {
     assert_eq!(offer.get_transfer_size(&only_new).unwrap(), 23);
 
     let only_new_and_interrupted =
-        FileResponseMsg::accept_only_new_and_interrupted(&offer, dir_path).unwrap();
+        FileRequestMsg::accept_only_new_and_interrupted(&offer, dir_path).unwrap();
     assert_eq!(
-        only_new_and_interrupted.response,
+        only_new_and_interrupted.request,
         vec![None, Some(0), Some(4), Some(0), Some(1), Some(0)]
     );
     assert_eq!(only_new_and_interrupted.get_num_fully_accepted(), 3);

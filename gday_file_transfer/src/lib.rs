@@ -52,18 +52,20 @@
 #![forbid(unsafe_code)]
 #![warn(clippy::all)]
 
-mod file_meta;
+mod msg;
 mod offer;
+mod partial_download;
+mod save_path;
 mod transfer;
 
 use std::path::PathBuf;
 use thiserror::Error;
 
-pub use crate::file_meta::{get_file_metas, FileMeta, FileMetaLocal};
-pub use crate::offer::{
-    read_from, read_from_async, write_to, write_to_async, FileOfferMsg, FileResponseMsg,
-};
-pub use crate::transfer::{receive_files, send_files, TransferReport};
+pub use crate::msg::*;
+pub use crate::offer::*;
+pub use crate::partial_download::*;
+pub use crate::save_path::*;
+pub use crate::transfer::*;
 
 /// Version of the protocol.
 /// Different numbers wound indicate
@@ -107,10 +109,13 @@ pub enum Error {
     #[error("Requested start index greater than offered file length.")]
     InvalidStartIndex,
 
-    /// The number of elements in [`FileResponseMsg`] didn't match
-    /// the number of elements in the [`FileOfferMsg`].
-    #[error("Number of elements in response message, doesn't match number of files offered.")]
-    InvalidResponseLength,
+    /// Peer requested more files than were listed in the offer.
+    #[error("Peer requested more files than were listed in the offer.")]
+    TooManyFilesRequested,
+
+    /// Peer requested a filename which wasn't in the offer.
+    #[error("Peer requested a filename which wasn't in the offer.")]
+    UnknownFileRequested,
 
     /// One path is a prefix of another. Local paths to send can't be nested within each other!
     #[error(
@@ -134,4 +139,8 @@ pub enum Error {
         Check if this software is up-to-date."
     )]
     IncompatibleProtocol,
+
+    /// Offered path contained illegal component such as .. or root /.
+    #[error("Offered path {0} contained illegal component such as .. or root /.")]
+    IllegalOfferedPath(PathBuf),
 }

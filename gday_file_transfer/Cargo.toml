@@ -23,4 +23,4 @@ tokio = { version = "1.43.0", features = ["io-util"] }
 
 [dev-dependencies]
 tempfile = "3.15.0"
-tokio = { version = "1.43.0", features = ["macros"] }
+tokio = { version = "1.43.0", features = ["macros", "rt"] }

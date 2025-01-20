@@ -1,4 +1,4 @@
-use gday_file_transfer::FileMeta;
+use gday_file_transfer::FileMetadata;
 use std::io::Write;
 use std::{fs::File, path::PathBuf};
 
@@ -19,9 +19,9 @@ async fn test_file_meta_1() {
     let mut f = File::create_new(dir_path.join("fol der/file.tar.gz.part5")).unwrap();
     write!(f, "--").unwrap();
 
-    let file_meta = FileMeta {
+    let file_meta = FileMetadata {
         short_path: PathBuf::from("fol der/file.tar.gz"),
-        len: 5,
+        size: 5,
     };
 
     // save path is the save directory joined with the short path
@@ -69,9 +69,9 @@ async fn test_file_meta_2() {
     let mut f = File::create_new(dir_path.join("fol der/file.tar.gz.part7")).unwrap();
     write!(f, "--").unwrap();
 
-    let file_meta = FileMeta {
+    let file_meta = FileMetadata {
         short_path: PathBuf::from("fol der/file.tar.gz"),
-        len: 5,
+        size: 5,
     };
 
     // save path is the save directory joined with the short path
@@ -109,9 +109,9 @@ async fn test_file_meta_empty() {
     let temp_dir = tempfile::tempdir().unwrap();
     let dir_path = temp_dir.path();
 
-    let file_meta = FileMeta {
+    let file_meta = FileMetadata {
         short_path: PathBuf::from("fol der/file.tar.gz"),
-        len: 5,
+        size: 5,
     };
 
     // save path is the save directory joined with the short path

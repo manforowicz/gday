@@ -10,7 +10,7 @@ use anstream::println;
 use anstyle::{AnsiColor, Color, Style};
 use clap::{Parser, Subcommand};
 use gday_encryption::EncryptedStream;
-use gday_file_transfer::{read_from_async, write_to_async, FileOfferMsg, FileResponseMsg};
+use gday_file_transfer::{read_from_async, write_to_async, FileOfferMsg, FileRequestMsg};
 use gday_hole_punch::server_connector::{self, DEFAULT_SERVERS};
 use gday_hole_punch::{share_contacts, PeerCode};
 use log::error;
@@ -163,11 +163,10 @@ async fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
             };
 
             // get metadata about the files to transfer
-            let local_files = gday_file_transfer::get_file_metas(&paths)?;
-            let offer_msg = FileOfferMsg::from(local_files.clone());
+            let local_file_offer = gday_file_transfer::create_file_offer(&paths)?;
 
             // confirm the user wants to send these files
-            if !dialog::confirm_send(&offer_msg)? {
+            if !dialog::confirm_send(&local_file_offer.offer)? {
                 println!("Cancelled.");
                 return Ok(());
             }
@@ -208,12 +207,12 @@ async fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
             info!("Established authenticated encrypted connection with peer.");
 
             // offer these files to the peer
-            write_to_async(offer_msg, &mut stream).await?;
+            write_to_async(&local_file_offer.offer, &mut stream).await?;
 
             println!("File offer sent to mate. Waiting on response.");
 
             // receive response from peer
-            let response: FileResponseMsg = read_from_async(&mut stream).await?;
+            let response: FileRequestMsg = read_from_async(&mut stream).await?;
 
             // Total number of files accepted
             let num_accepted = response.get_num_not_rejected();
@@ -224,7 +223,7 @@ async fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
             println!(
                 "Your mate accepted {}/{} files",
                 num_accepted,
-                local_files.len()
+                local_file_offer.offer.offer.len()
             );
 
             if resumptions != 0 {
@@ -232,7 +231,7 @@ async fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
             }
 
             if num_accepted != 0 {
-                transfer::send_files(local_files, response, &mut stream).await?;
+                transfer::send_files(local_file_offer, response, &mut stream).await?;
             }
         }
 

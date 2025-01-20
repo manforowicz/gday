@@ -1,7 +1,9 @@
 //! Helper functions for asking the user questions through
 //! the command line.
 use crate::{BOLD, GREEN, RED};
-use gday_file_transfer::{FileOfferMsg, FileResponseMsg};
+use gday_file_transfer::{
+    already_exists, detect_interrupted_download, FileOfferMsg, FileRequestMsg,
+};
 use indicatif::HumanBytes;
 use std::{
     io::{BufRead, Write},
@@ -11,19 +13,19 @@ use std::{
 /// Confirms that the user wants to send these `files``.
 ///
 /// If not, returns false.
-pub fn confirm_send(files: &FileOfferMsg) -> std::io::Result<bool> {
+pub fn confirm_send(offer: &FileOfferMsg) -> std::io::Result<bool> {
     // print all the file names and sizes
     println!("{BOLD}Files to send:{BOLD:#}");
-    for file in &files.files {
-        println!("{} ({})", file.short_path.display(), HumanBytes(file.len));
+    for (path, meta) in &offer.offer {
+        println!("{} ({})", path.display(), HumanBytes(meta.size));
     }
     println!();
 
     // print their total size
-    let total_size: u64 = files.get_total_offered_size();
+    let total_size: u64 = offer.get_total_offered_size();
     print!(
         "Would you like to send these {} files ({BOLD}{}{BOLD:#})? (y/n): ",
-        files.files.len(),
+        offer.offer.len(),
         HumanBytes(total_size)
     );
     std::io::stdout().flush()?;
@@ -43,35 +45,40 @@ pub fn confirm_send(files: &FileOfferMsg) -> std::io::Result<bool> {
 pub fn ask_receive(
     offer: &FileOfferMsg,
     save_dir: &Path,
-) -> Result<FileResponseMsg, gday_file_transfer::Error> {
+) -> Result<FileRequestMsg, gday_file_transfer::Error> {
     println!("{BOLD}Your mate wants to send you:{BOLD:#}");
 
+    let mut interrupted_path = None;
+    if let Some((path, start_offset)) = detect_interrupted_download(save_dir, offer) {
+        let meta = &offer.offer[&path];
+        println!(
+            "{} {RED}(Interrupted. {} bytes remaining.){RED:#}",
+            path.display(),
+            HumanBytes(meta.size - start_offset)
+        );
+        interrupted_path = Some(path);
+    }
+
     // Print all the offered files.
-    for file in &offer.files {
+    for (path, meta) in &offer.offer {
+        if Some(path) == interrupted_path.as_ref() {
+            continue;
+        }
         // print file metadata
-        print!("{} ({})", file.short_path.display(), HumanBytes(file.len));
-
-        // an interrupted download exists
-        if let Some(local_len) = file.partial_download_exists(save_dir)? {
-            let remaining_len = file.len - local_len;
-
-            print!(
-                "{RED}CAN RESUME DOWNLOAD. {} REMAINING{RED:#}",
-                HumanBytes(remaining_len)
-            );
+        print!("{} ({})", path.display(), HumanBytes(meta.size));
 
         // file was already downloaded
-        } else if file.already_exists(save_dir)? {
-            print!("{GREEN}ALREADY EXISTS{GREEN:#}");
+        if already_exists(path, meta)? {
+            print!(" {GREEN}ALREADY EXISTS{GREEN:#}");
         }
         println!();
     }
 
     println!();
 
-    let new_files = FileResponseMsg::accept_only_new_and_interrupted(offer, save_dir)?;
-    let all_files = FileResponseMsg::accept_all_files(offer);
-    let no_files = FileResponseMsg::reject_all_files(offer);
+    let new_files = FileRequestMsg::accept_only_new_and_interrupted(offer, save_dir)?;
+    let all_files = FileRequestMsg::accept_all_files(offer);
+    let no_files = FileRequestMsg::reject_all_files();
 
     // If there are no existing/interrupted files,
     // send or quit.
@@ -93,7 +100,7 @@ pub fn ask_receive(
 
     println!(
         "1. Fully download all {} files ({}).",
-        all_files.response.len(),
+        all_files.request.len(),
         HumanBytes(offer.get_transfer_size(&all_files)?)
     );
 
@@ -119,7 +126,7 @@ pub fn ask_receive(
     }
 
     println!("3. Cancel.");
-    print!("{BOLD}Choose an option (1, 2, or 3):{BOLD:#}");
+    print!("{BOLD}Choose an option (1, 2, or 3):{BOLD:#} ");
     std::io::stdout().flush()?;
 
     match get_lowercase_input()?.as_str() {
@@ -128,7 +135,7 @@ pub fn ask_receive(
         // new/interrupted files
         "2" => Ok(new_files),
         // cancel
-        _ => Ok(FileResponseMsg::reject_all_files(offer)),
+        _ => Ok(no_files),
     }
 }
 

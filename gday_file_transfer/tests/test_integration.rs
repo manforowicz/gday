@@ -1,8 +1,8 @@
 #![forbid(unsafe_code)]
 #![warn(clippy::all)]
 use gday_file_transfer::{
-    get_file_metas, read_from_async, receive_files, send_files, write_to_async, FileMetaLocal,
-    FileOfferMsg, FileResponseMsg,
+    create_file_offer, read_from_async, receive_files, send_files, write_to_async, FileOfferMsg,
+    FileRequestMsg, LocalFileMetadata,
 };
 use std::fs::{self, create_dir_all};
 use std::io::Write;
@@ -62,38 +62,38 @@ async fn test_file_metas_errors() {
 
     // trying to get metadata about file that doesn't exist
     assert!(matches!(
-        get_file_metas(&[dir_path.join("dir/non-existent.txt")]),
+        create_file_offer(&[dir_path.join("dir/non-existent.txt")]),
         Err(gday_file_transfer::Error::IO(..))
     ));
 
     // both paths end in the same name.
     // this would cause confusion with FileMetaLocal.short_path
     assert!(matches!(
-        get_file_metas(&[dir_path.join("file1"), dir_path.join("dir/file1")]),
+        create_file_offer(&[dir_path.join("file1"), dir_path.join("dir/file1")]),
         Err(gday_file_transfer::Error::PathsHaveSameName(..))
     ));
 
     // one path is prefix of another. that's an error!
     assert!(matches!(
-        get_file_metas(&[dir_path.to_path_buf(), dir_path.join("dir")]),
+        create_file_offer(&[dir_path.to_path_buf(), dir_path.join("dir")]),
         Err(gday_file_transfer::Error::PathIsPrefix(..))
     ));
 
     // one path is prefix of another. that's an error!
     assert!(matches!(
-        get_file_metas(&[dir_path.join("dir"), dir_path.to_path_buf()]),
+        create_file_offer(&[dir_path.join("dir"), dir_path.to_path_buf()]),
         Err(gday_file_transfer::Error::PathIsPrefix(..))
     ));
 
     // one path is prefix of another. that's an error!
     assert!(matches!(
-        get_file_metas(&[dir_path.join("dir"), dir_path.join("dir/subdir1/file2.txt")]),
+        create_file_offer(&[dir_path.join("dir"), dir_path.join("dir/subdir1/file2.txt")]),
         Err(gday_file_transfer::Error::PathIsPrefix(..))
     ));
 
     // one path is prefix of another. that's an error!
     assert!(matches!(
-        get_file_metas(&[dir_path.join("dir/subdir1/file2.txt"), dir_path.join("dir")]),
+        create_file_offer(&[dir_path.join("dir/subdir1/file2.txt"), dir_path.join("dir")]),
         Err(gday_file_transfer::Error::PathIsPrefix(..))
     ));
 }
@@ -105,52 +105,52 @@ async fn test_get_file_metas_1() {
     let test_dir = make_test_dir();
     let dir_path = test_dir.path().canonicalize().unwrap();
     let dir_name = PathBuf::from(dir_path.file_name().unwrap());
-    let mut result = gday_file_transfer::get_file_metas(&[dir_path.to_path_buf()]).unwrap();
+    let mut result = gday_file_transfer::create_file_offer(&[dir_path.to_path_buf()]).unwrap();
 
     let mut expected = [
-        FileMetaLocal {
+        LocalFileMetadata {
             short_path: dir_name.join("file1"),
             local_path: dir_path.join("file1"),
-            len: dir_path.join("file1").metadata().unwrap().len(),
+            size: dir_path.join("file1").metadata().unwrap().len(),
         },
-        FileMetaLocal {
+        LocalFileMetadata {
             short_path: dir_name.join("file2.txt"),
             local_path: dir_path.join("file2.txt"),
-            len: dir_path.join("file2.txt").metadata().unwrap().len(),
+            size: dir_path.join("file2.txt").metadata().unwrap().len(),
         },
-        FileMetaLocal {
+        LocalFileMetadata {
             short_path: dir_name.join("dir/file1"),
             local_path: dir_path.join("dir/file1"),
-            len: dir_path.join("dir/file1").metadata().unwrap().len(),
+            size: dir_path.join("dir/file1").metadata().unwrap().len(),
         },
-        FileMetaLocal {
+        LocalFileMetadata {
             short_path: dir_name.join("dir/file2.txt"),
             local_path: dir_path.join("dir/file2.txt"),
-            len: dir_path.join("dir/file2.txt").metadata().unwrap().len(),
+            size: dir_path.join("dir/file2.txt").metadata().unwrap().len(),
         },
-        FileMetaLocal {
+        LocalFileMetadata {
             short_path: dir_name.join("dir/subdir1/file1"),
             local_path: dir_path.join("dir/subdir1/file1"),
-            len: dir_path.join("dir/subdir1/file1").metadata().unwrap().len(),
+            size: dir_path.join("dir/subdir1/file1").metadata().unwrap().len(),
         },
-        FileMetaLocal {
+        LocalFileMetadata {
             short_path: dir_name.join("dir/subdir1/file2.txt"),
             local_path: dir_path.join("dir/subdir1/file2.txt"),
-            len: dir_path
+            size: dir_path
                 .join("dir/subdir1/file2.txt")
                 .metadata()
                 .unwrap()
                 .len(),
         },
-        FileMetaLocal {
+        LocalFileMetadata {
             short_path: dir_name.join("dir/subdir2/file1"),
             local_path: dir_path.join("dir/subdir2/file1"),
-            len: dir_path.join("dir/subdir2/file1").metadata().unwrap().len(),
+            size: dir_path.join("dir/subdir2/file1").metadata().unwrap().len(),
         },
-        FileMetaLocal {
+        LocalFileMetadata {
             short_path: dir_name.join("dir/subdir2/file2.tar.gz"),
             local_path: dir_path.join("dir/subdir2/file2.tar.gz"),
-            len: dir_path
+            size: dir_path
                 .join("dir/subdir2/file2.tar.gz")
                 .metadata()
                 .unwrap()
@@ -171,7 +171,7 @@ async fn test_get_file_metas_2() {
     let test_dir = make_test_dir();
     let dir_path = test_dir.path().canonicalize().unwrap();
 
-    let mut result = gday_file_transfer::get_file_metas(&[
+    let mut result = gday_file_transfer::create_file_offer(&[
         dir_path.join("dir/subdir1/"),
         dir_path.join("dir/subdir2/file1"),
         dir_path.join("dir/subdir2/file2.tar.gz"),
@@ -179,29 +179,29 @@ async fn test_get_file_metas_2() {
     .unwrap();
 
     let mut expected = [
-        FileMetaLocal {
+        LocalFileMetadata {
             short_path: PathBuf::from("subdir1/file1"),
             local_path: dir_path.join("dir/subdir1/file1"),
-            len: dir_path.join("dir/subdir1/file1").metadata().unwrap().len(),
+            size: dir_path.join("dir/subdir1/file1").metadata().unwrap().len(),
         },
-        FileMetaLocal {
+        LocalFileMetadata {
             short_path: PathBuf::from("subdir1/file2.txt"),
             local_path: dir_path.join("dir/subdir1/file2.txt"),
-            len: dir_path
+            size: dir_path
                 .join("dir/subdir1/file2.txt")
                 .metadata()
                 .unwrap()
                 .len(),
         },
-        FileMetaLocal {
+        LocalFileMetadata {
             short_path: PathBuf::from("file1"),
             local_path: dir_path.join("dir/subdir2/file1"),
-            len: dir_path.join("dir/subdir2/file1").metadata().unwrap().len(),
+            size: dir_path.join("dir/subdir2/file1").metadata().unwrap().len(),
         },
-        FileMetaLocal {
+        LocalFileMetadata {
             short_path: PathBuf::from("file2.tar.gz"),
             local_path: dir_path.join("dir/subdir2/file2.tar.gz"),
-            len: dir_path
+            size: dir_path
                 .join("dir/subdir2/file2.tar.gz")
                 .metadata()
                 .unwrap()
@@ -237,12 +237,12 @@ async fn file_transfer() {
             dir_a_path.join("file2.txt"),
             dir_a_path.join("dir/subdir1"),
         ];
-        let file_metas = get_file_metas(&paths).unwrap();
+        let file_metas = create_file_offer(&paths).unwrap();
         let file_offer = FileOfferMsg::from(file_metas.clone());
 
         // send offer, and read response
         write_to_async(file_offer, &mut stream_a).await.unwrap();
-        let response: FileResponseMsg = read_from_async(&mut stream_a).await.unwrap();
+        let response: FileRequestMsg = read_from_async(&mut stream_a).await.unwrap();
 
         // send the files
         send_files(&file_metas, &response, &mut stream_a, |_| {})
@@ -279,7 +279,7 @@ async fn file_transfer() {
     let file_offer: FileOfferMsg = read_from_async(&mut stream_b).await.unwrap();
 
     let response_msg =
-        FileResponseMsg::accept_only_new_and_interrupted(&file_offer, &dir_b_path).unwrap();
+        FileRequestMsg::accept_only_new_and_interrupted(&file_offer, &dir_b_path).unwrap();
 
     assert_eq!(response_msg.get_num_not_rejected(), 3);
     assert_eq!(response_msg.get_num_partially_accepted(), 1);
