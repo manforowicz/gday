@@ -6,6 +6,8 @@ mod dialog;
 mod transfer;
 
 use crate::dialog::ask_receive;
+use anstream::println;
+use anstyle::{AnsiColor, Color, Style};
 use clap::{Parser, Subcommand};
 use gday_encryption::EncryptedStream;
 use gday_file_transfer::{read_from_async, write_to_async, FileOfferMsg, FileResponseMsg};
@@ -13,8 +15,11 @@ use gday_hole_punch::server_connector::{self, DEFAULT_SERVERS};
 use gday_hole_punch::{share_contacts, PeerCode};
 use log::error;
 use log::info;
-use owo_colors::OwoColorize;
 use std::path::PathBuf;
+
+const BOLD: Style = Style::new().bold();
+const GREEN: Style = BOLD.fg_color(Some(Color::Ansi(AnsiColor::Green)));
+const RED: Style = BOLD.fg_color(Some(Color::Ansi(AnsiColor::Red)));
 
 /// How long to try hole punching before giving up.
 const HOLE_PUNCH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
@@ -175,8 +180,8 @@ async fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
             info!("Your contact is:\n{my_contact}");
 
             println!(
-                "Tell your mate to run \"gday get {}\"",
-                String::try_from(&peer_code)?.bold()
+                "Tell your mate to run \"gday get {BOLD}{}{BOLD:#}\"",
+                String::try_from(&peer_code)?
             );
 
             // get peer's contact

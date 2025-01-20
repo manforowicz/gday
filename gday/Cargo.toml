@@ -14,12 +14,13 @@ version.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-clap = { version = "4.5.21", features = ["derive"] }
-env_logger = "0.11.5"
+anstream = "0.6.18"
+anstyle = "1.0.10"
+clap = { version = "4.5.26", features = ["derive"] }
+env_logger = "0.11.6"
 gday_encryption = { version = "0.3.0", path = "../gday_encryption" }
 gday_file_transfer = { version = "0.3.0", path = "../gday_file_transfer" }
 gday_hole_punch = { version = "0.3.0", path = "../gday_hole_punch" }
 indicatif = "0.17.9"
-log = "0.4.22"
-owo-colors = "4.1.0"
-tokio = { version = "1.41.1", features = ["rt-multi-thread", "macros"] }
+log = "0.4.25"
+tokio = { version = "1.43.0", features = ["rt-multi-thread", "macros"] }

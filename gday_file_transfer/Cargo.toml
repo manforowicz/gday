@@ -15,12 +15,12 @@ version.workspace = true
 
 [dependencies]
 os_str_bytes = "7.0.0"
-pin-project = "1.1.7"
-serde = { version = "1.0.215", features = ["derive"] }
-serde_json = "1.0.133"
-thiserror = "2.0.3"
-tokio = { version = "1.41.1", features = ["io-util"] }
+pin-project = "1.1.8"
+serde = { version = "1.0.217", features = ["derive"] }
+serde_json = "1.0.137"
+thiserror = "2.0.11"
+tokio = { version = "1.43.0", features = ["io-util"] }
 
 [dev-dependencies]
-tempfile = "3.14.0"
-tokio = { version = "1.41.1", features = ["macros"] }
+tempfile = "3.15.0"
+tokio = { version = "1.43.0", features = ["macros"] }

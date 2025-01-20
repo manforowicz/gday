@@ -14,12 +14,12 @@ version.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-clap = { version = "4.5.21", features = ["derive"] }
+clap = { version = "4.5.26", features = ["derive"] }
 socket2 = { version = "0.5.8" }
-tokio = { version = "1.41.1", features = ["rt-multi-thread", "macros", "net", "time", "sync"] }
-tokio-rustls = { version = "0.26.0" }
+tokio = { version = "1.43.0", features = ["rt-multi-thread", "macros", "net", "time", "sync"] }
+tokio-rustls = { version = "0.26.1" }
 gday_contact_exchange_protocol = { version = "0.3.0", path = "../gday_contact_exchange_protocol" }
-thiserror = "2.0.3"
-log = "0.4.22"
-env_logger = "0.11.5"
+thiserror = "2.0.11"
+log = "0.4.25"
+env_logger = "0.11.6"
 rustls-pemfile = "2.2.0"

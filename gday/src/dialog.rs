@@ -1,8 +1,8 @@
 //! Helper functions for asking the user questions through
 //! the command line.
+use crate::{BOLD, GREEN, RED};
 use gday_file_transfer::{FileOfferMsg, FileResponseMsg};
 use indicatif::HumanBytes;
-use owo_colors::OwoColorize;
 use std::{
     io::{BufRead, Write},
     path::Path,
@@ -13,7 +13,7 @@ use std::{
 /// If not, returns false.
 pub fn confirm_send(files: &FileOfferMsg) -> std::io::Result<bool> {
     // print all the file names and sizes
-    println!("{}", "Files to send:".bold());
+    println!("{BOLD}Files to send:{BOLD:#}");
     for file in &files.files {
         println!("{} ({})", file.short_path.display(), HumanBytes(file.len));
     }
@@ -22,9 +22,9 @@ pub fn confirm_send(files: &FileOfferMsg) -> std::io::Result<bool> {
     // print their total size
     let total_size: u64 = files.get_total_offered_size();
     print!(
-        "Would you like to send these {} files ({})? (y/n): ",
+        "Would you like to send these {} files ({BOLD}{}{BOLD:#})? (y/n): ",
         files.files.len(),
-        HumanBytes(total_size).bold()
+        HumanBytes(total_size)
     );
     std::io::stdout().flush()?;
     let input = get_lowercase_input()?;
@@ -44,7 +44,7 @@ pub fn ask_receive(
     offer: &FileOfferMsg,
     save_dir: &Path,
 ) -> Result<FileResponseMsg, gday_file_transfer::Error> {
-    println!("{}", "Your mate wants to send you:".bold());
+    println!("{BOLD}Your mate wants to send you:{BOLD:#}");
 
     // Print all the offered files.
     for file in &offer.files {
@@ -56,15 +56,13 @@ pub fn ask_receive(
             let remaining_len = file.len - local_len;
 
             print!(
-                " {} {} {}",
-                "CAN RESUME DOWNLOAD.".red().bold(),
-                HumanBytes(remaining_len).red().bold(),
-                "REMAINING".red().bold()
+                "{RED}CAN RESUME DOWNLOAD. {} REMAINING{RED:#}",
+                HumanBytes(remaining_len)
             );
 
         // file was already downloaded
         } else if file.already_exists(save_dir)? {
-            print!(" {}", "ALREADY EXISTS".green().bold());
+            print!("{GREEN}ALREADY EXISTS{GREEN:#}");
         }
         println!();
     }
@@ -79,9 +77,9 @@ pub fn ask_receive(
     // send or quit.
     if new_files == all_files {
         print!(
-            "Download all {} files ({})? (y/n): ",
+            "Download all {} files ({})? {BOLD}(y/n){BOLD:#}: ",
             all_files.get_num_fully_accepted(),
-            HumanBytes(offer.get_transfer_size(&all_files)?).bold()
+            HumanBytes(offer.get_transfer_size(&all_files)?)
         );
         std::io::stdout().flush()?;
         let input = get_lowercase_input()?;
@@ -96,32 +94,32 @@ pub fn ask_receive(
     println!(
         "1. Fully download all {} files ({}).",
         all_files.response.len(),
-        HumanBytes(offer.get_transfer_size(&all_files)?).bold()
+        HumanBytes(offer.get_transfer_size(&all_files)?)
     );
 
     if new_files.get_num_partially_accepted() == 0 {
         println!(
             "2. Only download the {} new files ({}).",
             new_files.get_num_fully_accepted(),
-            HumanBytes(offer.get_transfer_size(&new_files)?).bold()
+            HumanBytes(offer.get_transfer_size(&new_files)?)
         );
     } else if new_files.get_num_fully_accepted() == 0 {
         println!(
             "2. Only resume the {} interrupted downloads ({}).",
             new_files.get_num_partially_accepted(),
-            HumanBytes(offer.get_transfer_size(&new_files)?).bold()
+            HumanBytes(offer.get_transfer_size(&new_files)?)
         );
     } else {
         println!(
             "2. Only download the {} new files, and resume {} interrupted downloads ({}).",
             new_files.get_num_fully_accepted(),
             new_files.get_num_partially_accepted(),
-            HumanBytes(offer.get_transfer_size(&new_files)?).bold()
+            HumanBytes(offer.get_transfer_size(&new_files)?)
         );
     }
 
     println!("3. Cancel.");
-    print!("{} ", "Choose an option (1, 2, or 3):".bold());
+    print!("{BOLD}Choose an option (1, 2, or 3):{BOLD:#}");
     std::io::stdout().flush()?;
 
     match get_lowercase_input()?.as_str() {
