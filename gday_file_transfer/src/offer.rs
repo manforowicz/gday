@@ -10,6 +10,7 @@ use std::{
 /// store its [`FileOfferMsg`] and
 /// a mapping from the shortened offered paths
 /// to the local on-disk file paths.
+#[derive(PartialEq, Eq, Debug)]
 pub struct LocalFileOffer {
     /// Offer that the sending peer will send.
     pub offer: FileOfferMsg,

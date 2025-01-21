@@ -3,7 +3,7 @@ use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWrite
 use crate::partial_download::TmpInfoFile;
 use crate::{
     delete_tmp_info_file, get_download_path, get_unoccupied_version, write_tmp_info_file, Error,
-    FileOfferMsg, FileRequestMsg, LocalFileOffer, TMP_DOWNLOAD_FILE,
+    FileOfferMsg, FileRequestsMsg, LocalFileOffer, TMP_DOWNLOAD_FILE,
 };
 use std::io::{ErrorKind, Seek, SeekFrom};
 use std::path::Path;
@@ -31,7 +31,7 @@ pub struct TransferReport {
 /// Transfers the accepted files in order, sequentially, back-to-back.
 pub async fn send_files(
     offer: &LocalFileOffer,
-    request: &FileRequestMsg,
+    request: &FileRequestsMsg,
     writer: impl AsyncWrite,
     progress_callback: impl FnMut(&TransferReport),
 ) -> Result<(), Error> {
@@ -90,7 +90,7 @@ pub async fn send_files(
 /// The accepted files must be sent in order, sequentially, back-to-back.
 pub async fn receive_files(
     offer: &FileOfferMsg,
-    request: &FileRequestMsg,
+    request: &FileRequestsMsg,
     save_path: &Path,
     reader: impl AsyncBufRead,
     progress_callback: impl FnMut(&TransferReport),

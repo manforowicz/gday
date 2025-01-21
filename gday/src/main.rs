@@ -10,7 +10,7 @@ use anstream::println;
 use anstyle::{AnsiColor, Color, Style};
 use clap::{Parser, Subcommand};
 use gday_encryption::EncryptedStream;
-use gday_file_transfer::{read_from_async, write_to_async, FileOfferMsg, FileRequestMsg};
+use gday_file_transfer::{read_from_async, write_to_async, FileOfferMsg, FileRequestsMsg};
 use gday_hole_punch::server_connector::{self, DEFAULT_SERVERS};
 use gday_hole_punch::{share_contacts, PeerCode};
 use log::error;
@@ -212,7 +212,7 @@ async fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
             println!("File offer sent to mate. Waiting on response.");
 
             // receive response from peer
-            let response: FileRequestMsg = read_from_async(&mut stream).await?;
+            let response: FileRequestsMsg = read_from_async(&mut stream).await?;
 
             // Total number of files accepted
             let num_accepted = response.get_num_not_rejected();

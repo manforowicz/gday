@@ -7,44 +7,36 @@ use std::{
 
 /// Joins `save_dir` and `offered_path`.
 ///
-/// Returns an error if `short_path` contains
+/// Returns an error if `offered_filepath` contains
 /// invalid components such as .. or the root /.
-pub fn get_download_path(download_dir: &Path, offered_path: &Path) -> Result<PathBuf, Error> {
-    if !offered_path
+pub fn get_download_path(download_dir: &Path, offered_filepath: &Path) -> Result<PathBuf, Error> {
+    if !offered_filepath
         .components()
         .all(|c| matches!(c, Component::CurDir) || matches!(c, Component::Normal(_)))
     {
-        return Err(Error::IllegalOfferedPath(offered_path.to_path_buf()));
+        return Err(Error::IllegalOfferedPath(offered_filepath.to_path_buf()));
     }
 
-    Ok(download_dir.join(offered_path))
+    Ok(download_dir.join(offered_filepath))
 }
 
-/// Returns a version of [`Self::get_save_path()`]
-/// that isn't taken yet.
+/// Returns a version of `path` that isn't occupied.
 ///
-/// If [`self.get_save_path(save_dir)`](Self::get_save_path)
-/// is taken, suffixes its file stem with
+/// If `path` is occupied suffixes its file stem with
 /// `" (1)"`, `" (2)"`, ..., `" (99)"` until a free path is found.
 ///
-/// If all of these (up to `" (99)"`) are occupied,
+/// If all of these up to `" (99)"` are occupied,
 /// returns [`Error::FilenameOccupied`].
 pub fn get_unoccupied_version(path: &Path) -> Result<PathBuf, Error> {
     let number = get_first_unoccupied_number(path)?;
     Ok(suffix_path(path, number))
 }
 
-/// Returns the occupied save path
+/// Returns the occupied `path`
 /// with the greatest numerical suffix.
 ///
-/// Iff [`Self::get_save_path()`]
-/// isn't occupied, returns `None`.
-///
-/// The numerical suffix of the returned path
-/// will be one less than that of
-/// [`Self::get_unoccupied_save_path()`] (or no suffix
-/// if [`Self::get_unoccupied_save_path()`] has suffix of 1).
-pub fn get_last_occupied_save_path(path: &Path) -> Result<Option<PathBuf>, Error> {
+/// Iff `path` isn't occupied, returns `None`.
+pub fn get_last_occupied_version(path: &Path) -> Result<Option<PathBuf>, Error> {
     let number = get_first_unoccupied_number(path)?;
 
     if number == 0 {
@@ -55,10 +47,10 @@ pub fn get_last_occupied_save_path(path: &Path) -> Result<Option<PathBuf>, Error
 }
 
 /// Returns `true` iff a file is already saved at
-/// `get_last_occupied_save_path(path)`
+/// `get_last_occupied_version(path)`
 /// with the same length as in `metadata`.
 pub fn already_exists(path: &Path, metadata: &FileMetadata) -> Result<bool, Error> {
-    let Some(occupied) = get_last_occupied_save_path(path)? else {
+    let Some(occupied) = get_last_occupied_version(path)? else {
         return Ok(false);
     };
 
@@ -80,7 +72,7 @@ pub fn already_exists(path: &Path, metadata: &FileMetadata) -> Result<bool, Erro
 /// If the path isn't taken, returns `0`.
 ///
 /// Otherwise, returns the smallest number, starting at 1, that
-/// when suffixed to `path` (using [`suffix_with_number()`]),
+/// when suffixed to `path` using [`suffix_path()`],
 /// gives an unoccupied path.
 fn get_first_unoccupied_number(path: &Path) -> Result<u32, Error> {
     // if the file doesn't exist
@@ -106,7 +98,7 @@ fn suffix_path(path: &Path, number: u32) -> PathBuf {
         return path.to_path_buf();
     }
 
-    let mut new_path = PathBuf::new();
+    let mut new_path = path.to_path_buf();
 
     // isolate the file name
     let filename = path.file_name().expect("Path terminates in ..");

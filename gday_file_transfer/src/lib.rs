@@ -9,15 +9,7 @@
 //!
 //! Peer A and peer B are on different computers in this example.
 //! ```no_run
-//! # use gday_file_transfer::{
-//! #   get_file_metas,
-//! #   FileOfferMsg,
-//! #   FileResponseMsg,
-//! #   write_to_async,
-//! #   read_from_async,
-//! #   send_files,
-//! #   receive_files,
-//! # };
+//! # use gday_file_transfer::*;
 //! # use std::path::Path;
 //! #
 //! # let rt = tokio::runtime::Builder::new_current_thread().build().unwrap();
@@ -27,25 +19,24 @@
 //! # let mut stream2 = tokio::io::BufReader::new(stream2);
 //! // Peer A offers files and folders they'd like to send
 //! let paths_to_send = ["folder/to/send/".into(), "a/file.txt".into()];
-//! let files_to_send = get_file_metas(&paths_to_send)?;
-//! let offer_msg = FileOfferMsg::from(files_to_send.clone());
-//! write_to_async(offer_msg, &mut stream1).await?;
+//! let offer = create_file_offer(&paths_to_send)?;
+//! write_to_async(&offer.offer, &mut stream1).await?;
 //!
 //! // Peer B responds to the offer
 //! let offer_msg: FileOfferMsg = read_from_async(&mut stream2).await?;
-//! let response_msg = FileResponseMsg::accept_only_new_and_interrupted(
+//! let requests_msg = FileRequestsMsg::accept_only_new_and_interrupted(
 //!     &offer_msg,
 //!     Path::new("save/the/files/here/"),
 //! )?;
-//! write_to_async(response_msg, &mut stream2).await?;
+//! write_to_async(requests_msg, &mut stream2).await?;
 //!
 //! // Peer A sends the accepted files
-//! let response_msg: FileResponseMsg = read_from_async(&mut stream1).await?;
-//! send_files(&files_to_send, &response_msg, &mut stream1, |progress| {}).await?;
+//! let requests_msg: FileRequestsMsg = read_from_async(&mut stream1).await?;
+//! send_files(&offer, &requests_msg, &mut stream1, |progress| {}).await?;
 //!
 //! // Peer B receives the accepted files
 //! let save_path = Path::new("save/the/files/here/");
-//! receive_files(&offer_msg, &response_msg, save_path, &mut stream2, |progress| {}).await?;
+//! receive_files(&offer_msg, &requests_msg, save_path, &mut stream2, |progress| {}).await?;
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! # }).unwrap();
 //! ```

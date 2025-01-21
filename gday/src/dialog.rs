@@ -2,7 +2,7 @@
 //! the command line.
 use crate::{BOLD, GREEN, RED};
 use gday_file_transfer::{
-    already_exists, detect_interrupted_download, FileOfferMsg, FileRequestMsg,
+    already_exists, detect_interrupted_download, FileOfferMsg, FileRequestsMsg,
 };
 use indicatif::HumanBytes;
 use std::{
@@ -45,7 +45,7 @@ pub fn confirm_send(offer: &FileOfferMsg) -> std::io::Result<bool> {
 pub fn ask_receive(
     offer: &FileOfferMsg,
     save_dir: &Path,
-) -> Result<FileRequestMsg, gday_file_transfer::Error> {
+) -> Result<FileRequestsMsg, gday_file_transfer::Error> {
     println!("{BOLD}Your mate wants to send you:{BOLD:#}");
 
     let mut interrupted_path = None;
@@ -76,9 +76,9 @@ pub fn ask_receive(
 
     println!();
 
-    let new_files = FileRequestMsg::accept_only_new_and_interrupted(offer, save_dir)?;
-    let all_files = FileRequestMsg::accept_all_files(offer);
-    let no_files = FileRequestMsg::reject_all_files();
+    let new_files = FileRequestsMsg::accept_only_new_and_interrupted(offer, save_dir)?;
+    let all_files = FileRequestsMsg::accept_all_files(offer);
+    let no_files = FileRequestsMsg::reject_all_files();
 
     // If there are no existing/interrupted files,
     // send or quit.

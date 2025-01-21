@@ -23,23 +23,30 @@ pub struct FileMetadata {
 /// and the receiver replies with [`FileRequestMsg`].
 ///
 /// Contains a map from offered filenames to metadata about them.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct FileOfferMsg {
     pub offer: HashMap<PathBuf, FileMetadata>,
 }
 
 impl FileOfferMsg {
+    /// Returns a [`Vec`] of tuples, with each individual request in
+    /// `requests` matched with the corresponding [`FileMetadata`]
+    /// in [`self`].
+    ///
+    /// Returns an error if there are more `requests` than offered files,
+    /// if an un-offered filepath is requested, or if a start index
+    /// larger than the offered file is requested.
     pub fn lookup_request<'a>(
         &'a self,
-        request: &'a FileRequestMsg,
+        requests: &'a FileRequestsMsg,
     ) -> Result<Vec<(&'a SingleFileRequest, &'a FileMetadata)>, Error> {
-        if request.request.len() > self.offer.len() {
+        if requests.request.len() > self.offer.len() {
             return Err(Error::TooManyFilesRequested);
         }
 
         let mut transfer_files = Vec::new();
 
-        for single_request in &request.request {
+        for single_request in &requests.request {
             let metadata = self
                 .offer
                 .get(&single_request.path)
@@ -62,7 +69,7 @@ impl FileOfferMsg {
 
     /// Returns the number of bytes that would be transferred for this
     /// [`FileOfferMsg`] and corresponding [`FileRequestMsg`].
-    pub fn get_transfer_size(&self, request: &FileRequestMsg) -> Result<u64, Error> {
+    pub fn get_transfer_size(&self, request: &FileRequestsMsg) -> Result<u64, Error> {
         let pairs = self.lookup_request(request)?;
         Ok(pairs
             .iter()
@@ -75,7 +82,7 @@ impl FileOfferMsg {
 ///
 /// A [`Vec`] of [`SingleFileRequest`].
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-pub struct FileRequestMsg {
+pub struct FileRequestsMsg {
     pub request: Vec<SingleFileRequest>,
 }
 
@@ -90,7 +97,7 @@ pub struct SingleFileRequest {
     pub start_offset: u64,
 }
 
-impl FileRequestMsg {
+impl FileRequestsMsg {
     /// Returns a [`FileRequestMsg`] that would
     /// accept all the offered files.
     pub fn accept_all_files(offer: &FileOfferMsg) -> Self {
