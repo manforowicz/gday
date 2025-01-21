@@ -5,7 +5,6 @@
 mod dialog;
 mod transfer;
 
-use crate::dialog::ask_receive;
 use anstream::println;
 use anstyle::{AnsiColor, Color, Style};
 use clap::{Parser, Subcommand};
@@ -13,8 +12,7 @@ use gday_encryption::EncryptedStream;
 use gday_file_transfer::{read_from_async, write_to_async, FileOfferMsg, FileRequestsMsg};
 use gday_hole_punch::server_connector::{self, DEFAULT_SERVERS};
 use gday_hole_punch::{share_contacts, PeerCode};
-use log::error;
-use log::info;
+use log::{error, info};
 use std::path::PathBuf;
 
 const BOLD: Style = Style::new().bold();
@@ -278,7 +276,7 @@ async fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
             // receive file offer from peer
             let offer: FileOfferMsg = read_from_async(&mut stream).await?;
 
-            let response = ask_receive(&offer, &path)?;
+            let response = dialog::ask_receive(&offer, &path)?;
 
             // respond to the file offer
             write_to_async(&response, &mut stream).await?;

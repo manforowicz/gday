@@ -20,7 +20,7 @@ pub struct FileMetadata {
 }
 
 /// The sending peer sends this message to offer files,
-/// and the receiver replies with [`FileRequestMsg`].
+/// and the receiver replies with [`FileRequestsMsg`].
 ///
 /// Contains a map from offered filenames to metadata about them.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
@@ -31,7 +31,7 @@ pub struct FileOfferMsg {
 impl FileOfferMsg {
     /// Returns a [`Vec`] of tuples, with each individual request in
     /// `requests` matched with the corresponding [`FileMetadata`]
-    /// in [`self`].
+    /// in this [`FileOfferMsg`].
     ///
     /// Returns an error if there are more `requests` than offered files,
     /// if an un-offered filepath is requested, or if a start index
@@ -68,7 +68,7 @@ impl FileOfferMsg {
     }
 
     /// Returns the number of bytes that would be transferred for this
-    /// [`FileOfferMsg`] and corresponding [`FileRequestMsg`].
+    /// [`FileOfferMsg`] and corresponding [`FileRequestsMsg`].
     pub fn get_transfer_size(&self, request: &FileRequestsMsg) -> Result<u64, Error> {
         let pairs = self.lookup_request(request)?;
         Ok(pairs
@@ -86,7 +86,7 @@ pub struct FileRequestsMsg {
     pub request: Vec<SingleFileRequest>,
 }
 
-/// A part of [`FileRequestMsg`]
+/// A part of [`FileRequestsMsg`]
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct SingleFileRequest {
     /// Path of the requested file.
@@ -98,7 +98,7 @@ pub struct SingleFileRequest {
 }
 
 impl FileRequestsMsg {
-    /// Returns a [`FileRequestMsg`] that would
+    /// Returns a [`FileRequestsMsg`] that would
     /// accept all the offered files.
     pub fn accept_all_files(offer: &FileOfferMsg) -> Self {
         Self {
@@ -113,7 +113,7 @@ impl FileRequestsMsg {
         }
     }
 
-    /// Returns a [`FileRequestMsg`] that would
+    /// Returns a [`FileRequestsMsg`] that would
     /// reject all the offered files.
     pub fn reject_all_files() -> Self {
         Self {
@@ -121,7 +121,7 @@ impl FileRequestsMsg {
         }
     }
 
-    /// Returns a [`FileRequestMsg`] that would
+    /// Returns a [`FileRequestsMsg`] that would
     /// accept only files that are not yet in `save_dir`,
     /// or have a different size.
     ///
@@ -147,7 +147,7 @@ impl FileRequestsMsg {
         Ok(Self { request: response })
     }
 
-    /// Get a [`FileResponseMsg`] that would:
+    /// Get a [`FileRequestsMsg`] that would:
     /// - Accept the remaining portions of files whose
     ///   downloads to `save_dir` have been previously interrupted,
     /// - AND files that are not yet in `save_dir`,

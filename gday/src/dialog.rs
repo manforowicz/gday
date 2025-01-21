@@ -5,10 +5,7 @@ use gday_file_transfer::{
     already_exists, detect_interrupted_download, FileOfferMsg, FileRequestsMsg,
 };
 use indicatif::HumanBytes;
-use std::{
-    io::{BufRead, Write},
-    path::Path,
-};
+use std::{io::Write, path::Path};
 
 /// Confirms that the user wants to send these `files``.
 ///
@@ -141,7 +138,7 @@ pub fn ask_receive(
 
 /// Reads a trimmed ascii-lowercase line of input from the user.
 fn get_lowercase_input() -> std::io::Result<String> {
-    let Some(response) = std::io::BufReader::new(std::io::stdin()).lines().next() else {
+    let Some(response) = std::io::stdin().lines().next() else {
         return Err(std::io::Error::new(
             std::io::ErrorKind::UnexpectedEof,
             "Couldn't read user input.",

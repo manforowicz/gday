@@ -68,7 +68,7 @@ pub const PROTOCOL_VERSION: u8 = 1;
 #[non_exhaustive]
 pub enum Error {
     /// Error serializing or deserializing
-    /// [`FileOfferMsg`] or [`FileResponseMsg`] to JSON.
+    /// [`FileOfferMsg`] or [`FileRequestsMsg`] to JSON.
     #[error("JSON Error: {0}")]
     JSON(#[from] serde_json::Error),
 
@@ -76,14 +76,13 @@ pub enum Error {
     #[error("IO Error: {0}")]
     IO(#[from] std::io::Error),
 
-    /// All 100 suitable locations to save [`FileMeta`] are occupied.
+    /// All 100 suitable locations to save [`FileMetadata`] are occupied.
     ///
-    /// Comes from [`FileMeta::get_unoccupied_save_path()`]
-    /// or [`FileMeta::get_partial_download_path()`].
+    /// Comes from [`get_unoccupied_version()`].
     #[error("100 files with base name '{0}' already exist. Aborting save.")]
     FilenameOccupied(PathBuf),
 
-    /// [`FileOfferMsg`] or [`FileResponseMsg`] was longer than 2^32
+    /// [`FileOfferMsg`] or [`FileRequestsMsg`] was longer than 2^32
     /// bytes when serialized.
     ///
     /// Can't send message longer than 2^32 bytes.
@@ -94,7 +93,7 @@ pub enum Error {
     #[error("A local file changed length between checks.")]
     UnexpectedFileLen,
 
-    /// A requested start byte index in [`FileResponseMsg`]
+    /// A requested start byte index in [`FileRequestsMsg`]
     /// is greater than the length of the corresponding file offered in
     /// [`FileOfferMsg`].
     #[error("Requested start index greater than offered file length.")]
