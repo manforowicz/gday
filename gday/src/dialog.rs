@@ -2,7 +2,7 @@
 //! the command line.
 use crate::{BOLD, GREEN, RED};
 use gday_file_transfer::{
-    already_exists, detect_interrupted_download, FileOfferMsg, FileRequestsMsg,
+    FileOfferMsg, FileRequestsMsg, already_exists, detect_interrupted_download,
 };
 use indicatif::HumanBytes;
 use std::{io::Write, path::Path};

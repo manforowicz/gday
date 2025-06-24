@@ -1,7 +1,8 @@
-//! Runs a server for the [`gday_contact_exchange_protocol`].
-//! Lets two users exchange their public and (optionally) private socket addresses.
 #![forbid(unsafe_code)]
 #![warn(clippy::all)]
+//! Runs a server for the [`gday_contact_exchange_protocol`].
+//! Lets two users exchange their public and (optionally) private socket
+//! addresses.
 
 mod connection_handler;
 mod state;
@@ -20,8 +21,8 @@ use std::{
 };
 use tokio::task::JoinSet;
 use tokio_rustls::{
-    rustls::{self, pki_types::CertificateDer},
     TlsAcceptor,
+    rustls::{self, pki_types::CertificateDer},
 };
 
 #[derive(Parser, Debug)]

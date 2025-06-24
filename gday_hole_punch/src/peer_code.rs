@@ -13,8 +13,10 @@ pub struct PeerCode {
     /// that the peers will connect to.
     /// Use `0` to indicate a custom server.
     ///
-    /// Usually the first peer will get this value from [`crate::server_connector::connect_to_random_server()`]
-    /// and the other peer will pass this value to [`crate::server_connector::connect_to_server_id()`]
+    /// Usually the first peer will get this value from
+    /// [`crate::server_connector::connect_to_random_server()`]
+    /// and the other peer will pass this value to
+    /// [`crate::server_connector::connect_to_server_id()`]
     pub server_id: u64,
 
     /// The room code within the server.
@@ -43,8 +45,8 @@ impl PeerCode {
     pub fn random(server_id: u64, len: usize) -> Self {
         const ALPHABET: &[u8] = b"2345689abcdefghjkmnpqrstvwxyz";
 
-        let mut rng = rand::thread_rng();
-        let range = rand::distributions::Uniform::new(0, ALPHABET.len());
+        let mut rng = rand::rng();
+        let range = rand::distr::Uniform::new(0, ALPHABET.len()).unwrap();
 
         let room_code: String = (0..len)
             .map(|_| ALPHABET[rng.sample(range)] as char)

@@ -1,7 +1,7 @@
 use crate::{
-    already_exists, detect_interrupted_download, get_download_path, Error, PROTOCOL_VERSION,
+    Error, PROTOCOL_VERSION, already_exists, detect_interrupted_download, get_download_path,
 };
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::{
     collections::HashMap,
     io::{Read, Write},
@@ -78,7 +78,8 @@ impl FileOfferMsg {
     }
 }
 
-/// The receiving peer replies with this message after getting a [`FileOfferMsg`].
+/// The receiving peer replies with this message after getting a
+/// [`FileOfferMsg`].
 ///
 /// A [`Vec`] of [`SingleFileRequest`].
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -148,10 +149,9 @@ impl FileRequestsMsg {
     }
 
     /// Get a [`FileRequestsMsg`] that would:
-    /// - Accept the remaining portions of files whose
-    ///   downloads to `save_dir` have been previously interrupted,
-    /// - AND files that are not yet in `save_dir`,
-    ///   or have a different size.
+    /// - Accept the remaining portions of files whose downloads to `save_dir`
+    ///   have been previously interrupted,
+    /// - AND files that are not yet in `save_dir`, or have a different size.
     ///
     /// Rejects all other files.
     pub fn accept_only_new_and_interrupted(

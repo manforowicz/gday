@@ -20,8 +20,9 @@ pub struct TmpInfoFile {
     pub file_metadata: FileMetadata,
 }
 
-/// Checks if [`TMP_DOWNLOAD_FILE`] and [`TMP_INFO_FILE`] in `download_dir` indicate
-/// a file download was interrupted, and `offer` is re-offering that same file.
+/// Checks if [`TMP_DOWNLOAD_FILE`] and [`TMP_INFO_FILE`] in `download_dir`
+/// indicate a file download was interrupted, and `offer` is re-offering that
+/// same file.
 ///
 /// If so, returns the offered path of the interrupted file,
 /// and the number of bytes already downloaded.
@@ -37,7 +38,8 @@ pub fn detect_interrupted_download(
     // Get the corresponding metadata in the offer if it exists
     let offered_file = offer.offer.get(&tmp_info.file_short_path)?;
 
-    // Transfer can't be resumed if offered metadata doesn't match interrupted metadata
+    // Transfer can't be resumed if offered metadata doesn't match interrupted
+    // metadata
     if *offered_file != tmp_info.file_metadata {
         return None;
     }

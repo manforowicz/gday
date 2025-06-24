@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 #![warn(clippy::all)]
 use std::collections::HashMap;
-use std::fs::{create_dir_all, File};
+use std::fs::{File, create_dir_all};
 use std::io::Write;
 use std::path::PathBuf;
 

@@ -1,8 +1,8 @@
 #![forbid(unsafe_code)]
 #![warn(clippy::all)]
 use gday_contact_exchange_protocol::{
-    read_from, read_from_async, write_to, write_to_async, ClientMsg, Contact, Error, FullContact,
-    ServerMsg,
+    ClientMsg, Contact, Error, FullContact, ServerMsg, read_from, read_from_async, write_to,
+    write_to_async,
 };
 use std::io::Write;
 use tokio::io::AsyncWriteExt;
@@ -103,14 +103,14 @@ async fn error_on_incompatible_version_async() {
 fn get_client_msg_examples() -> Vec<ClientMsg> {
     vec![
         ClientMsg::CreateRoom {
-            room_code: *b"fjdsafdssds89fph9ewafhusdp9afhas",
+            room_code: String::from("Hello"),
         },
         ClientMsg::RecordPublicAddr {
-            room_code: *b"fdsjafp89rejfnsdi;ofnsdo;jfsadif",
+            room_code: String::from("2897 fsdaf af897&*####$"),
             is_creator: true,
         },
         ClientMsg::ReadyToShare {
-            room_code: *b"jfdsi9uapfj89erpajf98sdpfajisdaf",
+            room_code: String::from("/457892*(%Q "),
             is_creator: false,
             local_contact: Contact {
                 v4: Some("31.31.65.31:324".parse().unwrap()),

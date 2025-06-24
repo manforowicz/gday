@@ -1,48 +1,56 @@
+#![forbid(unsafe_code)]
+#![warn(clippy::all)]
 //! Protocol for peers to exchange their socket addresses via a server.
 //!
-//! On it's own, this library doesn't do anything other than define a shared protocol.
-//! In most cases, you should use one of the following crates:
+//! On it's own, this library doesn't do anything other than define a shared
+//! protocol. In most cases, you should use one of the following crates:
 //!
-//! - [**gday**](https://crates.io/crates/gday):
-//!     A command line tool for sending files to peers.
-//! - [**gday_hole_punch**](https://docs.rs/gday_hole_punch/):
-//!     A library for establishing a peer-to-peer TCP connection.
-//! - [**gday_server**](https://crates.io/crates/gday_server):
-//!     A server binary that facilitates this protocol.
+//! - [**gday**](https://crates.io/crates/gday): A command line tool for sending
+//!   files to peers.
+//! - [**gday_hole_punch**](https://docs.rs/gday_hole_punch/): A library for
+//!   establishing a peer-to-peer TCP connection.
+//! - [**gday_server**](https://crates.io/crates/gday_server): A server binary
+//!   that facilitates this protocol.
 //!
 //! # Example
 //! First, both peers connect with TLS on both IPv4 and IPv6 (if possible)
 //! to a gday server on [`DEFAULT_PORT`].
 //! Then they exchange contacts like so:
 //! ```no_run
-//! # use gday_contact_exchange_protocol::{
-//! #    ServerMsg,
-//! #    ClientMsg,
-//! #    write_to,
-//! #    read_from,
-//! #    Contact
-//! # };
 //! # let mut tls_ipv4 = std::collections::VecDeque::new();
 //! # let mut tls_ipv6 = std::collections::VecDeque::new();
 //! #
-//! let room_code = *b"32-bytes. May be a password hash";
+//!
+//! use gday_contact_exchange_protocol::{ClientMsg, Contact, ServerMsg, read_from, write_to};
+//! let room_code = String::from("Room code");
 //!
 //! // One client tells the server to create a room.
 //! // The server responds with ServerMsg::RoomCreated or
 //! // an error message.
-//! let request = ClientMsg::CreateRoom { room_code };
+//! let request = ClientMsg::CreateRoom {
+//!     room_code: room_code.clone(),
+//! };
 //! write_to(request, &mut tls_ipv4)?;
-//! let ServerMsg::RoomCreated = read_from(&mut tls_ipv4)? else { panic!() };
+//! let ServerMsg::RoomCreated = read_from(&mut tls_ipv4)? else {
+//!     panic!()
+//! };
 //!
 //! // Both peers sends ClientMsg::RecordPublicAddr
 //! // from their IPv4 and/or IPv6 endpoints.
 //! // The server records the client's public addresses from these connections.
 //! // The server responds with ServerMsg::ReceivedAddr or an error message.
-//! let request = ClientMsg::RecordPublicAddr { room_code, is_creator: true };
-//! write_to(request, &mut tls_ipv4)?;
-//! let ServerMsg::ReceivedAddr = read_from(&mut tls_ipv4)? else { panic!() };
-//! write_to(request, &mut tls_ipv6)?;
-//! let ServerMsg::ReceivedAddr = read_from(&mut tls_ipv6)? else { panic!() };
+//! let request = ClientMsg::RecordPublicAddr {
+//!     room_code: room_code.clone(),
+//!     is_creator: true,
+//! };
+//! write_to(request.clone(), &mut tls_ipv4)?;
+//! let ServerMsg::ReceivedAddr = read_from(&mut tls_ipv4)? else {
+//!     panic!()
+//! };
+//! write_to(request.clone(), &mut tls_ipv6)?;
+//! let ServerMsg::ReceivedAddr = read_from(&mut tls_ipv6)? else {
+//!     panic!()
+//! };
 //!
 //! // Both peers share their local address with the server.
 //! // The server immediately responds with ServerMsg::ClientContact,
@@ -51,14 +59,22 @@
 //!     v4: Some("1.8.3.1:2304".parse()?),
 //!     v6: Some("[ab:41::b:43]:92".parse()?),
 //! };
-//! let request = ClientMsg::ReadyToShare { local_contact, room_code, is_creator: true };
+//! let request = ClientMsg::ReadyToShare {
+//!     local_contact,
+//!     room_code,
+//!     is_creator: true,
+//! };
 //! write_to(request, &mut tls_ipv4)?;
-//! let ServerMsg::ClientContact(my_contact) = read_from(&mut tls_ipv4)? else { panic!() };
+//! let ServerMsg::ClientContact(my_contact) = read_from(&mut tls_ipv4)? else {
+//!     panic!()
+//! };
 //!
 //! // Once both clients have sent ClientMsg::ReadyToShare,
 //! // the server sends both clients a ServerMsg::PeerContact
 //! // containing the FullContact of the peer.
-//! let ServerMsg::PeerContact(peer_contact) = read_from(&mut tls_ipv4)? else { panic!() };
+//! let ServerMsg::PeerContact(peer_contact) = read_from(&mut tls_ipv4)? else {
+//!     panic!()
+//! };
 //!
 //! // The server then closes the room, and the peers disconnect.
 //!
@@ -67,11 +83,8 @@
 //! #
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
-//!
-#![forbid(unsafe_code)]
-#![warn(clippy::all)]
 
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::{
     fmt::Display,
     io::{Read, Write},
@@ -80,7 +93,7 @@ use std::{
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 /// The port that contact exchange servers
-/// using encrypted TLS should listen on.
+/// using TLS should listen on.
 pub const DEFAULT_PORT: u16 = 2311;
 
 /// Version of the protocol.
@@ -89,18 +102,20 @@ pub const DEFAULT_PORT: u16 = 2311;
 pub const PROTOCOL_VERSION: u8 = 1;
 
 /// A message from client to server.
-#[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Clone, Copy)]
-#[non_exhaustive]
+#[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Clone)]
+#[serde(tag = "type")]
 pub enum ClientMsg {
     /// Requests the server to create a new room.
     ///
-    /// The server should automatically delete new rooms after roughly 10 minutes.
+    /// The server should automatically delete new rooms after roughly 10
+    /// minutes.
     ///
     /// More than one room can be created per connection.
     ///
     /// Server responds with [`ServerMsg::RoomCreated`] on success
-    /// or [`ServerMsg::ErrorRoomTaken`] in the unlikely case that this room is taken.
-    CreateRoom { room_code: [u8; 32] },
+    /// or [`ServerMsg::ErrorRoomTaken`] in the unlikely case that this room is
+    /// taken.
+    CreateRoom { room_code: String },
 
     /// Tells the server to record this client's public socket address
     /// from the connection on which this message was sent.
@@ -109,20 +124,20 @@ pub enum ClientMsg {
     /// or an error [`ServerMsg`] on failure.
     RecordPublicAddr {
         /// The room this client is in.
-        room_code: [u8; 32],
+        room_code: String,
         /// Whether this is the client that created this room,
         /// or the other client.
         is_creator: bool,
     },
 
-    /// Tells the server that this client has finished using [`ClientMsg::RecordPublicAddr`]
-    /// to record public addresses.
+    /// Tells the server that this client has finished using
+    /// [`ClientMsg::RecordPublicAddr`] to record public addresses.
     /// The server immediately responds with [`ServerMsg::ClientContact`] which
     /// contains this client's contact info.
     ///
-    /// The server then waits for the other peer to also send [`ClientMsg::ReadyToShare`]
-    /// as well. During this time, no messages should be sent on this
-    /// connection.
+    /// The server then waits for the other peer to also send
+    /// [`ClientMsg::ReadyToShare`] as well. During this time, no messages
+    /// should be sent on this connection.
     ///
     /// Once the other peer also sends [`ClientMsg::ReadyToShare`],
     /// the server sends both peers a [`ServerMsg::PeerContact`]
@@ -132,7 +147,7 @@ pub enum ClientMsg {
         /// The local contact to share.
         local_contact: Contact,
         /// The room this client is in.
-        room_code: [u8; 32],
+        room_code: String,
         /// Whether this is the client that created this room,
         /// or the other client.
         is_creator: bool,
@@ -140,8 +155,8 @@ pub enum ClientMsg {
 }
 
 /// A message from server to client.
-#[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Clone, Copy)]
-#[non_exhaustive]
+#[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Clone)]
+#[serde(tag = "type")]
 pub enum ServerMsg {
     /// Immediately responds to a [`ClientMsg::CreateRoom`] request.
     /// Indicates that a room with the given ID has been successfully created.
@@ -174,8 +189,9 @@ pub enum ServerMsg {
     /// doesn't exist, either because this room timed out, or never existed.
     ErrorNoSuchRoomCode,
 
-    /// The server may respond with this if a client sends [`ClientMsg::RecordPublicAddr`]
-    /// after already sending [`ClientMsg::ReadyToShare`].
+    /// The server may respond with this if a client sends
+    /// [`ClientMsg::RecordPublicAddr`] after already sending
+    /// [`ClientMsg::ReadyToShare`].
     ErrorUnexpectedMsg,
 
     /// Rejects a request if an IP address made too many requests.
@@ -259,8 +275,8 @@ impl std::fmt::Display for Contact {
 
 /// The local and public endpoints of an client.
 ///
-/// [`FullContact::local`] is only different from [`FullContact::public`] when the client is behind
-/// [NAT (network address translation)](https://en.wikipedia.org/wiki/Network_address_translation).
+/// [`FullContact::local`] is only different from [`FullContact::public`] when
+/// the client is behind [NAT (network address translation)](https://en.wikipedia.org/wiki/Network_address_translation).
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Clone, Copy, Default)]
 pub struct FullContact {
     /// The peer's private contact in it's local network.

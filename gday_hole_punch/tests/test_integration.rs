@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 #![warn(clippy::all)]
 
-use gday_hole_punch::{server_connector, share_contacts, try_connect_to_peer, PeerCode};
+use gday_hole_punch::{PeerCode, server_connector, share_contacts, try_connect_to_peer};
 use std::str::FromStr;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
@@ -41,10 +41,13 @@ async fn test_integration() {
             .unwrap();
 
         // Create a room in the server, and get my contact from it
-        let (my_contact, peer_contact_fut) =
-            share_contacts(&mut server_connection, peer_code.room_code.as_bytes(), true)
-                .await
-                .unwrap();
+        let (my_contact, peer_contact_fut) = share_contacts(
+            &mut server_connection,
+            peer_code.room_code.to_string(),
+            true,
+        )
+        .await
+        .unwrap();
 
         // Send PeerCode to peer
         let code_to_share = String::try_from(&peer_code).unwrap();
@@ -83,13 +86,10 @@ async fn test_integration() {
         .unwrap();
 
     // Join the same room in the server, and get my local contact
-    let (my_contact, peer_contact_fut) = share_contacts(
-        &mut server_connection,
-        peer_code.room_code.as_bytes(),
-        false,
-    )
-    .await
-    .unwrap();
+    let (my_contact, peer_contact_fut) =
+        share_contacts(&mut server_connection, peer_code.room_code, false)
+            .await
+            .unwrap();
 
     // Get peer's contact
     let peer_contact = peer_contact_fut.await.unwrap();

@@ -259,8 +259,8 @@ pub async fn connect_to_random_server(
 /// Connects to port [`DEFAULT_PORT`] via TLS.
 /// Gives up after `timeout` time.
 ///
-/// Returns an error if `servers` contains no server with id `server_id` or connecting
-/// to the server fails.
+/// Returns an error if `servers` contains no server with id `server_id` or
+/// connecting to the server fails.
 pub async fn connect_to_server_id(
     servers: &[ServerInfo],
     server_id: u64,
@@ -279,7 +279,8 @@ pub async fn connect_to_server_id(
 ///
 /// Returns
 /// - The [`ServerConnection`] of the first successful connection.
-/// - The index of the address in `addresses` that the [`ServerConnection`] connected to.
+/// - The index of the address in `addresses` that the [`ServerConnection`]
+///   connected to.
 ///
 /// Returns an error only if all connection attempts failed.
 pub async fn connect_to_random_domain_name(
@@ -287,7 +288,7 @@ pub async fn connect_to_random_domain_name(
     timeout: Duration,
 ) -> Result<(ServerConnection, usize), Error> {
     let mut indices: Vec<usize> = (0..domain_names.len()).collect();
-    indices.shuffle(&mut rand::thread_rng());
+    indices.shuffle(&mut rand::rng());
 
     let mut recent_error = Error::CouldntConnectToServers;
 

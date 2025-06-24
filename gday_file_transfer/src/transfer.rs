@@ -2,13 +2,13 @@ use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWrite
 
 use crate::partial_download::TmpInfoFile;
 use crate::{
-    delete_tmp_info_file, get_download_path, get_unoccupied_version, write_tmp_info_file, Error,
-    FileOfferMsg, FileRequestsMsg, LocalFileOffer, TMP_DOWNLOAD_FILE,
+    Error, FileOfferMsg, FileRequestsMsg, LocalFileOffer, TMP_DOWNLOAD_FILE, delete_tmp_info_file,
+    get_download_path, get_unoccupied_version, write_tmp_info_file,
 };
 use std::io::{ErrorKind, Seek, SeekFrom};
 use std::path::Path;
-use std::pin::{pin, Pin};
-use std::task::{ready, Context, Poll};
+use std::pin::{Pin, pin};
+use std::task::{Context, Poll, ready};
 
 /// Holds the status of a file transfer
 #[derive(Debug, Clone)]
@@ -25,8 +25,8 @@ pub struct TransferReport {
 /// - `offer` should contain the [`FileOfferMsg`] you sent to your peer.
 /// - `response` is the [`FileRequestsMsg`] received from your peer.
 /// - `writer` is the the IO stream on which the files will be sent.
-/// - `progress_callback` is a function that gets frequently
-///   called with [`TransferReport`] to report progress.
+/// - `progress_callback` is a function that gets frequently called with
+///   [`TransferReport`] to report progress.
 ///
 /// Transfers the accepted files in order, sequentially, back-to-back.
 pub async fn send_files(
@@ -84,8 +84,8 @@ pub async fn send_files(
 /// - `response` is the [`FileRequestsMsg`] that you've sent in response.
 /// - `save_path` is the directory where the files should be saved.
 /// - `reader` is the IO stream on which the files will be received.
-/// - `progress_callback` is an function that gets frequently
-///   called with [`TransferReport`] to report progress.
+/// - `progress_callback` is an function that gets frequently called with
+///   [`TransferReport`] to report progress.
 ///
 /// The accepted files must be sent in order, sequentially, back-to-back.
 pub async fn receive_files(

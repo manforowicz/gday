@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+#![warn(clippy::all)]
 //! This library lets you offer and transfer files to another peer,
 //! assuming you already have a reliable connection established.
 //!
@@ -36,12 +38,17 @@
 //!
 //! // Peer B receives the accepted files
 //! let save_path = Path::new("save/the/files/here/");
-//! receive_files(&offer_msg, &requests_msg, save_path, &mut stream2, |progress| {}).await?;
+//! receive_files(
+//!     &offer_msg,
+//!     &requests_msg,
+//!     save_path,
+//!     &mut stream2,
+//!     |progress| {},
+//! )
+//! .await?;
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! # }).unwrap();
 //! ```
-#![forbid(unsafe_code)]
-#![warn(clippy::all)]
 
 mod msg;
 mod offer;
@@ -107,7 +114,8 @@ pub enum Error {
     #[error("Peer requested a filename which wasn't in the offer.")]
     UnknownFileRequested,
 
-    /// One path is a prefix of another. Local paths to send can't be nested within each other!
+    /// One path is a prefix of another. Local paths to send can't be nested
+    /// within each other!
     #[error(
         "'{0}' is prefix of '{1}'. \
         Local paths to send can't be duplicated or nested within each other!"

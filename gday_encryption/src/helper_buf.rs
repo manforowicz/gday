@@ -2,9 +2,8 @@ use chacha20poly1305::aead;
 use std::ops::{Deref, DerefMut};
 
 /// Buffer for storing bytes.
-/// - Implemented as a heap-allocated array
-///     with a left and right cursor defining
-///     the in-use portion.
+/// - Implemented as a heap-allocated array with a left and right cursor
+///   defining the in-use portion.
 pub struct HelperBuf {
     inner: Box<[u8]>,
     l_cursor: usize,

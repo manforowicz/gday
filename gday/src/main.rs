@@ -1,6 +1,7 @@
-//! Command line tool to securely send files (without a relay or port forwarding).
 #![forbid(unsafe_code)]
 #![warn(clippy::all)]
+//! Command line tool to securely send files (without a relay or port
+//! forwarding).
 
 mod dialog;
 mod transfer;
@@ -9,9 +10,9 @@ use anstream::println;
 use anstyle::{AnsiColor, Color, Style};
 use clap::{Parser, Subcommand};
 use gday_encryption::EncryptedStream;
-use gday_file_transfer::{read_from_async, write_to_async, FileOfferMsg, FileRequestsMsg};
+use gday_file_transfer::{FileOfferMsg, FileRequestsMsg, read_from_async, write_to_async};
 use gday_hole_punch::server_connector::{self, DEFAULT_SERVERS};
-use gday_hole_punch::{share_contacts, PeerCode};
+use gday_hole_punch::{PeerCode, share_contacts};
 use log::{error, info};
 use std::path::PathBuf;
 
@@ -70,7 +71,8 @@ enum Command {
 
     /// Receive files.
     Get {
-        /// The code your peer gave you (of form "server_id.room_code.shared_secret")
+        /// The code your peer gave you (of form
+        /// "server_id.room_code.shared_secret")
         code: PeerCode,
 
         /// Directory where to save the files.
@@ -171,8 +173,7 @@ async fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
 
             // create a room in the server
             let (my_contact, peer_contact_fut) =
-                share_contacts(&mut server_connection, peer_code.room_code.as_bytes(), true)
-                    .await?;
+                share_contacts(&mut server_connection, peer_code.room_code.clone(), true).await?;
 
             info!("Your contact is:\n{my_contact}");
 
@@ -247,7 +248,7 @@ async fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
             };
 
             let (my_contact, peer_contact_fut) =
-                share_contacts(&mut server_connection, code.room_code.as_bytes(), false).await?;
+                share_contacts(&mut server_connection, code.room_code, false).await?;
 
             info!("Your contact is:\n{my_contact}");
 

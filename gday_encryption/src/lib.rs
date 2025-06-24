@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+#![warn(clippy::all)]
 //! Simple encrypted ChaCha20Poly1305 wrapper around an async IO stream.
 //!
 //! This library is used by [gday_file_transfer](https://crates.io/crates/gday_file_transfer),
@@ -24,10 +26,7 @@
 //!
 //! let handle = tokio::spawn(async move {
 //!     // Peer 1 sends "Hello!"
-//!     let mut stream = EncryptedStream::encrypt_connection(
-//!         &mut sender,
-//!         &key,
-//!     ).await?;
+//!     let mut stream = EncryptedStream::encrypt_connection(&mut sender, &key).await?;
 //!     stream.write_all(b"Hello!").await?;
 //!     stream.flush().await?;
 //!
@@ -35,10 +34,7 @@
 //! });
 //!
 //! // Peer 2 receives the "Hello!".
-//! let mut stream = EncryptedStream::encrypt_connection(
-//!     &mut receiver,
-//!     &key,
-//! ).await?;
+//! let mut stream = EncryptedStream::encrypt_connection(&mut receiver, &key).await?;
 //! let mut received = [0u8; 6];
 //! stream.read_exact(&mut received).await?;
 //!
@@ -48,21 +44,18 @@
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! # }).unwrap();
 //! ```
-//!
-#![forbid(unsafe_code)]
-#![warn(clippy::all)]
 
 mod helper_buf;
 
-use chacha20poly1305::aead::stream::{DecryptorBE32, EncryptorBE32};
-use chacha20poly1305::aead::Buffer;
 use chacha20poly1305::ChaCha20Poly1305;
+use chacha20poly1305::aead::Buffer;
+use chacha20poly1305::aead::stream::{DecryptorBE32, EncryptorBE32};
 use helper_buf::HelperBuf;
 
 use pin_project::pin_project;
 use std::io::ErrorKind;
 use std::pin::Pin;
-use std::task::{ready, Context, Poll};
+use std::task::{Context, Poll, ready};
 use tokio::io::{AsyncBufRead, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
 
 /// How many bytes larger an encrypted chunk is
@@ -91,13 +84,11 @@ pub struct EncryptedStream<T> {
     received: HelperBuf,
 
     /// Data that has been decrypted from `received`.
-    /// - Invariant: This must be empty when calling
-    ///   [`Self::inner_read()`]
+    /// - Invariant: This must be empty when calling [`Self::inner_read()`]
     decrypted: HelperBuf,
 
     /// Data to be sent. Encrypted only when [`Self::flushing`].
-    /// - Invariant: the first 2 bytes are always
-    ///   reserved for the length
+    /// - Invariant: the first 2 bytes are always reserved for the length
     /// - Invariant: Data can only be appended when `flushing` is false.
     to_send: HelperBuf,
 
@@ -112,7 +103,8 @@ impl<T> EncryptedStream<T> {
     /// - The `key` must be a cryptographically random secret.
     /// - The `nonce` shouldn't be reused, but doesn't need to be secret.
     ///
-    /// - See [`Self::encrypt_connection()`] if you'd like an auto-generatcan't createed nonce.
+    /// - See [`Self::encrypt_connection()`] if you'd like an auto-generatcan't
+    ///   createed nonce.
     pub fn new(io_stream: T, key: &[u8; 32], nonce: &[u8; 7]) -> Self {
         let mut to_send = HelperBuf::with_capacity(u16::MAX as usize + 2);
         // add 2 bytes for length header to uphold invariant
@@ -131,13 +123,14 @@ impl<T> EncryptedStream<T> {
 }
 
 impl<T: AsyncRead + AsyncWrite + Unpin> EncryptedStream<T> {
-    /// Establish an [`EncryptedStream`] between two peers with an auto-generated nonce.
+    /// Establish an [`EncryptedStream`] between two peers with an
+    /// auto-generated nonce.
     ///
     /// - Both peers must have the same `key`.
     /// - The `key` must be a cryptographically random secret.
     ///
-    /// This function sends random bytes to the peer, and receives some from the peer.
-    /// The nonce is set to the XOR of the two byte strings.
+    /// This function sends random bytes to the peer, and receives some from the
+    /// peer. The nonce is set to the XOR of the two byte strings.
     /// Both peers must call this function for this to work.
     ///
     /// - See [`Self::new()`] if you'd like to provide your own nonce.
@@ -243,8 +236,8 @@ impl<T: AsyncWrite> AsyncWrite for EncryptedStream<T> {
 impl<T: AsyncRead> EncryptedStream<T> {
     /// Reads and decrypts at least 1 new chunk into [`Self::decrypted`],
     /// unless reached EOF or the inner reader returned [`Poll::Pending`].
-    /// - Invariant: must only be called when [`Self::decrypted`] is empty,
-    ///     so that it has space to decrypt into.
+    /// - Invariant: must only be called when [`Self::decrypted`] is empty, so
+    ///   that it has space to decrypt into.
     fn inner_read(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
         let mut me = self.project();
 
