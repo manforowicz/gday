@@ -8,8 +8,8 @@
 //! In general, I recommend using the well-established
 //! [rustls](https://docs.rs/rustls/latest/rustls) for encryption.
 //! [gday_file_transfer](https://crates.io/crates/gday_file_transfer) chose this library
-//! because [rustls](https://docs.rs/rustls/latest/rustls) didn't support
-//! peer-to-peer connections with a shared key.
+//! because Rustls didn't support
+//! peer-to-peer connections with a pre-shared key.
 //!
 //! # Example
 //! ```rust

@@ -20,7 +20,6 @@
 //! # let mut tls_ipv4 = std::collections::VecDeque::new();
 //! # let mut tls_ipv6 = std::collections::VecDeque::new();
 //! #
-//!
 //! use gday_contact_exchange_protocol::{ClientMsg, Contact, ServerMsg, read_from, write_to};
 //! let room_code = String::from("Room code");
 //!
@@ -30,12 +29,12 @@
 //! let request = ClientMsg::CreateRoom {
 //!     room_code: room_code.clone(),
 //! };
-//! write_to(request, &mut tls_ipv4)?;
+//! write_to(&request, &mut tls_ipv4)?;
 //! let ServerMsg::RoomCreated = read_from(&mut tls_ipv4)? else {
 //!     panic!()
 //! };
 //!
-//! // Both peers sends ClientMsg::RecordPublicAddr
+//! // Both peers send ClientMsg::RecordPublicAddr
 //! // from their IPv4 and/or IPv6 endpoints.
 //! // The server records the client's public addresses from these connections.
 //! // The server responds with ServerMsg::ReceivedAddr or an error message.
@@ -43,11 +42,11 @@
 //!     room_code: room_code.clone(),
 //!     is_creator: true,
 //! };
-//! write_to(request.clone(), &mut tls_ipv4)?;
+//! write_to(&request, &mut tls_ipv4)?;
 //! let ServerMsg::ReceivedAddr = read_from(&mut tls_ipv4)? else {
 //!     panic!()
 //! };
-//! write_to(request.clone(), &mut tls_ipv6)?;
+//! write_to(&request, &mut tls_ipv6)?;
 //! let ServerMsg::ReceivedAddr = read_from(&mut tls_ipv6)? else {
 //!     panic!()
 //! };
@@ -64,7 +63,7 @@
 //!     room_code,
 //!     is_creator: true,
 //! };
-//! write_to(request, &mut tls_ipv4)?;
+//! write_to(&request, &mut tls_ipv4)?;
 //! let ServerMsg::ClientContact(my_contact) = read_from(&mut tls_ipv4)? else {
 //!     panic!()
 //! };
@@ -109,8 +108,6 @@ pub enum ClientMsg {
     ///
     /// The server should automatically delete new rooms after roughly 10
     /// minutes.
-    ///
-    /// More than one room can be created per connection.
     ///
     /// Server responds with [`ServerMsg::RoomCreated`] on success
     /// or [`ServerMsg::ErrorRoomTaken`] in the unlikely case that this room is
@@ -181,7 +178,7 @@ pub enum ServerMsg {
     ErrorRoomTaken,
 
     /// If only one client sends [`ClientMsg::ReadyToShare`] before the room
-    /// times out, the server replies with this message instead of
+    /// times out, the server replies to it with this message instead of
     /// [`ServerMsg::PeerContact`].
     ErrorPeerTimedOut,
 
@@ -191,7 +188,7 @@ pub enum ServerMsg {
 
     /// The server may respond with this if a client sends
     /// [`ClientMsg::RecordPublicAddr`] after already sending
-    /// [`ClientMsg::ReadyToShare`].
+    /// [`ClientMsg::ReadyToShare`] to a given room.
     ErrorUnexpectedMsg,
 
     /// Rejects a request if an IP address made too many requests.
@@ -202,10 +199,6 @@ pub enum ServerMsg {
     /// it doesn't understand.
     /// The server then closes the connection.
     ErrorSyntax,
-
-    /// The server responds with this if it has an internal error.
-    /// The server then closes the connection.
-    ErrorInternal,
 }
 
 impl Display for ServerMsg {
@@ -238,7 +231,6 @@ impl Display for ServerMsg {
                 "Exceeded request limit from this IP address. Try again in a minute."
             ),
             Self::ErrorSyntax => write!(f, "Server couldn't parse message syntax from client."),
-            Self::ErrorInternal => write!(f, "Server had an internal error."),
         }
     }
 }
@@ -302,7 +294,10 @@ impl std::fmt::Display for FullContact {
 /// and 2 bytes holding the length of the following message (all in big-endian).
 pub fn write_to(msg: impl Serialize, writer: &mut impl Write) -> Result<(), Error> {
     let vec = serde_json::to_vec(&msg)?;
-    let len = u16::try_from(vec.len())?;
+    if vec.len() > 1024 {
+        return Err(Error::MsgTooLong);
+    }
+    let len = vec.len() as u16;
 
     let mut header = [0; 3];
     header[0] = PROTOCOL_VERSION;
@@ -323,7 +318,10 @@ pub async fn write_to_async(
     writer: &mut (impl AsyncWrite + Unpin),
 ) -> Result<(), Error> {
     let vec = serde_json::to_vec(&msg)?;
-    let len = u16::try_from(vec.len())?;
+    if vec.len() > 1024 {
+        return Err(Error::MsgTooLong);
+    }
+    let len = vec.len() as u16;
 
     let mut header = [0; 3];
     header[0] = PROTOCOL_VERSION;
@@ -343,13 +341,16 @@ pub fn read_from<T: DeserializeOwned>(reader: &mut impl Read) -> Result<T, Error
     let mut header = [0_u8; 3];
     reader.read_exact(&mut header)?;
     if header[0] != PROTOCOL_VERSION {
-        return Err(Error::IncompatibleProtocol);
+        return Err(Error::IncompatibleProtocol(header[0]));
     }
     let len = u16::from_be_bytes(header[1..3].try_into().unwrap()) as usize;
+    if len > 1024 {
+        return Err(Error::MsgTooLong);
+    }
 
     let mut buf = vec![0; len];
     reader.read_exact(&mut buf)?;
-    Ok(serde_json::from_reader(&buf[..])?)
+    Ok(serde_json::from_slice(&buf)?)
 }
 
 /// Asynchronously reads a message from `reader` using [`serde_json`].
@@ -362,13 +363,16 @@ pub async fn read_from_async<T: DeserializeOwned>(
     let mut header = [0_u8; 3];
     reader.read_exact(&mut header).await?;
     if header[0] != PROTOCOL_VERSION {
-        return Err(Error::IncompatibleProtocol);
+        return Err(Error::IncompatibleProtocol(header[0]));
     }
     let len = u16::from_be_bytes(header[1..3].try_into().unwrap()) as usize;
+    if len > 1024 {
+        return Err(Error::MsgTooLong);
+    }
 
     let mut buf = vec![0; len];
     reader.read_exact(&mut buf).await?;
-    Ok(serde_json::from_reader(&buf[..])?)
+    Ok(serde_json::from_slice(&buf)?)
 }
 
 /// Message serialization/deserialization error.
@@ -383,15 +387,15 @@ pub enum Error {
     #[error("IO Error: {0}")]
     IO(#[from] std::io::Error),
 
-    /// Can't send message longer than 2^16 bytes.
-    #[error("Can't send message longer than 2^16 bytes: {0}")]
-    MsgTooLong(#[from] std::num::TryFromIntError),
+    /// Protocol doesn't allow messages longer than 2^10 bytes.
+    #[error("Protocol doesn't allow messages longer than 2^10 bytes")]
+    MsgTooLong,
 
     /// Received a message with an incompatible protocol version.
     /// Check if this software is up-to-date.
     #[error(
-        "Received a message with an incompatible protocol version. \
-        Check if this software is up-to-date."
+        "Received a contact exchange message with protocol version {0} \
+        but this software version only supports protocol version {PROTOCOL_VERSION}"
     )]
-    IncompatibleProtocol,
+    IncompatibleProtocol(u8),
 }

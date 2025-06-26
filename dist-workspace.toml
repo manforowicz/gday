@@ -21,6 +21,6 @@ pr-run-mode = "plan"
 unix-archive = ".tar.gz"
 
 # aws-lc-sys requires a new version of gcc,
-# show we use ubuntu-latest when building for linux
+# so we use ubuntu-latest when building for linux
 [dist.github-custom-runners]
 x86_64-unknown-linux-gnu = "ubuntu-latest"

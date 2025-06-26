@@ -1,7 +1,6 @@
 [package]
 name = "gday_contact_exchange_protocol"
 description = "Protocol for peers to exchange their socket addresses via a server."
-homepage = "https://github.com/manforowicz/gday/tree/main/gday_contact_exchange_protocol"
 categories = ["network-programming"]
 
 # Inherit these keys from workspace toml

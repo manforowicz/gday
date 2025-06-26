@@ -1,7 +1,6 @@
 [package]
 name = "gday_encryption"
 description = "Simple encrypted ChaCha20Poly1305 wrapper around an async IO stream."
-homepage = "https://github.com/manforowicz/gday/tree/main/gday_encryption"
 categories = ["cryptography"]
 
 # Inherit these keys from workspace toml

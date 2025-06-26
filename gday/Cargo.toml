@@ -1,7 +1,6 @@
 [package]
 name = "gday"
 description = "Command line tool to securely send files (without a relay or port forwarding)."
-homepage = "https://github.com/manforowicz/gday/tree/main/gday"
 categories = ["command-line-utilities", "network-programming", "filesystem"]
 
 # Inherit these keys from workspace toml

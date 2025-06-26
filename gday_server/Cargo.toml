@@ -1,7 +1,6 @@
 [package]
 name = "gday_server"
 description = "Server that lets 2 peers exchange their socket addresses."
-homepage = "https://github.com/manforowicz/gday/tree/main/gday_server"
 categories = ["command-line-utilities"]
 
 # Inherit these keys from workspace toml
@@ -23,3 +22,4 @@ thiserror = "2.0.12"
 log = "0.4.27"
 env_logger = "0.11.8"
 rustls-pemfile = "2.2.0"
+anyhow = "1.0.98"

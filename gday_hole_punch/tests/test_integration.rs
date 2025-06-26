@@ -17,7 +17,7 @@ async fn test_integration() {
         request_limit: 10,
         verbosity: log::LevelFilter::Off,
     };
-    let (server_addrs, _joinset) = gday_server::start_server(args).unwrap();
+    let (server_addrs, _handle) = gday_server::start_server(args).unwrap();
 
     let server_addr_1 = server_addrs[0];
 

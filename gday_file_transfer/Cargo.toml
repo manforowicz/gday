@@ -1,7 +1,6 @@
 [package]
 name = "gday_file_transfer"
 description = "Protocol to securely transfer files over an encrypted IO stream."
-homepage = "https://github.com/manforowicz/gday/tree/main/gday_file_transfer"
 categories = ["network-programming"]
 
 # Inherit these keys from workspace toml

@@ -17,7 +17,7 @@ async fn test_integration() {
         request_limit: 10,
         verbosity: log::LevelFilter::Off,
     };
-    let (server_addrs, _joinset) = gday_server::start_server(args).unwrap();
+    let (server_addrs, _handle) = gday_server::start_server(args).unwrap();
     let server_ipv4 = *server_addrs.iter().find(|a| a.is_ipv4()).unwrap();
     let server_ipv6 = *server_addrs.iter().find(|a| a.is_ipv6()).unwrap();
 
@@ -190,7 +190,7 @@ async fn test_request_limit() {
         request_limit: 10,
         verbosity: log::LevelFilter::Off,
     };
-    let (server_addrs, _joinset) = gday_server::start_server(args).unwrap();
+    let (server_addrs, _handle) = gday_server::start_server(args).unwrap();
     let server_ipv4 = *server_addrs.iter().find(|a| a.is_ipv4()).unwrap();
     let server_ipv6 = *server_addrs.iter().find(|a| a.is_ipv6()).unwrap();
 
