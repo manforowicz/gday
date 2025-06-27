@@ -98,7 +98,7 @@ pub const DEFAULT_PORT: u16 = 2311;
 /// Version of the protocol.
 /// Different numbers wound indicate
 /// incompatible protocol breaking changes.
-pub const PROTOCOL_VERSION: u8 = 1;
+pub const PROTOCOL_VERSION: u8 = 2;
 
 /// A message from client to server.
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Clone)]

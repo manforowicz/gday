@@ -1,4 +1,0 @@
-- To reduce memory usage, make server hashmap keys be password hashes rather than passwords themselves.
-
-- Look over:
-    - gday file transfer file modification date tests

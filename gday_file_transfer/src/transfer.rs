@@ -32,10 +32,9 @@ pub struct TransferReport {
 pub async fn send_files(
     offer: &LocalFileOffer,
     request: &FileRequestsMsg,
-    writer: impl AsyncWrite,
+    writer: impl AsyncWrite + Unpin,
     progress_callback: impl FnMut(&TransferReport),
 ) -> Result<(), Error> {
-    let writer = pin!(writer);
     let files = offer.offer.lookup_request(request)?;
     let total_bytes = offer.offer.get_transfer_size(request)?;
 
@@ -92,10 +91,9 @@ pub async fn receive_files(
     offer: &FileOfferMsg,
     request: &FileRequestsMsg,
     save_path: &Path,
-    reader: impl AsyncBufRead,
+    reader: impl AsyncBufRead + Unpin,
     progress_callback: impl FnMut(&TransferReport),
 ) -> Result<(), Error> {
-    let reader = pin!(reader);
     let files = offer.lookup_request(request)?;
     let total_bytes = offer.get_transfer_size(request)?;
 

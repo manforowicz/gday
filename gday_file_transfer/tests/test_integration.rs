@@ -1,11 +1,10 @@
 #![forbid(unsafe_code)]
 #![warn(clippy::all)]
+use gday_file_transfer::*;
 use std::collections::HashMap;
 use std::fs::{File, create_dir_all};
 use std::io::Write;
 use std::path::PathBuf;
-
-use gday_file_transfer::*;
 use tokio::io::AsyncReadExt;
 
 const TEST_FILENAMES: &[&str] = &[
@@ -37,10 +36,10 @@ fn make_test_dir() -> tempfile::TempDir {
 
 /// Confirm that [`create_file_offer()`] returns errors
 /// when it should.
-#[tokio::test]
-async fn test_create_file_offer_errors() {
+#[test]
+fn test_create_file_offer_errors() {
     let test_dir = make_test_dir();
-    let dir_path = test_dir.path().canonicalize().unwrap();
+    let dir_path = test_dir.path();
 
     // trying to get metadata about file that doesn't exist
     assert!(matches!(
@@ -90,10 +89,10 @@ async fn test_create_file_offer_errors() {
 }
 
 /// Confirm that [`create_file_offer()`] works.
-#[tokio::test]
-async fn test_create_file_offer() {
+#[test]
+fn test_create_file_offer() {
     let test_dir = make_test_dir();
-    let dir_path = test_dir.path().canonicalize().unwrap();
+    let dir_path = test_dir.path();
 
     let result = gday_file_transfer::create_file_offer(&[
         dir_path.join("file 1"),
@@ -145,15 +144,15 @@ async fn test_file_transfer() {
     // dir_a contains test files, some of which
     // will be sent
     let dir_a = make_test_dir();
-    let dir_a_path = dir_a.path().canonicalize().unwrap();
+    let dir_a_path = dir_a.path();
 
-    // fille offer
+    // file offer
     let offered_paths = [dir_a_path.join("file 1"), dir_a_path.join("dir")];
     let offer = create_file_offer(&offered_paths).unwrap();
     let offered_size = offer.offer.get_total_offered_size();
 
     // A thread that will send data to the loopback address
-    tokio::spawn(async move {
+    let handle = tokio::spawn(async move {
         // There will be an interruption after each byte sent
         for _ in 0..offered_size - 1 {
             let mut stream_a = tokio::net::TcpStream::connect(pipe_addr).await.unwrap();
@@ -180,7 +179,7 @@ async fn test_file_transfer() {
 
     // dir_b will receive the files in
     let dir_b = tempfile::tempdir().unwrap();
-    let dir_b_path = dir_b.path().canonicalize().unwrap();
+    let dir_b_path = dir_b.path();
     let mut f = File::create_new(dir_b_path.join("unrelated")).unwrap();
     write!(f, "unrelated").unwrap();
 
@@ -188,13 +187,13 @@ async fn test_file_transfer() {
         let mut stream_b = listener.accept().await.unwrap().0;
         let received_offer: FileOfferMsg = read_from_async(&mut stream_b).await.unwrap();
         let response_msg =
-            FileRequestsMsg::accept_only_new_and_interrupted(&received_offer, &dir_b_path).unwrap();
+            FileRequestsMsg::accept_only_new_and_interrupted(&received_offer, dir_b_path).unwrap();
         write_to_async(&response_msg, &mut stream_b).await.unwrap();
 
         let res = receive_files(
             &received_offer,
             &response_msg,
-            &dir_b_path,
+            dir_b_path,
             tokio::io::BufReader::new(stream_b.take(1)),
             |_| {},
         )
@@ -206,18 +205,20 @@ async fn test_file_transfer() {
     let mut stream_b = listener.accept().await.unwrap().0;
     let received_offer: FileOfferMsg = read_from_async(&mut stream_b).await.unwrap();
     let response_msg =
-        FileRequestsMsg::accept_only_new_and_interrupted(&received_offer, &dir_b_path).unwrap();
+        FileRequestsMsg::accept_only_new_and_interrupted(&received_offer, dir_b_path).unwrap();
     write_to_async(&response_msg, &mut stream_b).await.unwrap();
 
     receive_files(
         &received_offer,
         &response_msg,
-        &dir_b_path,
+        dir_b_path,
         tokio::io::BufReader::new(stream_b.take(1)),
         |_| {},
     )
     .await
     .unwrap();
+
+    handle.await.unwrap();
 
     // Ensure sender's directory is unchanged from original
     let dir_original = make_test_dir();
@@ -228,6 +229,105 @@ async fn test_file_transfer() {
     let mut f = File::create_new(dir_expected.path().join("unrelated")).unwrap();
     write!(f, "unrelated").unwrap();
     std::fs::remove_file(dir_expected.path().join("file 2.txt")).unwrap();
+
+    assert!(!dir_diff::is_different(dir_expected.path(), dir_b.path()).unwrap());
+}
+
+#[tokio::test]
+async fn test_no_incorrect_resume() {
+    // dir_a contains test files, some of which
+    // will be sent
+    let dir_a = tempfile::tempdir().unwrap();
+    let dir_a_path = dir_a.path();
+    let offered_paths = [dir_a_path.join("file 1")];
+    let mut f = std::fs::File::create(&offered_paths[0]).unwrap();
+    write!(f, "This is file 1").unwrap();
+
+    // Listens on the loopback address
+    let listener = tokio::net::TcpListener::bind("[::1]:0").await.unwrap();
+    let pipe_addr = listener.local_addr().unwrap();
+
+    let handle = tokio::spawn(async move {
+        // file offer
+        let offer = create_file_offer(&offered_paths).unwrap();
+        let offered_size = offer.offer.get_total_offered_size();
+        assert_eq!(offered_size, "This is file 1".len() as u64);
+
+        // There will be an interruption after each byte sent
+        let mut stream_a = tokio::net::TcpStream::connect(pipe_addr).await.unwrap();
+        // send offer, and read response
+        write_to_async(&offer.offer, &mut stream_a).await.unwrap();
+        let response: FileRequestsMsg = read_from_async(&mut stream_a).await.unwrap();
+
+        // send the files
+        let _ = send_files(&offer, &response, &mut stream_a, |_| {}).await;
+
+        let mut f = std::fs::File::create(&offered_paths[0]).unwrap();
+        write!(f, "This is a completely different file 1").unwrap();
+        let offer = create_file_offer(&offered_paths).unwrap();
+        let offered_size = offer.offer.get_total_offered_size();
+        assert_eq!(
+            offered_size,
+            "This is a completely different file 1".len() as u64
+        );
+
+        let mut stream_a = tokio::net::TcpStream::connect(pipe_addr).await.unwrap();
+
+        // send offer, and read response
+        write_to_async(&offer.offer, &mut stream_a).await.unwrap();
+        let response: FileRequestsMsg = read_from_async(&mut stream_a).await.unwrap();
+
+        // send the files
+        send_files(&offer, &response, &mut stream_a, |_| {})
+            .await
+            .unwrap();
+    });
+
+    // dir_b will receive the files in
+    let dir_b = tempfile::tempdir().unwrap();
+    let dir_b_path = dir_b.path();
+
+    let mut stream_b = listener.accept().await.unwrap().0;
+    let received_offer: FileOfferMsg = read_from_async(&mut stream_b).await.unwrap();
+    let response_msg =
+        FileRequestsMsg::accept_only_new_and_interrupted(&received_offer, dir_b_path).unwrap();
+    write_to_async(&response_msg, &mut stream_b).await.unwrap();
+
+    let res = receive_files(
+        &received_offer,
+        &response_msg,
+        dir_b_path,
+        tokio::io::BufReader::new(stream_b.take(1)),
+        |_| {},
+    )
+    .await;
+    assert!(matches!(res, Err(Error::IO(_))));
+
+    let mut stream_b = listener.accept().await.unwrap().0;
+    let received_offer: FileOfferMsg = read_from_async(&mut stream_b).await.unwrap();
+    let response_msg =
+        FileRequestsMsg::accept_only_new_and_interrupted(&received_offer, dir_b_path).unwrap();
+    write_to_async(&response_msg, &mut stream_b).await.unwrap();
+    assert_eq!(response_msg.get_num_not_rejected(), 1);
+    assert_eq!(response_msg.get_num_partially_accepted(), 0);
+    assert_eq!(response_msg.get_num_fully_accepted(), 1);
+
+    receive_files(
+        &received_offer,
+        &response_msg,
+        dir_b_path,
+        tokio::io::BufReader::new(stream_b),
+        |_| {},
+    )
+    .await
+    .unwrap();
+
+    handle.await.unwrap();
+
+    // Ensure receiver's directory is as expected
+    let dir_expected = tempfile::tempdir().unwrap();
+    let mut f = File::create_new(dir_expected.path().join("file 1")).unwrap();
+    write!(f, "This is a completely different file 1").unwrap();
 
     assert!(!dir_diff::is_different(dir_expected.path(), dir_b.path()).unwrap());
 }

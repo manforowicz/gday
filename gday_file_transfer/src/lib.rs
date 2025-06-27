@@ -68,7 +68,7 @@ pub use crate::transfer::*;
 /// Version of the protocol.
 /// Different numbers wound indicate
 /// incompatible protocol breaking changes.
-pub const PROTOCOL_VERSION: u8 = 1;
+pub const PROTOCOL_VERSION: u8 = 2;
 
 /// `gday_file_transfer` error.
 #[derive(Error, Debug)]
@@ -93,7 +93,7 @@ pub enum Error {
     /// bytes when serialized.
     ///
     /// Can't send message longer than 2^32 bytes.
-    #[error("Can't send message longer than 2^32 bytes: {0}")]
+    #[error("Can't send message longer than 2^32 bytes.")]
     MsgTooLong(#[from] std::num::TryFromIntError),
 
     /// A local file had an unexpected length.

@@ -23,4 +23,4 @@ tokio = { version = "1.45.1", features = ["io-util"] }
 [dev-dependencies]
 dir-diff = "0.3.3"
 tempfile = "3.20.0"
-tokio = { version = "1.45.1", features = ["macros", "rt-multi-thread", "net"] }
+tokio = { version = "1.45.1", features = ["macros", "rt-multi-thread", "net", "time"] }

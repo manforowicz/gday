@@ -16,7 +16,6 @@ in [/other/pre-push](/other/pre-push).
 
 ## Running a server
 
-One of the strengths of gday is its decentralized nature.
 Want to add your own server to the list of
 [default servers](https://docs.rs/gday_hole_punch/latest/gday_hole_punch/server_connector/constant.DEFAULT_SERVERS.html)?
 Read the instructions in [/gday_server/README.md](/gday_server/README.md).

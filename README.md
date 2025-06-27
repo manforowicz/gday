@@ -38,26 +38,24 @@ brew install manforowicz/tap/gday
 - No limit on the size of files and folders sent.
 
 - Files are sent directly, without relay servers.
-A server is only used to exchange socket addresses at the beginning.
+    - A server is only used to exchange socket addresses at the beginning.
+    Then, a peer-to-peer connection is established with [TCP Hole Punching](https://bford.info/pub/net/p2pnat/).
+    This may not work through some restrictive [NATs](https://en.wikipedia.org/wiki/Network_address_translation). If that happens, enable IPv6, move to a different network, or use a tool with a relay server such as [magic-wormhole](https://github.com/magic-wormhole/magic-wormhole") or [croc](https://github.com/schollz/croc).
 
 - Automatically resumes interrupted transfers. Just `gday send` the same files, and partial downloads will be detected and resumed.
-
-- Doesn't require port forwarding.
-Instead, uses [TCP Hole Punching](https://bford.info/pub/net/p2pnat/) to traverse
-[NATs](https://en.wikipedia.org/wiki/Network_address_translation).
-This may not work on very restrictive NATs. If that happens, enable IPv6 or move to a different network.
+    - This is implemented by having the receiver identify when an offered file metadata (name and last modified time) exactly matches metadata saved in a local temporary file.
 
 - If a contact exchange server is down, just uses a different one from the default list. Or specify your own with `--server`.
 
 - Server connection encrypted with
-[TLS](https://en.wikipedia.org/wiki/Transport_Layer_Security)
-and file transfer is over TCP that's end-to-end encrypted with
+TLS and file transfer is over TCP that's end-to-end encrypted with
 [ChaCha20Poly1305](https://en.wikipedia.org/wiki/ChaCha20-Poly1305).
+    - (not TLS for file transfer, because the rustls library [doesn't support PSK](https://github.com/rustls/rustls/issues/174) which is needed for the certificate-less peer-to-peer connection).
 
 - Automatically tries both IPv4 and IPv6.
+    - When IPv6 is available, peer-to-peer connection almost always succeeds because NATs are uncommon on IPv6.
 
-- Resistant to malicious servers impersonating your peer.
-Uses [SPAKE2](https://datatracker.ietf.org/doc/rfc9382/) to derive an
+- Authenticates your peer using [SPAKE2](https://datatracker.ietf.org/doc/rfc9382/) to derive an
 encryption key from a shared secret.
 
 - No `unsafe` Rust in this repository.
@@ -220,25 +218,27 @@ Open an [issue](https://github.com/manforowicz/gday/issues) to add more projects
 
 2. **Peer A** randomly selects a **gday server** ID and connects to it over TLS.
 
-3. **Peer A** sends its _room code_ and its local IP address and port number to the **gday server**.
+3. **Peer A** sends its _room code_, local IP addresses, and port numbers to the **gday server**.
 
-4. **Peer A** combines the server's ID, _room code_, and _shared secret_ into a code of form `"1.n5xn8.wvqsf"`.
+4. **Peer A** combines the server's ID, _room code_, and _shared secret_ into a code of form `"1.n5xn8.wvqsf"` and gives it to **Peer B**.
 
 5. **Peer A** tells this code to **Peer B**, possibly via phone call or text message.
 
-6. **Peer B** also sends this _room code_ and its local IP address and port number to the **gday server**.
+6. **Peer B** also sends this _room code_ and its local IP addresses and port numbers to the **gday server**.
 
 7. The **gday server** sends both peers the public and local IP addresses and ports of the other peer.
 
-8. From the same local port that they used to connect to the server, each peer tries a few times to connect over TCP to both the local and public socket addresses of the other peer.
+8. From the same local port that they used to connect to the server, each peer tries a few times to connect over TCP to both the local and public socket addresses of the other peer. This may fail on networks with strict [NATs](https://en.wikipedia.org/wiki/Network_address_translation).
 
 9. Once any of the connection attempts succeeds, they use password-authenticated key exchange to derive a strong shared key from their _shared secret_, and use it to encrypt their TCP connection with chacha20poly1305.
 
 10. **Peer A** sends **Peer B** a list of offered files and their sizes.
 
-11. **Peer B** checks for files left over from any previous interrupted downloads, and replies with the file portions it would like to receive.
+11. **Peer B** detects interrupted downloads by checking if any offered file's metadata (name and last modified time) exactly matches metadata saved in a local temporary file leftover from the interrupted download.
 
-12. **Peer A** sends all the accepted files to **Peer B**, back-to-back.
+12. **Peer B** sends **Peer A** the file portions it would like to receive
+
+13. **Peer A** sends all the accepted files to **Peer B**, back-to-back.
 
 ## In this repository
 
