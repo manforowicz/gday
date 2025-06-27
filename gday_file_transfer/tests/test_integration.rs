@@ -114,8 +114,8 @@ fn test_create_file_offer() {
     };
 
     for (full_path, offered_path) in expected_paths {
-        let full_path = dir_path.join(full_path);
-        let offered_path = PathBuf::from(offered_path);
+        let full_path = dir_path.join(full_path).canonicalize().unwrap();
+        let offered_path = PathBuf::from(offered_path).canonicalize().unwrap();
         let meta = full_path.metadata().unwrap();
 
         expected.offer.offer.insert(
