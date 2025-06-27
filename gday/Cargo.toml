@@ -17,9 +17,9 @@ anstream = "0.6.19"
 anstyle = "1.0.11"
 clap = { version = "4.5.40", features = ["derive"] }
 env_logger = "0.11.8"
-gday_encryption = { version = "0.3.0", path = "../gday_encryption" }
-gday_file_transfer = { version = "0.3.0", path = "../gday_file_transfer" }
-gday_hole_punch = { version = "0.3.0", path = "../gday_hole_punch" }
+gday_encryption = { version = "0.4.0", path = "../gday_encryption" }
+gday_file_transfer = { version = "0.4.0", path = "../gday_file_transfer" }
+gday_hole_punch = { version = "0.4.0", path = "../gday_hole_punch" }
 indicatif = "0.17.11"
 log = "0.4.27"
 tokio = { version = "1.45.1", features = ["rt-multi-thread", "macros"] }
