@@ -1,7 +1,8 @@
-//! Runs a server for the [`gday_contact_exchange_protocol`].
-//! Lets two users exchange their public and (optionally) private socket addresses.
 #![forbid(unsafe_code)]
 #![warn(clippy::all)]
+//! Runs a server for the [`gday_contact_exchange_protocol`].
+//! Lets two users exchange their public and (optionally) private socket
+//! addresses.
 
 use clap::Parser;
 use gday_server::Args;
@@ -13,12 +14,8 @@ async fn main() {
     let args = Args::parse();
 
     match gday_server::start_server(args) {
-        Ok((_addr, mut joinset)) => {
-            joinset
-                .join_next()
-                .await
-                .expect("No addresses provided.")
-                .expect("Server thread panicked.");
+        Ok((_addr, handle)) => {
+            handle.await;
             error!("Server crashed.");
         }
         Err(err) => {

@@ -1,5 +1,5 @@
 use crate::state::{self, State};
-use gday_contact_exchange_protocol::{read_from_async, write_to_async, ClientMsg, ServerMsg};
+use gday_contact_exchange_protocol::{ClientMsg, ServerMsg, read_from_async, write_to_async};
 use log::{error, info, warn};
 use std::net::SocketAddr;
 use tokio::{
@@ -27,10 +27,10 @@ pub async fn handle_connection(
             }
         };
         let _ = handle_requests(&mut tls_stream, state, origin).await;
-        // Graceful TLS termination
         let _ = tls_stream.shutdown().await;
     } else {
         let _ = handle_requests(&mut tcp_stream, state, origin).await;
+        let _ = tcp_stream.shutdown().await;
     }
 }
 
@@ -71,11 +71,6 @@ async fn handle_requests(
                 write_to_async(ServerMsg::ErrorSyntax, stream).await?;
                 return result;
             }
-            Err(HandleMessageError::UnknownMessage(msg)) => {
-                warn!("Replying with ServerMsg::ErrorSyntax because received unknown message: {msg:?}");
-                write_to_async(ServerMsg::ErrorSyntax, stream).await?;
-                return result;
-            }
             Err(HandleMessageError::IO(_)) => {
                 info!("'{origin}' disconnected.");
                 return result;
@@ -107,7 +102,7 @@ async fn handle_message(
             is_creator,
         } => {
             // record their public socket address from the connection
-            state.update_client(room_code, is_creator, origin, true, origin.ip())?;
+            state.update_client(&room_code, is_creator, origin, true, origin.ip())?;
 
             // acknowledge the receipt
             write_to_async(ServerMsg::ReceivedAddr, stream).await?;
@@ -121,7 +116,7 @@ async fn handle_message(
             // record the given private socket addresses
             if let Some(sockaddr_v4) = local_contact.v4 {
                 state.update_client(
-                    room_code,
+                    &room_code,
                     is_creator,
                     sockaddr_v4.into(),
                     false,
@@ -130,7 +125,7 @@ async fn handle_message(
             }
             if let Some(sockaddr_v6) = local_contact.v6 {
                 state.update_client(
-                    room_code,
+                    &room_code,
                     is_creator,
                     sockaddr_v6.into(),
                     false,
@@ -138,7 +133,8 @@ async fn handle_message(
                 )?;
             }
 
-            let (client_contact, rx) = state.set_client_done(room_code, is_creator, origin.ip())?;
+            let (client_contact, rx) =
+                state.set_client_done(&room_code, is_creator, origin.ip())?;
 
             // responds to the client with their own contact info
             write_to_async(ServerMsg::ClientContact(client_contact), stream).await?;
@@ -153,7 +149,6 @@ async fn handle_message(
 
             info!("Sent client '{origin}' their peer's contact of '{client_contact}'.");
         }
-        unknown_msg => return Err(HandleMessageError::UnknownMessage(unknown_msg)),
     }
     Ok(())
 }
@@ -176,8 +171,4 @@ enum HandleMessageError {
     /// IO Error
     #[error("IO Error: {0}")]
     IO(#[from] std::io::Error),
-
-    /// Received unknown message from client
-    #[error("Received unknown message from client:\n{0:?}")]
-    UnknownMessage(gday_contact_exchange_protocol::ClientMsg),
 }

@@ -1,10 +1,14 @@
 use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt};
 
-use crate::{Error, FileMeta, FileMetaLocal, FileOfferMsg, FileResponseMsg};
+use crate::partial_download::TmpInfoFile;
+use crate::{
+    Error, FileOfferMsg, FileRequestsMsg, LocalFileOffer, TMP_DOWNLOAD_FILE, delete_tmp_info_file,
+    get_download_path, get_unoccupied_version, write_tmp_info_file,
+};
 use std::io::{ErrorKind, Seek, SeekFrom};
 use std::path::Path;
-use std::pin::{pin, Pin};
-use std::task::{ready, Context, Poll};
+use std::pin::{Pin, pin};
+use std::task::{Context, Poll, ready};
 
 /// Holds the status of a file transfer
 #[derive(Debug, Clone)]
@@ -18,34 +22,21 @@ pub struct TransferReport {
 
 /// Transfers the requested files to `writer`.
 ///
-/// - `offer` is the `Vec` of [`FileMetaLocal`] you sent to your peer.
-/// - `response` is the [`FileResponseMsg`] received from your peer.
+/// - `offer` should contain the [`FileOfferMsg`] you sent to your peer.
+/// - `response` is the [`FileRequestsMsg`] received from your peer.
 /// - `writer` is the the IO stream on which the files will be sent.
-/// - `progress_callback` is a function that gets frequently
-///   called with [`TransferReport`] to report progress.
+/// - `progress_callback` is a function that gets frequently called with
+///   [`TransferReport`] to report progress.
 ///
 /// Transfers the accepted files in order, sequentially, back-to-back.
 pub async fn send_files(
-    offer: &[FileMetaLocal],
-    response: &FileResponseMsg,
-    writer: impl AsyncWrite,
+    offer: &LocalFileOffer,
+    request: &FileRequestsMsg,
+    writer: impl AsyncWrite + Unpin,
     progress_callback: impl FnMut(&TransferReport),
 ) -> Result<(), Error> {
-    let writer = pin!(writer);
-    let files: Vec<(&FileMetaLocal, u64)> = offer
-        .iter()
-        .zip(&response.response)
-        .filter_map(|(file, response)| response.map(|response| (file, response)))
-        .collect();
-
-    // sum up total transfer size
-    let mut total_bytes = 0;
-    for (file, start) in &files {
-        total_bytes += file
-            .len
-            .checked_sub(*start)
-            .ok_or(Error::InvalidStartIndex)?;
-    }
+    let files = offer.offer.lookup_request(request)?;
+    let total_bytes = offer.offer.get_transfer_size(request)?;
 
     // Wrap the writer to report progress over `progress_tx`
     let mut writer =
@@ -55,21 +46,27 @@ pub async fn send_files(
     let mut buf = vec![0; 0x10000];
 
     // iterate over all the files
-    for (offer, start) in files {
+    for (request, metadata) in files {
         // report the file path
-        writer.progress.current_file.clone_from(&offer.short_path);
+        writer.progress.current_file.clone_from(&request.path);
 
-        let mut file = std::fs::File::open(&offer.local_path)?;
+        let mut file = std::fs::File::open(&offer.offered_path_to_local[&request.path])?;
 
         // confirm file length matches metadata length
-        if file.metadata()?.len() != offer.len {
+        if file.metadata()?.len() != metadata.size {
             return Err(Error::UnexpectedFileLen);
         }
 
         // copy the file into the writer
-        file.seek(SeekFrom::Start(start))?;
+        file.seek(SeekFrom::Start(request.start_offset))?;
 
-        file_to_net(&mut file, &mut writer, offer.len - start, &mut buf).await?;
+        file_to_net(
+            &mut file,
+            &mut writer,
+            metadata.size - request.start_offset,
+            &mut buf,
+        )
+        .await?;
 
         // report the number of processed files
         writer.progress.processed_files += 1;
@@ -83,72 +80,72 @@ pub async fn send_files(
 /// Receives the requested files from `reader`.
 ///
 /// - `offer` is the [`FileOfferMsg`] offered by the peer.
-/// - `response` is the [`FileResponseMsg`] that you've sent in response.
+/// - `response` is the [`FileRequestsMsg`] that you've sent in response.
 /// - `save_path` is the directory where the files should be saved.
 /// - `reader` is the IO stream on which the files will be received.
-/// - `progress_callback` is an function that gets frequently
-///   called with [`TransferReport`] to report progress.
+/// - `progress_callback` is an function that gets frequently called with
+///   [`TransferReport`] to report progress.
 ///
 /// The accepted files must be sent in order, sequentially, back-to-back.
 pub async fn receive_files(
     offer: &FileOfferMsg,
-    response: &FileResponseMsg,
+    request: &FileRequestsMsg,
     save_path: &Path,
-    reader: impl AsyncBufRead,
+    reader: impl AsyncBufRead + Unpin,
     progress_callback: impl FnMut(&TransferReport),
 ) -> Result<(), Error> {
-    let reader = pin!(reader);
-    let files: Vec<(&FileMeta, u64)> = offer
-        .files
-        .iter()
-        .zip(&response.response)
-        .filter_map(|(file, response)| response.map(|response| (file, response)))
-        .collect();
-
-    // sum up total transfer size
-    let mut total_bytes = 0;
-    for (file, start) in &files {
-        total_bytes += file
-            .len
-            .checked_sub(*start)
-            .ok_or(Error::InvalidStartIndex)?;
-    }
+    let files = offer.lookup_request(request)?;
+    let total_bytes = offer.get_transfer_size(request)?;
 
     // Wrap the reader to report progress over `progress_tx`
     let mut reader =
         ProgressWrapper::new(reader, total_bytes, files.len() as u64, progress_callback);
 
     // iterate over all the files
-    for (offer, start) in files {
+    for (request, metadata) in files {
         // set progress bar message to file path
-        reader.progress.current_file.clone_from(&offer.short_path);
+        reader.progress.current_file.clone_from(&request.path);
 
-        // get the partial download path
-        let tmp_path = offer.get_partial_download_path(save_path)?;
+        write_tmp_info_file(
+            save_path,
+            &TmpInfoFile {
+                file_short_path: request.path.clone(),
+                file_metadata: metadata.clone(),
+            },
+        )?;
 
         // download whole file
-        if start == 0 {
-            // create a directory and TMP file
-            if let Some(parent) = tmp_path.parent() {
-                std::fs::create_dir_all(parent)?;
-            }
-            let mut file = std::fs::File::create(&tmp_path)?;
-
-            // copy from the reader into the file
-            net_to_file(&mut reader, &mut file, offer.len).await?;
-
-        // resume interrupted download
-        } else {
+        if request.start_offset != 0 {
             // open the partially downloaded file in append mode
-            let mut file = std::fs::OpenOptions::new().append(true).open(&tmp_path)?;
-            if file.metadata()?.len() != start {
+            let mut file = std::fs::OpenOptions::new()
+                .append(true)
+                .open(save_path.join(TMP_DOWNLOAD_FILE))?;
+            if file.metadata()?.len() != request.start_offset {
                 return Err(Error::UnexpectedFileLen);
             }
 
-            net_to_file(&mut reader, &mut file, offer.len - start).await?;
+            net_to_file(&mut reader, &mut file, metadata.size - request.start_offset).await?;
+        } else {
+            // create a directory and TMP file
+            let mut file = std::fs::File::create(save_path.join(TMP_DOWNLOAD_FILE))?;
+
+            // copy from the reader into the file
+            net_to_file(&mut reader, &mut file, metadata.size).await?;
+
+            // resume interrupted download
         }
+
+        let final_save_path =
+            get_unoccupied_version(&get_download_path(save_path, &request.path)?)?;
+        if let Some(parent) = final_save_path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+
+        std::fs::rename(save_path.join(TMP_DOWNLOAD_FILE), final_save_path)?;
+
+        delete_tmp_info_file(save_path)?;
+
         reader.progress.processed_files += 1;
-        std::fs::rename(tmp_path, offer.get_unoccupied_save_path(save_path)?)?;
     }
 
     Ok(())

@@ -1,7 +1,6 @@
 [package]
 name = "gday_hole_punch"
 description = "Securely connect to a peer using TCP hole-punching."
-homepage = "https://github.com/manforowicz/gday/tree/main/gday_hole_punch"
 categories = ["network-programming"]
 
 # Inherit these keys from workspace toml
@@ -14,18 +13,18 @@ version.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-gday_contact_exchange_protocol = { version = "0.3.0", path = "../gday_contact_exchange_protocol" }
-log = "0.4.22"
-pin-project = "1.1.7"
-rand = "0.8.5"
-serde = "1.0.215"
-sha2 = "0.10.8"
-socket2 = { version = "0.5.8" }
+gday_contact_exchange_protocol = { version = "0.4.0", path = "../gday_contact_exchange_protocol" }
+log = "0.4.27"
+pin-project = "1.1.10"
+rand = "0.9.1"
+serde = "1.0.219"
+sha2 = "0.10.9"
+socket2 = { version = "0.5.10" }
 spake2 = { version = "0.4.0", features = ["std"] }
-thiserror = "2.0.3"
-tokio = { version = "1.41.1", features = ["net", "rt", "time"] }
-tokio-rustls = "0.26.0"
-webpki-roots = "0.26.7"
+thiserror = "2.0.12"
+tokio = { version = "1.45.1", features = ["net", "rt", "time"] }
+tokio-rustls = "0.26.2"
+webpki-roots = "1.0.1"
 
 [dev-dependencies]
-gday_server = { version = "0.3.0", path = "../gday_server" }
+gday_server = { version = "0.4.0", path = "../gday_server" }

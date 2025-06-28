@@ -1,14 +1,14 @@
 use gday_encryption::EncryptedStream;
-use gday_file_transfer::{FileMetaLocal, FileOfferMsg, FileResponseMsg, TransferReport};
+use gday_file_transfer::{FileOfferMsg, FileRequestsMsg, LocalFileOffer, TransferReport};
 use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
 
 /// Sequentially write the given files to this `writer`.
 pub async fn send_files(
-    offer: Vec<FileMetaLocal>,
-    response: FileResponseMsg,
+    offer: LocalFileOffer,
+    response: FileRequestsMsg,
     writer: &mut EncryptedStream<tokio::net::TcpStream>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let len = FileOfferMsg::from(offer.clone()).get_transfer_size(&response)?;
+    let len = offer.offer.get_transfer_size(&response)?;
     let progress_bar = create_progress_bar(len);
     let mut current_file = String::from("Starting...");
 
@@ -39,7 +39,7 @@ pub async fn send_files(
 /// will be saved.
 pub async fn receive_files(
     offer: FileOfferMsg,
-    response: FileResponseMsg,
+    response: FileRequestsMsg,
     save_dir: &std::path::Path,
     reader: &mut EncryptedStream<tokio::net::TcpStream>,
 ) -> Result<(), Box<dyn std::error::Error>> {

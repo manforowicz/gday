@@ -1,8 +1,7 @@
-use crate::{server_connector::ServerConnection, Error};
+use crate::{Error, server_connector::ServerConnection};
 use gday_contact_exchange_protocol::{
-    read_from_async, write_to_async, ClientMsg, FullContact, ServerMsg,
+    ClientMsg, FullContact, ServerMsg, read_from_async, write_to_async,
 };
-use sha2::Digest;
 use std::future::Future;
 
 /// Shares contacts on `room_code` in the gday server
@@ -11,26 +10,19 @@ use std::future::Future;
 /// If `is_creator`, tries creating the room, otherwise tries joining it.
 ///
 /// Returns
-/// - Your [`FullContact`], as
-///   determined by the server
-/// - A future that when awaited will evaluate to
-///   the peer's [`FullContact`].
-pub async fn share_contacts<'a>(
-    server_connection: &'a mut ServerConnection,
-    room_code: &[u8],
+/// - Your [`FullContact`], as determined by the server
+/// - A future that when awaited will evaluate to the peer's [`FullContact`].
+pub async fn share_contacts(
+    server_connection: &mut ServerConnection,
+    room_code: String,
     is_creator: bool,
 ) -> Result<
     (
         FullContact,
-        impl Future<Output = Result<FullContact, Error>> + 'a,
+        impl Future<Output = Result<FullContact, Error>> + '_,
     ),
     Error,
 > {
-    // Hash the `room_code` to get a 32-bit long code
-    let mut hasher = sha2::Sha256::new();
-    hasher.update(room_code);
-    let room_code: [u8; 32] = hasher.finalize().into();
-
     // set reuse addr and reuse port, so that these sockets
     // can be later reused for hole punching
     server_connection.enable_reuse()?;
@@ -40,7 +32,13 @@ pub async fn share_contacts<'a>(
         let messenger = &mut server_connection.streams()[0];
 
         // try creating a room in the server
-        write_to_async(ClientMsg::CreateRoom { room_code }, messenger).await?;
+        write_to_async(
+            ClientMsg::CreateRoom {
+                room_code: room_code.clone(),
+            },
+            messenger,
+        )
+        .await?;
         let response: ServerMsg = read_from_async(messenger).await?;
         if response != ServerMsg::RoomCreated {
             return Err(Error::UnexpectedServerReply(response));
@@ -58,7 +56,7 @@ pub async fn share_contacts<'a>(
 /// returns its response.
 async fn share_contact(
     connection: &mut ServerConnection,
-    room_code: [u8; 32],
+    room_code: String,
     is_creator: bool,
 ) -> Result<FullContact, Error> {
     let local_contact = connection.local_contact()?;
@@ -70,7 +68,7 @@ async fn share_contact(
     // public address
     for stream in &mut streams {
         let msg = ClientMsg::RecordPublicAddr {
-            room_code,
+            room_code: room_code.clone(),
             is_creator,
         };
         write_to_async(msg, stream).await?;

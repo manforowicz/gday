@@ -1,7 +1,6 @@
 [package]
 name = "gday_contact_exchange_protocol"
 description = "Protocol for peers to exchange their socket addresses via a server."
-homepage = "https://github.com/manforowicz/gday/tree/main/gday_contact_exchange_protocol"
 categories = ["network-programming"]
 
 # Inherit these keys from workspace toml
@@ -14,10 +13,10 @@ version.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-serde = { version = "1.0.215", features = ["derive"] }
-serde_json = "1.0.133"
-thiserror = "2.0.3"
-tokio = { version = "1.41.1", features = ["io-util"] }
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.140"
+thiserror = "2.0.12"
+tokio = { version = "1.45.1", features = ["io-util"] }
 
 [dev-dependencies]
-tokio = { version = "1.41.1", features = ["test-util", "macros"] }
+tokio = { version = "1.45.1", features = ["test-util", "macros"] }

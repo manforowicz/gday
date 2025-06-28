@@ -1,7 +1,6 @@
 [package]
 name = "gday_file_transfer"
 description = "Protocol to securely transfer files over an encrypted IO stream."
-homepage = "https://github.com/manforowicz/gday/tree/main/gday_file_transfer"
 categories = ["network-programming"]
 
 # Inherit these keys from workspace toml
@@ -14,13 +13,14 @@ version.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-os_str_bytes = "7.0.0"
-pin-project = "1.1.7"
-serde = { version = "1.0.215", features = ["derive"] }
-serde_json = "1.0.133"
-thiserror = "2.0.3"
-tokio = { version = "1.41.1", features = ["io-util"] }
+os_str_bytes = "7.1.1"
+pin-project = "1.1.10"
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.140"
+thiserror = "2.0.12"
+tokio = { version = "1.45.1", features = ["io-util"] }
 
 [dev-dependencies]
-tempfile = "3.14.0"
-tokio = { version = "1.41.1", features = ["macros"] }
+dir-diff = "0.3.3"
+tempfile = "3.20.0"
+tokio = { version = "1.45.1", features = ["macros", "rt-multi-thread", "net", "time"] }

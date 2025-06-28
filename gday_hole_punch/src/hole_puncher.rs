@@ -19,20 +19,22 @@ const RETRY_INTERVAL: Duration = Duration::from_millis(200);
 /// Tries to connect to the other peer using
 /// [TCP hole punching](https://en.wikipedia.org/wiki/TCP_hole_punching).
 ///
-/// Call this function _after_ you've gotten the peer's contacts with [`crate::share_contacts()`].
+/// Call this function _after_ you've gotten the peer's contacts with
+/// [`crate::share_contacts()`].
 ///
 /// Arguments:
-/// - `local_contact` should be the `local` field of your [`FullContact`]
-///   that [`crate::share_contacts()`] returned.
-/// - `peer_contact` should be the peer's [`FullContact`] returned by the future from [`crate::share_contacts()`].
+/// - `local_contact` should be the `local` field of your [`FullContact`] that
+///   [`crate::share_contacts()`] returned.
+/// - `peer_contact` should be the peer's [`FullContact`] returned by the future
+///   from [`crate::share_contacts()`].
 /// - `shared_secret` should be a secret that both peers know.
 ///   It will be used to verify the peer's identity, and derive a stronger shared key
 ///   using [SPAKE2](https://docs.rs/spake2/).
 ///
 /// Returns:
 /// - An authenticated [`std::net::TcpStream`] connected to the other peer.
-/// - A `[u8; 32]` shared key that was derived using
-///     [SPAKE2](https://docs.rs/spake2/) from the weaker `shared_secret`.
+/// - A `[u8; 32]` shared key that was derived using [SPAKE2](https://docs.rs/spake2/)
+///   from the weaker `shared_secret`.
 pub async fn try_connect_to_peer(
     local_contact: Contact,
     peer_contact: FullContact,

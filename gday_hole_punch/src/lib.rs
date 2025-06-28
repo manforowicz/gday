@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+#![warn(clippy::all)]
 //! Lets 2 peers, possibly behind [NAT (network address translation)](https://en.wikipedia.org/wiki/Network_address_translation),
 //! try to establish a direct authenticated TCP connection.
 //! Uses [TCP hole punching](https://en.wikipedia.org/wiki/TCP_hole_punching)
@@ -19,26 +21,22 @@
 //! //////// Peer 1 ////////
 //!
 //! // Connect to a random server in the default server list
-//! let (mut server_connection, server_id) = server_connector::connect_to_random_server(
-//!     server_connector::DEFAULT_SERVERS,
-//!     timeout,
-//! ).await?;
+//! let (mut server_connection, server_id) =
+//!     server_connector::connect_to_random_server(server_connector::DEFAULT_SERVERS, timeout)
+//!         .await?;
 //!
 //! // PeerCode useful for giving rendezvous info to peer,
 //! // over an existing channel like email.
 //! let peer_code = PeerCode {
 //!     server_id,
 //!     room_code: "roomcode".to_string(),
-//!     shared_secret: "shared_secret".to_string()
+//!     shared_secret: "shared_secret".to_string(),
 //! };
 //! let code_to_share = String::try_from(&peer_code)?;
 //!
 //! // Create a room in the server, and get my contact from it
-//! let (my_contact, peer_contact_future) = share_contacts(
-//!     &mut server_connection,
-//!     peer_code.room_code.as_bytes(),
-//!     true,
-//! ).await?;
+//! let (my_contact, peer_contact_future) =
+//!     share_contacts(&mut server_connection, peer_code.room_code, true).await?;
 //!
 //! // Wait for the server to send the peer's contact
 //! let peer_contact = peer_contact_future.await?;
@@ -50,7 +48,8 @@
 //!     my_contact.local,
 //!     peer_contact,
 //!     peer_code.shared_secret.as_bytes(),
-//! ).await?;
+//! )
+//! .await?;
 //!
 //! //////// Peer 2 (on a different computer) ////////
 //!
@@ -63,14 +62,12 @@
 //!     server_connector::DEFAULT_SERVERS,
 //!     peer_code.server_id,
 //!     timeout,
-//! ).await?;
+//! )
+//! .await?;
 //!
 //! // Join the same room in the server, and get my local contact
-//! let (my_contact, peer_contact_future) = share_contacts(
-//!     &mut server_connection,
-//!     peer_code.room_code.as_bytes(),
-//!     false,
-//! ).await?;
+//! let (my_contact, peer_contact_future) =
+//!     share_contacts(&mut server_connection, peer_code.room_code, false).await?;
 //!
 //! let peer_contact = peer_contact_future.await?;
 //!
@@ -78,14 +75,12 @@
 //!     my_contact.local,
 //!     peer_contact,
 //!     peer_code.shared_secret.as_bytes(),
-//! ).await?;
+//! )
+//! .await?;
 //!
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! # }).unwrap();
 //! ```
-//!
-#![forbid(unsafe_code)]
-#![warn(clippy::all)]
 
 mod contact_sharer;
 mod hole_puncher;
@@ -121,7 +116,8 @@ pub enum Error {
     #[error("Both `v4` and `v6` fields of a ServerConnection were None.")]
     ServerConnectionEmpty,
 
-    /// ServerConnection has mismatched streams. Either v4 had an IPv6 stream, or vice-versa.
+    /// ServerConnection has mismatched streams. Either v4 had an IPv6 stream,
+    /// or vice-versa.
     #[error(
         "ServerConnection has mismatched streams. Either v4 had an IPv6 stream, or vice-versa."
     )]
@@ -153,8 +149,8 @@ pub enum Error {
     #[error("Invalid server DNS name for TLS: {0}")]
     InvalidDNSName(#[from] tokio_rustls::rustls::pki_types::InvalidDnsNameError),
 
-    /// Timed out while trying to connect to peer, likely due to an uncooperative
-    /// NAT (network address translator).
+    /// Timed out while trying to connect to peer, likely due to an
+    /// uncooperative NAT (network address translator).
     #[error(
         "Timed out while trying to connect to peer, likely due to an uncooperative \
     NAT (network address translator). \

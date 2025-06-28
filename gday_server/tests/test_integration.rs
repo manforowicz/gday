@@ -3,7 +3,7 @@
 
 use std::io::Read;
 
-use gday_contact_exchange_protocol::{read_from, write_to, ClientMsg, Contact, ServerMsg};
+use gday_contact_exchange_protocol::{ClientMsg, Contact, ServerMsg, read_from, write_to};
 
 #[tokio::test]
 async fn test_integration() {
@@ -17,7 +17,7 @@ async fn test_integration() {
         request_limit: 10,
         verbosity: log::LevelFilter::Off,
     };
-    let (server_addrs, _joinset) = gday_server::start_server(args).unwrap();
+    let (server_addrs, _handle) = gday_server::start_server(args).unwrap();
     let server_ipv4 = *server_addrs.iter().find(|a| a.is_ipv4()).unwrap();
     let server_ipv6 = *server_addrs.iter().find(|a| a.is_ipv6()).unwrap();
 
@@ -39,7 +39,7 @@ async fn test_integration() {
         // successfully create a room
         write_to(
             ClientMsg::CreateRoom {
-                room_code: [123; 32],
+                room_code: "room code 1".to_string(),
             },
             &mut stream_v4,
         )
@@ -50,7 +50,7 @@ async fn test_integration() {
         // room taken
         write_to(
             ClientMsg::CreateRoom {
-                room_code: [123; 32],
+                room_code: "room code 1".to_string(),
             },
             &mut stream_v4,
         )
@@ -61,7 +61,7 @@ async fn test_integration() {
         // room doesn't exist
         write_to(
             ClientMsg::RecordPublicAddr {
-                room_code: [234; 32],
+                room_code: "room code 2".to_string(),
                 is_creator: true,
             },
             &mut stream_v6,
@@ -73,7 +73,7 @@ async fn test_integration() {
         // record public address
         write_to(
             ClientMsg::RecordPublicAddr {
-                room_code: [123; 32],
+                room_code: "room code 1".to_string(),
                 is_creator: true,
             },
             &mut stream_v4,
@@ -85,7 +85,7 @@ async fn test_integration() {
         // record public address
         write_to(
             ClientMsg::RecordPublicAddr {
-                room_code: [123; 32],
+                room_code: "room code 1".to_string(),
                 is_creator: false,
             },
             &mut stream_v6,
@@ -98,7 +98,7 @@ async fn test_integration() {
         write_to(
             ClientMsg::ReadyToShare {
                 local_contact: local_contact_1,
-                room_code: [123; 32],
+                room_code: "room code 1".to_string(),
                 is_creator: true,
             },
             &mut stream_v4,
@@ -113,7 +113,7 @@ async fn test_integration() {
         // can't update client once it is done
         write_to(
             ClientMsg::RecordPublicAddr {
-                room_code: [123; 32],
+                room_code: "room code 1".to_string(),
                 is_creator: true,
             },
             &mut stream_v6,
@@ -125,7 +125,7 @@ async fn test_integration() {
         // successfully create an unrelated room
         write_to(
             ClientMsg::CreateRoom {
-                room_code: [234; 32],
+                room_code: "room code 2".to_string(),
             },
             &mut stream_v6,
         )
@@ -137,7 +137,7 @@ async fn test_integration() {
         write_to(
             ClientMsg::ReadyToShare {
                 local_contact: local_contact_2,
-                room_code: [123; 32],
+                room_code: "room code 1".to_string(),
                 is_creator: false,
             },
             &mut stream_v6,
@@ -166,7 +166,7 @@ async fn test_integration() {
         // ensure the room was closed, and can be reopened
         write_to(
             ClientMsg::CreateRoom {
-                room_code: [123; 32],
+                room_code: "room code 1".to_string(),
             },
             &mut stream_v4,
         )
@@ -190,7 +190,7 @@ async fn test_request_limit() {
         request_limit: 10,
         verbosity: log::LevelFilter::Off,
     };
-    let (server_addrs, _joinset) = gday_server::start_server(args).unwrap();
+    let (server_addrs, _handle) = gday_server::start_server(args).unwrap();
     let server_ipv4 = *server_addrs.iter().find(|a| a.is_ipv4()).unwrap();
     let server_ipv6 = *server_addrs.iter().find(|a| a.is_ipv6()).unwrap();
 
@@ -203,7 +203,7 @@ async fn test_request_limit() {
             // successfully create a room
             write_to(
                 ClientMsg::CreateRoom {
-                    room_code: [room_code; 32],
+                    room_code: format!("{room_code}"),
                 },
                 &mut stream_v4,
             )
@@ -215,7 +215,7 @@ async fn test_request_limit() {
         // request limit hit
         write_to(
             ClientMsg::CreateRoom {
-                room_code: [11; 32],
+                room_code: "11".to_string(),
             },
             &mut stream_v4,
         )
@@ -229,7 +229,7 @@ async fn test_request_limit() {
         // ensure other connections are unaffected
         write_to(
             ClientMsg::CreateRoom {
-                room_code: [200; 32],
+                room_code: "other room code".to_string(),
             },
             &mut stream_v6,
         )

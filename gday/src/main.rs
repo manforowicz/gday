@@ -1,20 +1,24 @@
-//! Command line tool to securely send files (without a relay or port forwarding).
 #![forbid(unsafe_code)]
 #![warn(clippy::all)]
+//! Command line tool to securely send files (without a relay or port
+//! forwarding).
 
 mod dialog;
 mod transfer;
 
-use crate::dialog::ask_receive;
+use anstream::println;
+use anstyle::{AnsiColor, Color, Style};
 use clap::{Parser, Subcommand};
 use gday_encryption::EncryptedStream;
-use gday_file_transfer::{read_from_async, write_to_async, FileOfferMsg, FileResponseMsg};
+use gday_file_transfer::{FileOfferMsg, FileRequestsMsg, read_from_async, write_to_async};
 use gday_hole_punch::server_connector::{self, DEFAULT_SERVERS};
-use gday_hole_punch::{share_contacts, PeerCode};
-use log::error;
-use log::info;
-use owo_colors::OwoColorize;
+use gday_hole_punch::{PeerCode, share_contacts};
+use log::{error, info};
 use std::path::PathBuf;
+
+const BOLD: Style = Style::new().bold();
+const GREEN: Style = BOLD.fg_color(Some(Color::Ansi(AnsiColor::Green)));
+const RED: Style = BOLD.fg_color(Some(Color::Ansi(AnsiColor::Red)));
 
 /// How long to try hole punching before giving up.
 const HOLE_PUNCH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
@@ -67,7 +71,8 @@ enum Command {
 
     /// Receive files.
     Get {
-        /// The code your peer gave you (of form "server_id.room_code.shared_secret")
+        /// The code your peer gave you (of form
+        /// "server_id.room_code.shared_secret")
         code: PeerCode,
 
         /// Directory where to save the files.
@@ -158,25 +163,23 @@ async fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
             };
 
             // get metadata about the files to transfer
-            let local_files = gday_file_transfer::get_file_metas(&paths)?;
-            let offer_msg = FileOfferMsg::from(local_files.clone());
+            let local_file_offer = gday_file_transfer::create_file_offer(&paths)?;
 
             // confirm the user wants to send these files
-            if !dialog::confirm_send(&offer_msg)? {
+            if !dialog::confirm_send(&local_file_offer.offer)? {
                 println!("Cancelled.");
                 return Ok(());
             }
 
             // create a room in the server
             let (my_contact, peer_contact_fut) =
-                share_contacts(&mut server_connection, peer_code.room_code.as_bytes(), true)
-                    .await?;
+                share_contacts(&mut server_connection, peer_code.room_code.clone(), true).await?;
 
             info!("Your contact is:\n{my_contact}");
 
             println!(
-                "Tell your mate to run \"gday get {}\"",
-                String::try_from(&peer_code)?.bold()
+                "Tell your mate to run \"gday get {BOLD}{}{BOLD:#}\"",
+                String::try_from(&peer_code)?
             );
 
             // get peer's contact
@@ -203,12 +206,12 @@ async fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
             info!("Established authenticated encrypted connection with peer.");
 
             // offer these files to the peer
-            write_to_async(offer_msg, &mut stream).await?;
+            write_to_async(&local_file_offer.offer, &mut stream).await?;
 
             println!("File offer sent to mate. Waiting on response.");
 
             // receive response from peer
-            let response: FileResponseMsg = read_from_async(&mut stream).await?;
+            let response: FileRequestsMsg = read_from_async(&mut stream).await?;
 
             // Total number of files accepted
             let num_accepted = response.get_num_not_rejected();
@@ -219,7 +222,7 @@ async fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
             println!(
                 "Your mate accepted {}/{} files",
                 num_accepted,
-                local_files.len()
+                local_file_offer.offer.offer.len()
             );
 
             if resumptions != 0 {
@@ -227,7 +230,7 @@ async fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
             }
 
             if num_accepted != 0 {
-                transfer::send_files(local_files, response, &mut stream).await?;
+                transfer::send_files(local_file_offer, response, &mut stream).await?;
             }
         }
 
@@ -245,7 +248,7 @@ async fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
             };
 
             let (my_contact, peer_contact_fut) =
-                share_contacts(&mut server_connection, code.room_code.as_bytes(), false).await?;
+                share_contacts(&mut server_connection, code.room_code, false).await?;
 
             info!("Your contact is:\n{my_contact}");
 
@@ -274,7 +277,7 @@ async fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
             // receive file offer from peer
             let offer: FileOfferMsg = read_from_async(&mut stream).await?;
 
-            let response = ask_receive(&offer, &path)?;
+            let response = dialog::ask_receive(&offer, &path)?;
 
             // respond to the file offer
             write_to_async(&response, &mut stream).await?;

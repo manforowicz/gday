@@ -2,11 +2,12 @@
 #![warn(clippy::all)]
 
 use criterion::BatchSize;
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use gday_encryption::EncryptedStream;
-use rand::rngs::StdRng;
 use rand::RngCore;
 use rand::SeedableRng;
+use rand::rngs::StdRng;
+use std::hint::black_box;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 fn encryption_bench(c: &mut Criterion) {

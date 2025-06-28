@@ -1,7 +1,6 @@
 [package]
 name = "gday_server"
 description = "Server that lets 2 peers exchange their socket addresses."
-homepage = "https://github.com/manforowicz/gday/tree/main/gday_server"
 categories = ["command-line-utilities"]
 
 # Inherit these keys from workspace toml
@@ -14,12 +13,13 @@ version.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-clap = { version = "4.5.21", features = ["derive"] }
-socket2 = { version = "0.5.8" }
-tokio = { version = "1.41.1", features = ["rt-multi-thread", "macros", "net", "time", "sync"] }
-tokio-rustls = { version = "0.26.0" }
-gday_contact_exchange_protocol = { version = "0.3.0", path = "../gday_contact_exchange_protocol" }
-thiserror = "2.0.3"
-log = "0.4.22"
-env_logger = "0.11.5"
+clap = { version = "4.5.40", features = ["derive"] }
+socket2 = { version = "0.5.10" }
+tokio = { version = "1.45.1", features = ["rt-multi-thread", "macros", "net", "time", "sync"] }
+tokio-rustls = { version = "0.26.2" }
+gday_contact_exchange_protocol = { version = "0.4.0", path = "../gday_contact_exchange_protocol" }
+thiserror = "2.0.12"
+log = "0.4.27"
+env_logger = "0.11.8"
 rustls-pemfile = "2.2.0"
+anyhow = "1.0.98"

@@ -13,10 +13,10 @@ use tokio::{sync::oneshot, time::MissedTickBehavior};
 struct Client {
     /// Contact info of this client
     contact: FullContact,
-    /// - `None` if the other peer isn't done and
-    ///     isn't ready to receive this peer's contacts.
-    /// - `Some` if the other peer is done and
-    ///     ready to receive this peer's contacts.
+    /// - `None` if the other peer isn't done and isn't ready to receive this
+    ///   peer's contacts.
+    /// - `Some` if the other peer is done and ready to receive this peer's
+    ///   contacts.
     ///
     /// Once this peer is done, and `contact_sender` isn't `None`,
     /// this sender sends [`Self::contact`].
@@ -61,7 +61,7 @@ impl Room {
 #[derive(Clone, Debug)]
 pub struct State {
     /// Maps room code to rooms
-    rooms: Arc<Mutex<HashMap<[u8; 32], Room>>>,
+    rooms: Arc<Mutex<HashMap<String, Room>>>,
 
     /// Maps IP addresses to the number of critical
     /// requests they sent this minute.
@@ -108,10 +108,10 @@ impl State {
 
     /// Creates a new room with `room_code`.
     ///
-    /// - Returns [`Error::TooManyRequests`] if `origin`'s
-    ///   request limit is exceeded.
+    /// - Returns [`Error::TooManyRequests`] if `origin`'s request limit is
+    ///   exceeded.
     /// - Returns [`Error::RoomCodeTaken`] if the room already exists.
-    pub fn create_room(&mut self, room_code: [u8; 32], origin: IpAddr) -> Result<(), Error> {
+    pub fn create_room(&mut self, room_code: String, origin: IpAddr) -> Result<(), Error> {
         self.increment_request_count(origin)?;
 
         {
@@ -121,7 +121,7 @@ impl State {
             if rooms.contains_key(&room_code) {
                 return Err(Error::RoomCodeTaken);
             }
-            rooms.insert(room_code, Room::default());
+            rooms.insert(room_code.to_string(), Room::default());
         }
 
         // spawn a thread that will remove this
@@ -139,14 +139,15 @@ impl State {
         Ok(())
     }
 
-    /// Updates the contact information of a client in the room with `room_code`.
+    /// Updates the contact information of a client in the room with
+    /// `room_code`.
     ///
     /// - Returns [`Error::NoSuchRoomCode`] if no room with `room_code` exists.
-    /// - Returns [`Error::TooManyRequests`] if `origin`'s
-    ///   request limit is exceeded.
+    /// - Returns [`Error::TooManyRequests`] if `origin`'s request limit is
+    ///   exceeded.
     pub fn update_client(
         &mut self,
-        room_code: [u8; 32],
+        room_code: &str,
         is_creator: bool,
         endpoint: SocketAddr,
         public: bool,
@@ -154,7 +155,7 @@ impl State {
     ) -> Result<(), Error> {
         // get the room
         let mut rooms = self.rooms.lock().expect("Couldn't acquire state lock.");
-        let Some(room) = rooms.get_mut(&room_code) else {
+        let Some(room) = rooms.get_mut(room_code) else {
             drop(rooms);
             self.increment_request_count(origin)?;
             return Err(Error::NoSuchRoomCode);
@@ -193,16 +194,16 @@ impl State {
     /// [`oneshot::Receiver`] that will send the other peer's contact info
     /// once that peer is also ready.
     ///
-    /// - Returns [`Error::TooManyRequests`] if the max
-    ///   allowable number of requests per minute is exceeded.
+    /// - Returns [`Error::TooManyRequests`] if the max allowable number of
+    ///   requests per minute is exceeded.
     pub fn set_client_done(
         &mut self,
-        room_code: [u8; 32],
+        room_code: &str,
         is_creator: bool,
         origin: IpAddr,
     ) -> Result<(FullContact, oneshot::Receiver<FullContact>), Error> {
         let mut rooms = self.rooms.lock().expect("Couldn't acquire state lock.");
-        let Some(room) = rooms.get_mut(&room_code) else {
+        let Some(room) = rooms.get_mut(room_code) else {
             drop(rooms);
             self.increment_request_count(origin)?;
             return Err(Error::NoSuchRoomCode);
@@ -235,7 +236,7 @@ impl State {
                         .expect("Unrecoverable: RX dropped!");
 
                     // remove their room
-                    rooms.remove(&room_code);
+                    rooms.remove(room_code);
                 }
             }
         }
@@ -245,8 +246,8 @@ impl State {
 
     /// Increments the request count of this IP address.
     ///
-    /// Returns an [`Error::TooManyRequests`] if [`State::max_requests_per_minute`]
-    /// is exceeded.
+    /// Returns an [`Error::TooManyRequests`] if
+    /// [`State::max_requests_per_minute`] is exceeded.
     fn increment_request_count(&self, ip: IpAddr) -> Result<(), Error> {
         let mut request_counts = self
             .request_counts
@@ -324,65 +325,65 @@ mod tests {
             },
         };
 
-        const ROOM: [u8; 32] = *b"hduejdlameu7493mzajfjdlf;sdafsda";
+        let room = "room code";
 
         // Client 1 creates a new room
-        state1.create_room(ROOM, origin1).unwrap();
+        state1.create_room(room.to_string(), origin1).unwrap();
 
         // Verify that a room with the same ID
         // can't be created
         assert!(matches!(
-            state2.create_room(ROOM, origin2),
+            state2.create_room(room.to_string(), origin2),
             Err(Error::RoomCodeTaken)
         ));
 
         // Client 1 sends over their contact info
         if let Some(addr) = contact1.local.v4 {
             state1
-                .update_client(ROOM, true, addr.into(), false, origin1)
+                .update_client(room, true, addr.into(), false, origin1)
                 .unwrap();
         }
         if let Some(addr) = contact1.local.v6 {
             state1
-                .update_client(ROOM, true, addr.into(), false, origin1)
+                .update_client(room, true, addr.into(), false, origin1)
                 .unwrap();
         }
         if let Some(addr) = contact1.public.v4 {
             state1
-                .update_client(ROOM, true, addr.into(), true, origin1)
+                .update_client(room, true, addr.into(), true, origin1)
                 .unwrap();
         }
         if let Some(addr) = contact1.public.v6 {
             state1
-                .update_client(ROOM, true, addr.into(), true, origin1)
+                .update_client(room, true, addr.into(), true, origin1)
                 .unwrap();
         }
 
         // Client 2 sends over their contact info
         if let Some(addr) = contact2.local.v4 {
             state1
-                .update_client(ROOM, false, addr.into(), false, origin2)
+                .update_client(room, false, addr.into(), false, origin2)
                 .unwrap();
         }
         if let Some(addr) = contact2.local.v6 {
             state1
-                .update_client(ROOM, false, addr.into(), false, origin2)
+                .update_client(room, false, addr.into(), false, origin2)
                 .unwrap();
         }
         if let Some(addr) = contact2.public.v4 {
             state1
-                .update_client(ROOM, false, addr.into(), true, origin2)
+                .update_client(room, false, addr.into(), true, origin2)
                 .unwrap();
         }
         if let Some(addr) = contact2.public.v6 {
             state1
-                .update_client(ROOM, false, addr.into(), true, origin2)
+                .update_client(room, false, addr.into(), true, origin2)
                 .unwrap();
         }
 
-        let (reported_contact1, rx1) = state1.set_client_done(ROOM, true, origin1).unwrap();
+        let (reported_contact1, rx1) = state1.set_client_done(room, true, origin1).unwrap();
 
-        let (reported_contact2, rx2) = state2.set_client_done(ROOM, false, origin2).unwrap();
+        let (reported_contact2, rx2) = state2.set_client_done(room, false, origin2).unwrap();
 
         assert_eq!(reported_contact1, contact1);
         assert_eq!(reported_contact2, contact2);
@@ -401,15 +402,17 @@ mod tests {
 
         // 100 requests
         for i in 1..=100 {
-            state1.create_room([i; 32], origin1).unwrap();
+            state1.create_room(format!("{i}"), origin1).unwrap();
 
             // unrelated requests that shouldn't hit limit
-            state2.create_room([i + 100; 32], origin2).unwrap();
+            state2
+                .create_room(format!("{i}-unrelated"), origin2)
+                .unwrap();
         }
 
         // 101th request should hit limit
         assert!(matches!(
-            state2.create_room([101; 32], origin1),
+            state2.create_room("101".to_string(), origin1),
             Err(Error::TooManyRequests)
         ));
     }
@@ -424,26 +427,26 @@ mod tests {
 
         let example_endpoint = "12.213.31.13:342".parse().unwrap();
 
-        const ROOM: [u8; 32] = *b"jkfd;ew8t9spfjsdiafdjsafadsafdsa";
+        let room = "room code";
 
-        state1.create_room(ROOM, origin1).unwrap();
+        state1.create_room(room.to_string(), origin1).unwrap();
 
         // Confirm this room is taken
         assert!(matches!(
-            state2.create_room(ROOM, origin2),
+            state2.create_room(room.to_string(), origin2),
             Err(Error::RoomCodeTaken)
         ));
 
         // confirm that this room works
         state2
-            .update_client(ROOM, false, example_endpoint, true, origin2)
+            .update_client(room, false, example_endpoint, true, origin2)
             .unwrap();
 
         // wait for the room to time out
         tokio::time::sleep(Duration::from_millis(300)).await;
 
         // confirm this room has been removed
-        let result = state2.update_client(ROOM, false, example_endpoint, false, origin2);
+        let result = state2.update_client(room, false, example_endpoint, false, origin2);
         assert!(matches!(result, Err(Error::NoSuchRoomCode)))
     }
 }
