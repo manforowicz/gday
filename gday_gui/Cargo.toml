@@ -1,0 +1,20 @@
+[package]
+name = "gday_gui"
+description = "GUI to securely send files (without a relay or port forwarding)."
+categories = ["GUI", "network-programming", "filesystem"]
+
+# Inherit these keys from workspace toml
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+version.workspace = true
+
+[dependencies]
+gday_encryption = { version = "0.4.0", path = "../gday_encryption" }
+gday_file_transfer = { version = "0.4.0", path = "../gday_file_transfer" }
+gday_hole_punch = { version = "0.4.0", path = "../gday_hole_punch" }
+eframe = "0.32.1"
+egui = "0.32.1"
+rfd = "0.15.4"
+tokio = "1.47.1"

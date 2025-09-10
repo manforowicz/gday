@@ -61,7 +61,7 @@ impl HelperBuf {
 
     /// Returns a mutable [`aead::Buffer`] view into the part of this
     /// buffer starting at index `i`.
-    pub fn split_off_aead_buf(&mut self, i: usize) -> HelperBufPart {
+    pub fn split_off_aead_buf<'a>(&'a mut self, i: usize) -> HelperBufPart<'a> {
         let start_i = self.l_cursor + i;
         HelperBufPart {
             parent: self,

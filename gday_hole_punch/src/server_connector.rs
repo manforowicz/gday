@@ -7,9 +7,11 @@ use socket2::SockRef;
 use std::fmt::Debug;
 use std::io::ErrorKind;
 use std::net::SocketAddr::{V4, V6};
-use std::{net::SocketAddr, sync::Arc, time::Duration};
+use std::time::Duration;
+use std::{net::SocketAddr, sync::Arc};
 use tokio::io::AsyncWriteExt;
 use tokio::net::{TcpStream, ToSocketAddrs};
+use tokio::task::JoinSet;
 
 pub use gday_contact_exchange_protocol::DEFAULT_PORT;
 
@@ -54,10 +56,9 @@ pub struct ServerInfo {
 /// A TCP or TLS stream to a server.
 #[pin_project::pin_project(project = EnumProj)]
 #[derive(Debug)]
-#[allow(clippy::large_enum_variant)]
 pub enum ServerStream {
     TCP(#[pin] tokio::net::TcpStream),
-    TLS(#[pin] tokio_rustls::client::TlsStream<tokio::net::TcpStream>),
+    TLS(#[pin] Box<tokio_rustls::client::TlsStream<tokio::net::TcpStream>>),
 }
 
 impl ServerStream {
@@ -82,7 +83,7 @@ impl ServerStream {
         let _ = sock.set_reuse_address(true);
 
         // socket2 only supports this method on these systems
-        #[cfg(all(unix, not(any(target_os = "solaris", target_os = "illumos"))))]
+        #[cfg(not(any(target_os = "solaris", target_os = "illumos", target_os = "cygwin")))]
         let _ = sock.set_reuse_port(true);
     }
 }
@@ -230,7 +231,7 @@ impl ServerConnection {
 ///
 /// Ignores servers that don't have `prefer == true`.
 /// Connects to port [`DEFAULT_PORT`] via TLS.
-/// Tries the next server after `timeout` time.
+/// Each connection attempt (IPv4 & IPv6) times out after 5 seconds.
 ///
 /// Returns
 /// - The [`ServerConnection`] of the first successful connection.
@@ -239,7 +240,6 @@ impl ServerConnection {
 /// Returns an error if all connection attempts failed.
 pub async fn connect_to_random_server(
     servers: &[ServerInfo],
-    timeout: Duration,
 ) -> Result<(ServerConnection, u64), Error> {
     // Filter out non-preferred servers
     let preferred: Vec<&ServerInfo> = servers.iter().filter(|s| s.prefer).collect();
@@ -248,7 +248,7 @@ pub async fn connect_to_random_server(
     let preferred_names: Vec<&str> = preferred.iter().map(|s| s.domain_name).collect();
 
     // Try connecting to the them in a random order
-    let (conn, i) = connect_to_random_domain_name(&preferred_names, timeout).await?;
+    let (conn, i) = connect_to_random_domain_name(&preferred_names).await?;
     Ok((conn, preferred[i].id))
 }
 
@@ -257,25 +257,24 @@ pub async fn connect_to_random_server(
 /// You may pass [`DEFAULT_SERVERS`] as `servers`.
 ///
 /// Connects to port [`DEFAULT_PORT`] via TLS.
-/// Gives up after `timeout` time.
+/// Each connection attempt (IPv4 & IPv6) times out after 5 seconds.
 ///
 /// Returns an error if `servers` contains no server with id `server_id` or
 /// connecting to the server fails.
 pub async fn connect_to_server_id(
     servers: &[ServerInfo],
     server_id: u64,
-    timeout: Duration,
 ) -> Result<ServerConnection, Error> {
     let Some(server) = servers.iter().find(|server| server.id == server_id) else {
         return Err(Error::ServerIDNotFound(server_id));
     };
-    connect_tls(server.domain_name.to_string(), DEFAULT_PORT, timeout).await
+    connect_tls(server.domain_name.to_string(), DEFAULT_PORT).await
 }
 
 /// In random order, sequentially tries connecting to the given `domain_names`.
 ///
 /// Connects to port [`DEFAULT_PORT`] via TLS.
-/// Tries the next connection after `timeout` time.
+/// Each connection attempt (IPv4 & IPv6) times out after 5 seconds.
 ///
 /// Returns
 /// - The [`ServerConnection`] of the first successful connection.
@@ -285,7 +284,6 @@ pub async fn connect_to_server_id(
 /// Returns an error only if all connection attempts failed.
 pub async fn connect_to_random_domain_name(
     domain_names: &[&str],
-    timeout: Duration,
 ) -> Result<(ServerConnection, usize), Error> {
     let mut indices: Vec<usize> = (0..domain_names.len()).collect();
     indices.shuffle(&mut rand::rng());
@@ -294,7 +292,7 @@ pub async fn connect_to_random_domain_name(
 
     for i in indices {
         let server = domain_names[i];
-        match connect_tls(server.to_string(), DEFAULT_PORT, timeout).await {
+        match connect_tls(server.to_string(), DEFAULT_PORT).await {
             Ok(streams) => return Ok((streams, i)),
             Err(err) => {
                 recent_error = err;
@@ -313,19 +311,14 @@ pub async fn connect_to_random_domain_name(
 /// Tries to TLS connect to `domain_name` over both IPv4 and IPv6.
 ///
 /// - Returns a [`ServerConnection`] with all the successful TLS streams.
-/// - Gives up connecting to each TCP address after `timeout` time.
+/// - Each connection attempt (IPv4 & IPv6) times out after 5 seconds.
 /// - Returns an error if couldn't connect to any of IPv4 and IPv6.
 /// - Returns an error for any issues with TLS.
-pub async fn connect_tls(
-    domain_name: String,
-    port: u16,
-    timeout: Duration,
-) -> Result<ServerConnection, Error> {
+pub async fn connect_tls(domain_name: String, port: u16) -> Result<ServerConnection, Error> {
     debug!("Connecting to server '{domain_name}:{port}'");
 
     // Connect to the server over TCP
-    let mut connection: ServerConnection =
-        connect_tcp((domain_name.as_str(), port), timeout).await?;
+    let mut connection: ServerConnection = connect_tcp((domain_name.as_str(), port)).await?;
 
     // wrap the DNS name of the server
     let name = tokio_rustls::rustls::pki_types::ServerName::try_from(domain_name)?;
@@ -339,18 +332,18 @@ pub async fn connect_tls(
         let ServerStream::TCP(tcp_v4) = tcp_v4 else {
             unreachable!()
         };
-        connection.v4 = Some(ServerStream::TLS(
+        connection.v4 = Some(ServerStream::TLS(Box::new(
             connector.connect(name.clone(), tcp_v4).await?,
-        ));
+        )));
     }
 
     if let Some(tcp_v6) = connection.v6 {
         let ServerStream::TCP(tcp_v6) = tcp_v6 else {
             unreachable!()
         };
-        connection.v6 = Some(ServerStream::TLS(
+        connection.v6 = Some(ServerStream::TLS(Box::new(
             connector.connect(name.clone(), tcp_v6).await?,
-        ));
+        )));
     }
 
     Ok(connection)
@@ -359,81 +352,77 @@ pub async fn connect_tls(
 /// Tries to TCP connect to `addrs` over both IPv4 and IPv6.
 ///
 /// - Returns a [`ServerConnection`] with all the successful TCP streams.
-/// - Gives up connecting to each TCP address after `timeout` time.
+/// - Each connection attempt (IPv4 & IPv6) times out after 5 seconds.
 /// - Returns an error if couldn't connect to any of IPv4 and IPv6.
-pub async fn connect_tcp(
-    addrs: impl ToSocketAddrs + Debug,
-    timeout: Duration,
-) -> std::io::Result<ServerConnection> {
-    // Try to get an IPv4 and IPv6 socket address.
-    let mut addr_v4 = None;
-    let mut addr_v6 = None;
+pub async fn connect_tcp(addrs: impl ToSocketAddrs + Debug) -> std::io::Result<ServerConnection> {
+    let mut v4_addrs = Vec::new();
+    let mut v6_addrs = Vec::new();
+
     for addr in tokio::net::lookup_host(&addrs).await? {
-        if addr.is_ipv6() && addr_v6.is_none() {
-            addr_v6 = Some(addr);
-        } else if addr.is_ipv4() && addr_v4.is_none() {
-            addr_v4 = Some(addr);
-        } else if addr_v4.is_some() && addr_v6.is_some() {
-            break;
+        if addr.is_ipv4() {
+            v4_addrs.push(addr);
+        } else if addr.is_ipv6() {
+            v6_addrs.push(addr);
         }
     }
 
-    // try connecting to the first IPv4 address
-    let tcp_v4 = if let Some(addr) = addr_v4 {
-        if let Ok(result) = tokio::time::timeout(timeout, TcpStream::connect(addr)).await {
-            Some(result)
-        } else {
-            Some(Err(std::io::Error::new(
-                ErrorKind::TimedOut,
-                format!("Timed out while trying to connect to server {addrs:?}."),
-            )))
-        }
-    } else {
-        None
-    };
+    let (tcp_v4, tcp_v6) = tokio::join!(connect_family(v4_addrs), connect_family(v6_addrs));
 
-    // try connecting to the first IPv6 addresss
-    let tcp_v6 = if let Some(addr) = addr_v6 {
-        if let Ok(result) = tokio::time::timeout(timeout, TcpStream::connect(addr)).await {
-            Some(result)
-        } else {
-            Some(Err(std::io::Error::new(
-                ErrorKind::TimedOut,
-                format!("Timed out while trying to connect to server {addrs:?}."),
-            )))
-        }
-    } else {
-        None
-    };
-
-    // return an error if couldn't establish any connections
-    if !matches!(tcp_v4, Some(Ok(_))) && !matches!(tcp_v6, Some(Ok(_))) {
-        if let Some(Err(err)) = tcp_v4 {
-            return Err(err);
-        } else if let Some(Err(err)) = tcp_v6 {
-            return Err(err);
-        } else {
-            return Err(std::io::Error::new(
-                ErrorKind::NotFound,
-                format!("Couldn't resolve address {addrs:?}"),
-            ));
-        }
+    if tcp_v6.is_err()
+        && let Err(err_v4) = tcp_v4
+    {
+        return Err(err_v4);
     }
 
     let server_connection = ServerConnection {
-        v4: if let Some(Ok(v4)) = tcp_v4 {
-            Some(ServerStream::TCP(v4))
-        } else {
-            None
-        },
-        v6: if let Some(Ok(v6)) = tcp_v6 {
-            Some(ServerStream::TCP(v6))
-        } else {
-            None
-        },
+        v4: tcp_v4.ok().map(ServerStream::TCP),
+        v6: tcp_v6.ok().map(ServerStream::TCP),
     };
 
     Ok(server_connection)
+}
+
+/// Helper that tries connecting to addresses of the same family (IPv6, IPv4),
+/// staggering each attempt by 500ms.
+/// Returns the first successful connection.
+/// Gives up after 5 seconds.
+async fn connect_family(addrs: Vec<SocketAddr>) -> std::io::Result<TcpStream> {
+    const STAGGER_TIME: Duration = Duration::from_millis(500);
+    const SERVER_TIMEOUT: Duration = Duration::from_secs(5);
+
+    if addrs.is_empty() {
+        return Err(std::io::Error::new(
+            ErrorKind::NotFound,
+            "No addresses resolved.".to_string(),
+        ));
+    }
+
+    let mut futs = JoinSet::new();
+
+    for (i, addr) in addrs.into_iter().enumerate() {
+        let delay = STAGGER_TIME * i as u32;
+        futs.spawn(async move {
+            tokio::time::sleep(delay).await;
+            TcpStream::connect(addr).await
+        });
+    }
+
+    let mut result = Err(std::io::Error::new(
+        ErrorKind::TimedOut,
+        "Timed out while trying to connect to server.".to_string(),
+    ));
+
+    let _ = tokio::time::timeout(SERVER_TIMEOUT, async {
+        while let Some(res) = futs.join_next().await {
+            result = res.expect("Join error");
+            if result.is_ok() {
+                return;
+            }
+        }
+    })
+    .await;
+
+    result
 }
 
 /// Get default TLS config

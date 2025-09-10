@@ -21,8 +21,6 @@ async fn test_integration() {
 
     let server_addr_1 = server_addrs[0];
 
-    let timeout = std::time::Duration::from_secs(5);
-
     // Channel for Peer 1 to send the PeerCode to Peer 2
     let (code_tx, code_rx) = tokio::sync::oneshot::channel();
 
@@ -36,9 +34,7 @@ async fn test_integration() {
         };
 
         // Connect to the server
-        let mut server_connection = server_connector::connect_tcp(server_addr_1, timeout)
-            .await
-            .unwrap();
+        let mut server_connection = server_connector::connect_tcp(server_addr_1).await.unwrap();
 
         // Create a room in the server, and get my contact from it
         let (my_contact, peer_contact_fut) = share_contacts(
@@ -81,9 +77,7 @@ async fn test_integration() {
     let peer_code = PeerCode::from_str(&received_code).unwrap();
 
     // Connect to the same server as Peer 1
-    let mut server_connection = server_connector::connect_tcp(server_addr_1, timeout)
-        .await
-        .unwrap();
+    let mut server_connection = server_connector::connect_tcp(server_addr_1).await.unwrap();
 
     // Join the same room in the server, and get my local contact
     let (my_contact, peer_contact_fut) =

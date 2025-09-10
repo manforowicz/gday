@@ -249,14 +249,14 @@ impl std::fmt::Display for Contact {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "IPv4: ")?;
         if let Some(v4) = self.v4 {
-            write!(f, "{}", v4)?;
+            write!(f, "{v4}")?;
         } else {
             write!(f, "None")?;
         }
 
         write!(f, ", IPv6: ")?;
         if let Some(v6) = self.v6 {
-            write!(f, "{}", v6)?;
+            write!(f, "{v6}")?;
         } else {
             write!(f, "None")?;
         }

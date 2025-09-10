@@ -17,7 +17,7 @@ pub async fn send_files(
         if current_file.as_str() != report.current_file.to_string_lossy() {
             current_file.clear();
             current_file.push_str(&report.current_file.to_string_lossy());
-            progress_bar.set_message(format!("Sending {}", current_file));
+            progress_bar.set_message(format!("Sending {current_file}"));
         }
     };
 
@@ -52,7 +52,7 @@ pub async fn receive_files(
         if current_file.as_str() != report.current_file.to_string_lossy() {
             current_file.clear();
             current_file.push_str(&report.current_file.to_string_lossy());
-            progress_bar.set_message(format!("Receiving {}", current_file));
+            progress_bar.set_message(format!("Receiving {current_file}"));
         }
     };
 

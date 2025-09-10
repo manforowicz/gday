@@ -23,9 +23,6 @@ const RED: Style = BOLD.fg_color(Some(Color::Ansi(AnsiColor::Red)));
 /// How long to try hole punching before giving up.
 const HOLE_PUNCH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
-/// How long to try connecting to a server before giving up.
-const SERVER_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
-
 #[derive(Parser, Debug)]
 #[command(author, version, about)]
 struct Args {
@@ -96,7 +93,7 @@ async fn main() {
 
     // catch and log any errors
     if let Err(err) = run(args).await {
-        error!("{}", err);
+        error!("{err}");
     }
 }
 
@@ -111,12 +108,9 @@ async fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
     // Connect to a custom server if the user chose one.
     let custom_server = if let Some(domain_name) = args.server {
         if args.unencrypted {
-            Some(
-                server_connector::connect_tcp(format!("{domain_name}:{port}"), SERVER_TIMEOUT)
-                    .await?,
-            )
+            Some(server_connector::connect_tcp(format!("{domain_name}:{port}")).await?)
         } else {
-            Some(server_connector::connect_tls(domain_name, port, SERVER_TIMEOUT).await?)
+            Some(server_connector::connect_tls(domain_name, port).await?)
         }
     } else {
         None
@@ -135,23 +129,18 @@ async fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
             // If the user chose a custom code
             } else if let Some(code) = &code {
                 if code.server_id == 0 {
-                    server_connector::connect_to_random_server(DEFAULT_SERVERS, SERVER_TIMEOUT)
-                        .await?
+                    server_connector::connect_to_random_server(DEFAULT_SERVERS).await?
                 } else {
                     (
-                        server_connector::connect_to_server_id(
-                            DEFAULT_SERVERS,
-                            code.server_id,
-                            SERVER_TIMEOUT,
-                        )
-                        .await?,
+                        server_connector::connect_to_server_id(DEFAULT_SERVERS, code.server_id)
+                            .await?,
                         code.server_id,
                     )
                 }
 
             // Otherwise, pick a random server
             } else {
-                server_connector::connect_to_random_server(DEFAULT_SERVERS, SERVER_TIMEOUT).await?
+                server_connector::connect_to_random_server(DEFAULT_SERVERS).await?
             };
 
             // generate random `room_code` and `shared_secret`
@@ -239,12 +228,7 @@ async fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
             let mut server_connection = if let Some(custom_server) = custom_server {
                 custom_server
             } else {
-                server_connector::connect_to_server_id(
-                    DEFAULT_SERVERS,
-                    code.server_id,
-                    SERVER_TIMEOUT,
-                )
-                .await?
+                server_connector::connect_to_server_id(DEFAULT_SERVERS, code.server_id).await?
             };
 
             let (my_contact, peer_contact_fut) =

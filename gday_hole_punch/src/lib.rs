@@ -16,13 +16,12 @@
 //! #
 //! # let rt = tokio::runtime::Builder::new_current_thread().build().unwrap();
 //! # rt.block_on( async {
-//! let timeout = std::time::Duration::from_secs(5);
 //!
 //! //////// Peer 1 ////////
 //!
 //! // Connect to a random server in the default server list
 //! let (mut server_connection, server_id) =
-//!     server_connector::connect_to_random_server(server_connector::DEFAULT_SERVERS, timeout)
+//!     server_connector::connect_to_random_server(server_connector::DEFAULT_SERVERS)
 //!         .await?;
 //!
 //! // PeerCode useful for giving rendezvous info to peer,
@@ -61,7 +60,6 @@
 //! let mut server_connection = server_connector::connect_to_server_id(
 //!     server_connector::DEFAULT_SERVERS,
 //!     peer_code.server_id,
-//!     timeout,
 //! )
 //! .await?;
 //!

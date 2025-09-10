@@ -16,7 +16,7 @@
 # the following into /etc/systemd/system/rate_limiter.service:
 
 ##########################################
-#[Unit]
+# [Unit]
 # Description=rate_limiter
 # After=network.target
 #
@@ -40,6 +40,9 @@
 #
 # Verify the status of the service:
 # 'sudo systemctl status rate_limiter'
+#
+# View service logs (-u specifies service, -f follows log in real time)
+# 'sudo journalctl -u rate_limiter -f'
 
 
 # Clear existing rules

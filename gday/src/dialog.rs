@@ -7,7 +7,7 @@ use gday_file_transfer::{
 use indicatif::HumanBytes;
 use std::{io::Write, path::Path};
 
-/// Confirms that the user wants to send these `files``.
+/// Confirms that the user wants to send these files.
 ///
 /// If not, returns false.
 pub fn confirm_send(offer: &FileOfferMsg) -> std::io::Result<bool> {
@@ -25,7 +25,6 @@ pub fn confirm_send(offer: &FileOfferMsg) -> std::io::Result<bool> {
         offer.offer.len(),
         HumanBytes(total_size)
     );
-    std::io::stdout().flush()?;
     let input = get_lowercase_input()?;
 
     // act on user choice
@@ -85,7 +84,6 @@ pub fn ask_receive(
             all_files.get_num_fully_accepted(),
             HumanBytes(offer.get_transfer_size(&all_files)?)
         );
-        std::io::stdout().flush()?;
         let input = get_lowercase_input()?;
 
         if "yes".starts_with(&input) {
@@ -124,7 +122,6 @@ pub fn ask_receive(
 
     println!("3. Cancel.");
     print!("{BOLD}Choose an option (1, 2, or 3):{BOLD:#} ");
-    std::io::stdout().flush()?;
 
     match get_lowercase_input()?.as_str() {
         // all files
@@ -138,6 +135,7 @@ pub fn ask_receive(
 
 /// Reads a trimmed ascii-lowercase line of input from the user.
 fn get_lowercase_input() -> std::io::Result<String> {
+    std::io::stdout().flush()?;
     let Some(response) = std::io::stdin().lines().next() else {
         return Err(std::io::Error::new(
             std::io::ErrorKind::UnexpectedEof,

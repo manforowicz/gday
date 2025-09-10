@@ -226,7 +226,7 @@ fn get_local_socket(local_addr: SocketAddr) -> std::io::Result<TcpSocket> {
     sock.set_reuse_address(true)?;
 
     // socket2 only supports this method on these systems
-    #[cfg(all(unix, not(any(target_os = "solaris", target_os = "illumos"))))]
+    #[cfg(not(any(target_os = "solaris", target_os = "illumos", target_os = "cygwin")))]
     sock.set_reuse_port(true)?;
 
     let keepalive = TcpKeepalive::new()

@@ -7,7 +7,7 @@ members = [
     "gday_hole_punch",
     "gday_encryption",
     "gday_contact_exchange_protocol",
-    "gday_file_transfer",
+    "gday_file_transfer", "gday_gui",
 ]
 
 # Keys that workspace packages will inherit

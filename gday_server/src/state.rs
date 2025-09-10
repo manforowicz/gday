@@ -223,22 +223,22 @@ impl State {
         // if this client has a contact sender, that means
         // the peer must have given it to us. That means the peer
         // is also ready to exchange contacts.
-        if room.get_client(is_creator).contact_sender.is_some() {
-            // note: both of these `if let` will always pass
-            if let Some(client_sender) = room.get_client_mut(is_creator).contact_sender.take() {
-                if let Some(peer_sender) = room.get_client_mut(!is_creator).contact_sender.take() {
-                    // exchange their info
-                    client_sender
-                        .send(client_contact)
-                        .expect("Unrecoverable: RX dropped!");
-                    peer_sender
-                        .send(peer_contact)
-                        .expect("Unrecoverable: RX dropped!");
+        if let Some(client_sender) = room.get_client_mut(is_creator).contact_sender.take() {
+            let peer_sender = room
+                .get_client_mut(!is_creator)
+                .contact_sender
+                .take()
+                .unwrap();
+            // exchange their info
+            client_sender
+                .send(client_contact)
+                .expect("Unrecoverable: RX dropped!");
+            peer_sender
+                .send(peer_contact)
+                .expect("Unrecoverable: RX dropped!");
 
-                    // remove their room
-                    rooms.remove(room_code);
-                }
-            }
+            // remove their room
+            rooms.remove(room_code);
         }
 
         Ok((client_contact, rx))
