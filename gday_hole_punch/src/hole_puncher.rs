@@ -38,10 +38,9 @@ const RETRY_INTERVAL: Duration = Duration::from_millis(200);
 pub async fn try_connect_to_peer(
     local_contact: Contact,
     peer_contact: FullContact,
-    shared_secret: &[u8],
+    shared_secret: &str,
 ) -> Result<PeerConnection, Error> {
-    // shorten the variable name for brevity
-    let p = shared_secret;
+    let p = shared_secret.to_string().into_bytes();
 
     // A set of tasks that will run concurrently,
     // trying to establish a connection to the peer.
@@ -226,7 +225,10 @@ fn get_local_socket(local_addr: SocketAddr) -> std::io::Result<TcpSocket> {
     sock.set_reuse_address(true)?;
 
     // socket2 only supports this method on these systems
-    #[cfg(not(any(target_os = "solaris", target_os = "illumos", target_os = "cygwin")))]
+    #[cfg(all(
+        unix,
+        not(any(target_os = "solaris", target_os = "illumos", target_os = "cygwin"))
+    ))]
     sock.set_reuse_port(true)?;
 
     let keepalive = TcpKeepalive::new()

@@ -4,29 +4,22 @@ use std::str::FromStr;
 /// Test encoding a message.
 #[test]
 fn test_encode() {
-    let peer_code = PeerCode {
-        server_id: 27,
-        room_code: " hel lo123".to_string(),
-        shared_secret: "coded ".to_string(),
-    };
+    let peer_code = PeerCode::new(27, "hello123".to_string(), "coded".to_string()).unwrap();
 
-    let message = String::try_from(&peer_code).unwrap();
-    assert_eq!(message, "27. hel lo123.coded ");
+    let message = peer_code.to_string();
+    assert_eq!(message, "27.hello123.coded");
 }
 
 #[test]
 fn test_decode() {
     // some uppercase, some lowercase, and spacing
-    let message = "83221.room codefoo.secret123  ";
+    let message = "  83221.roomcodefoo.secret123   ";
     let received1 = PeerCode::from_str(message).unwrap();
     let received2: PeerCode = message.parse().unwrap();
     let received3 = PeerCode::try_from(message).unwrap();
 
-    let expected = PeerCode {
-        server_id: 83221,
-        room_code: "room codefoo".to_string(),
-        shared_secret: "secret123  ".to_string(),
-    };
+    let expected =
+        PeerCode::new(83221, "roomcodefoo".to_string(), "secret123".to_string()).unwrap();
 
     assert_eq!(received1, expected);
     assert_eq!(received2, expected);
@@ -55,40 +48,44 @@ fn invalid_decodes() {
 }
 
 #[test]
-fn invalid_encodes() {
-    let peer_code = PeerCode {
-        server_id: 0,
-        room_code: "hi.there".to_string(),
-        shared_secret: "what.".to_string(),
-    };
+fn invalid_encodes_1() {
+    let peer_code = PeerCode::new(0, "hithere".to_string(), "what.".to_string());
 
-    let result = String::try_from(&peer_code);
+    assert!(matches!(
+        peer_code,
+        Err(Error::PeerCodeContainedInvalidChar)
+    ));
+}
 
-    assert!(matches!(result, Err(Error::PeerCodeContainedPeriod)))
+#[test]
+fn invalid_encodes_2() {
+    let peer_code = PeerCode::new(0, "hi there".to_string(), "what".to_string());
+
+    assert!(matches!(
+        peer_code,
+        Err(Error::PeerCodeContainedInvalidChar)
+    ));
 }
 
 #[test]
 fn test_zeros() {
-    let peer_code = PeerCode {
-        server_id: 0,
-        room_code: "".to_string(),
-        shared_secret: "".to_string(),
-    };
+    let peer_code = PeerCode::new(0, "".to_string(), "".to_string()).unwrap();
 
-    let str = String::try_from(&peer_code).unwrap();
+    let str = peer_code.to_string();
     let received = PeerCode::from_str(&str).unwrap();
     assert_eq!(peer_code, received);
 }
 
 #[test]
 fn test_large() {
-    let peer_code = PeerCode {
-        server_id: u64::MAX,
-        room_code: " j fisd;af  ljks da; ".to_string(),
-        shared_secret: "r f98032 fsf 02f a".to_string(),
-    };
+    let peer_code = PeerCode::new(
+        u64::MAX,
+        "jfisd;afljksda;".to_string(),
+        "rf98032fsf02fa".to_string(),
+    )
+    .unwrap();
 
-    let str = String::try_from(&peer_code).unwrap();
+    let str = peer_code.to_string();
     let received = PeerCode::from_str(&str).unwrap();
     assert_eq!(peer_code, received);
 }
@@ -97,11 +94,11 @@ fn test_large() {
 fn test_random() {
     let peer_code = PeerCode::random(5, 6);
 
-    assert_eq!(peer_code.server_id, 5);
-    assert_eq!(peer_code.room_code.len(), 6);
-    assert_eq!(peer_code.shared_secret.len(), 6);
+    assert_eq!(peer_code.server_id(), 5);
+    assert_eq!(peer_code.room_code().len(), 6);
+    assert_eq!(peer_code.shared_secret().len(), 6);
 
-    let str = String::try_from(&peer_code).unwrap();
+    let str = peer_code.to_string();
     let received = PeerCode::from_str(&str).unwrap();
     assert_eq!(peer_code, received);
 }

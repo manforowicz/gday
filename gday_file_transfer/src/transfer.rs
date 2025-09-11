@@ -11,7 +11,7 @@ use std::pin::{Pin, pin};
 use std::task::{Context, Poll, ready};
 
 /// Holds the status of a file transfer
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct TransferReport {
     pub processed_bytes: u64,
     pub total_bytes: u64,

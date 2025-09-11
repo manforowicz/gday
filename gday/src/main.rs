@@ -128,13 +128,13 @@ async fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
 
             // If the user chose a custom code
             } else if let Some(code) = &code {
-                if code.server_id == 0 {
+                if code.server_id() == 0 {
                     server_connector::connect_to_random_server(DEFAULT_SERVERS).await?
                 } else {
                     (
-                        server_connector::connect_to_server_id(DEFAULT_SERVERS, code.server_id)
+                        server_connector::connect_to_server_id(DEFAULT_SERVERS, code.server_id())
                             .await?,
-                        code.server_id,
+                        code.server_id(),
                     )
                 }
 
@@ -146,7 +146,12 @@ async fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
             // generate random `room_code` and `shared_secret`
             // if the user didn't provide custom ones
             let peer_code = if let Some(code) = code {
-                PeerCode { server_id, ..code }
+                PeerCode::new(
+                    server_id,
+                    code.room_code().to_string(),
+                    code.shared_secret().to_string(),
+                )
+                .unwrap()
             } else {
                 PeerCode::random(server_id, length)
             };
@@ -162,14 +167,11 @@ async fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
 
             // create a room in the server
             let (my_contact, peer_contact_fut) =
-                share_contacts(&mut server_connection, peer_code.room_code.clone(), true).await?;
+                share_contacts(&mut server_connection, peer_code.room_code(), true).await?;
 
             info!("Your contact is:\n{my_contact}");
 
-            println!(
-                "Tell your mate to run \"gday get {BOLD}{}{BOLD:#}\"",
-                String::try_from(&peer_code)?
-            );
+            println!("Tell your mate to run \"gday get {BOLD}{peer_code}{BOLD:#}\"",);
 
             // get peer's contact
             let peer_contact = peer_contact_fut.await?;
@@ -181,7 +183,7 @@ async fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
                 gday_hole_punch::try_connect_to_peer(
                     my_contact.local,
                     peer_contact,
-                    peer_code.shared_secret.as_bytes(),
+                    peer_code.shared_secret(),
                 ),
             )
             .await
@@ -228,11 +230,11 @@ async fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
             let mut server_connection = if let Some(custom_server) = custom_server {
                 custom_server
             } else {
-                server_connector::connect_to_server_id(DEFAULT_SERVERS, code.server_id).await?
+                server_connector::connect_to_server_id(DEFAULT_SERVERS, code.server_id()).await?
             };
 
             let (my_contact, peer_contact_fut) =
-                share_contacts(&mut server_connection, code.room_code, false).await?;
+                share_contacts(&mut server_connection, code.room_code(), false).await?;
 
             info!("Your contact is:\n{my_contact}");
 
@@ -245,7 +247,7 @@ async fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
                 gday_hole_punch::try_connect_to_peer(
                     my_contact.local,
                     peer_contact,
-                    code.shared_secret.as_bytes(),
+                    code.shared_secret(),
                 ),
             )
             .await

@@ -26,16 +26,16 @@
 //!
 //! // PeerCode useful for giving rendezvous info to peer,
 //! // over an existing channel like email.
-//! let peer_code = PeerCode {
+//! let peer_code = PeerCode::new(
 //!     server_id,
-//!     room_code: "roomcode".to_string(),
-//!     shared_secret: "shared_secret".to_string(),
-//! };
-//! let code_to_share = String::try_from(&peer_code)?;
+//!     "roomcode".to_string(),
+//!     "shared_secret".to_string(),
+//! ).unwrap();
+//! let code_to_share = peer_code.to_string();
 //!
 //! // Create a room in the server, and get my contact from it
 //! let (my_contact, peer_contact_future) =
-//!     share_contacts(&mut server_connection, peer_code.room_code, true).await?;
+//!     share_contacts(&mut server_connection, peer_code.room_code(), true).await?;
 //!
 //! // Wait for the server to send the peer's contact
 //! let peer_contact = peer_contact_future.await?;
@@ -46,7 +46,7 @@
 //! let (tcp_stream, strong_key) = try_connect_to_peer(
 //!     my_contact.local,
 //!     peer_contact,
-//!     peer_code.shared_secret.as_bytes(),
+//!     peer_code.shared_secret(),
 //! )
 //! .await?;
 //!
@@ -59,20 +59,20 @@
 //! // Connect to the same server as Peer 1
 //! let mut server_connection = server_connector::connect_to_server_id(
 //!     server_connector::DEFAULT_SERVERS,
-//!     peer_code.server_id,
+//!     peer_code.server_id(),
 //! )
 //! .await?;
 //!
 //! // Join the same room in the server, and get my local contact
 //! let (my_contact, peer_contact_future) =
-//!     share_contacts(&mut server_connection, peer_code.room_code, false).await?;
+//!     share_contacts(&mut server_connection, peer_code.room_code(), false).await?;
 //!
 //! let peer_contact = peer_contact_future.await?;
 //!
 //! let (tcp_stream, strong_key) = try_connect_to_peer(
 //!     my_contact.local,
 //!     peer_contact,
-//!     peer_code.shared_secret.as_bytes(),
+//!     peer_code.shared_secret(),
 //! )
 //! .await?;
 //!
@@ -86,9 +86,11 @@ mod peer_code;
 pub mod server_connector;
 
 pub use contact_sharer::share_contacts;
-use gday_contact_exchange_protocol::ServerMsg;
+pub use gday_contact_exchange_protocol::FullContact;
 pub use hole_puncher::try_connect_to_peer;
 pub use peer_code::PeerCode;
+
+use gday_contact_exchange_protocol::ServerMsg;
 
 /// `gday_hole_punch` error
 #[derive(thiserror::Error, Debug)]
@@ -151,10 +153,10 @@ pub enum Error {
     /// uncooperative NAT (network address translator).
     #[error(
         "Timed out while trying to connect to peer, likely due to an uncooperative \
-    NAT (network address translator). \
-    Enable IPv6 or try from a different network. \
-    Or use a tool such as magic-wormhole that transfers \
-    over a relay to evade NATs."
+        NAT (network address translator). \
+        Enable IPv6 or try from a different network. \
+        Or use a tool such as magic-wormhole that transfers \
+        over a relay to evade NATs."
     )]
     HolePunchTimeout,
 
@@ -162,13 +164,13 @@ pub enum Error {
     #[error("Couldn't parse the server ID in your code: {0}. Check it for typos!")]
     CouldntParseServerID(#[from] std::num::ParseIntError),
 
-    /// The room_code or shared_secret of the peer code contained a period.
-    /// Periods aren't allowed because they're used as delimeters.
+    /// The room_code or shared_secret element of the peer code contained a period or space.
+    /// These characters aren't allowed to minimize confusion.
     #[error(
-        "The room_code or shared_secret of the peer code contained a period. \
-    Periods aren't allowed because they're used as delimeters."
+        "The room_code or shared_secret element of the peer code contained a period or space.
+        These characters aren't allowed to minimize confusion."
     )]
-    PeerCodeContainedPeriod,
+    PeerCodeContainedInvalidChar,
 
     /// Wrong number of settings in [`PeerCode`].
     #[error("Wrong number of segments in your code. Check it for typos!")]

@@ -83,7 +83,10 @@ impl ServerStream {
         let _ = sock.set_reuse_address(true);
 
         // socket2 only supports this method on these systems
-        #[cfg(not(any(target_os = "solaris", target_os = "illumos", target_os = "cygwin")))]
+        #[cfg(all(
+            unix,
+            not(any(target_os = "solaris", target_os = "illumos", target_os = "cygwin"))
+        ))]
         let _ = sock.set_reuse_port(true);
     }
 }

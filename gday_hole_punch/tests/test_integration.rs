@@ -27,26 +27,19 @@ async fn test_integration() {
     let handle = tokio::spawn(async move {
         //////// Peer 1 ////////
         // Rendezvous settings
-        let peer_code = PeerCode {
-            server_id: 0,
-            room_code: "123".to_string(),
-            shared_secret: "456".to_string(),
-        };
+        let peer_code = PeerCode::new(0, "123".to_string(), "456".to_string()).unwrap();
 
         // Connect to the server
         let mut server_connection = server_connector::connect_tcp(server_addr_1).await.unwrap();
 
         // Create a room in the server, and get my contact from it
-        let (my_contact, peer_contact_fut) = share_contacts(
-            &mut server_connection,
-            peer_code.room_code.to_string(),
-            true,
-        )
-        .await
-        .unwrap();
+        let (my_contact, peer_contact_fut) =
+            share_contacts(&mut server_connection, peer_code.room_code(), true)
+                .await
+                .unwrap();
 
         // Send PeerCode to peer
-        let code_to_share = String::try_from(&peer_code).unwrap();
+        let code_to_share = peer_code.to_string();
         code_tx.send(code_to_share).unwrap();
 
         // Wait for the server to send the peer's contact
@@ -55,13 +48,10 @@ async fn test_integration() {
         // Use TCP hole-punching to connect to the peer,
         // verify their identity with the shared_secret,
         // and get a cryptographically-secure shared key
-        let (mut tcp_stream, strong_key) = try_connect_to_peer(
-            my_contact.local,
-            peer_contact,
-            peer_code.shared_secret.as_bytes(),
-        )
-        .await
-        .unwrap();
+        let (mut tcp_stream, strong_key) =
+            try_connect_to_peer(my_contact.local, peer_contact, peer_code.shared_secret())
+                .await
+                .unwrap();
 
         tcp_stream.write_all(b"Hello peer!").await.unwrap();
 
@@ -81,7 +71,7 @@ async fn test_integration() {
 
     // Join the same room in the server, and get my local contact
     let (my_contact, peer_contact_fut) =
-        share_contacts(&mut server_connection, peer_code.room_code, false)
+        share_contacts(&mut server_connection, peer_code.room_code(), false)
             .await
             .unwrap();
 
@@ -89,13 +79,10 @@ async fn test_integration() {
     let peer_contact = peer_contact_fut.await.unwrap();
 
     // Use hole-punching to connect to peer.
-    let (mut tcp_stream, strong_key) = try_connect_to_peer(
-        my_contact.local,
-        peer_contact,
-        peer_code.shared_secret.as_bytes(),
-    )
-    .await
-    .unwrap();
+    let (mut tcp_stream, strong_key) =
+        try_connect_to_peer(my_contact.local, peer_contact, peer_code.shared_secret())
+            .await
+            .unwrap();
 
     // Ensure the direct connection works
     let mut received = [0_u8; 11];

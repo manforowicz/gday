@@ -12,14 +12,14 @@ use std::future::Future;
 /// Returns
 /// - Your [`FullContact`], as determined by the server
 /// - A future that when awaited will evaluate to the peer's [`FullContact`].
-pub async fn share_contacts(
-    server_connection: &mut ServerConnection,
-    room_code: String,
+pub async fn share_contacts<'a>(
+    server_connection: &'a mut ServerConnection,
+    room_code: &str,
     is_creator: bool,
 ) -> Result<
     (
         FullContact,
-        impl Future<Output = Result<FullContact, Error>> + '_,
+        impl Future<Output = Result<FullContact, Error>> + 'a,
     ),
     Error,
 > {
@@ -34,7 +34,7 @@ pub async fn share_contacts(
         // try creating a room in the server
         write_to_async(
             ClientMsg::CreateRoom {
-                room_code: room_code.clone(),
+                room_code: room_code.to_string(),
             },
             messenger,
         )
@@ -56,7 +56,7 @@ pub async fn share_contacts(
 /// returns its response.
 async fn share_contact(
     connection: &mut ServerConnection,
-    room_code: String,
+    room_code: &str,
     is_creator: bool,
 ) -> Result<FullContact, Error> {
     let local_contact = connection.local_contact()?;
@@ -68,7 +68,7 @@ async fn share_contact(
     // public address
     for stream in &mut streams {
         let msg = ClientMsg::RecordPublicAddr {
-            room_code: room_code.clone(),
+            room_code: room_code.to_string(),
             is_creator,
         };
         write_to_async(msg, stream).await?;
@@ -81,7 +81,7 @@ async fn share_contact(
     // tell the server that we're done
     // sending socket addresses
     let msg = ClientMsg::ReadyToShare {
-        room_code,
+        room_code: room_code.to_string(),
         is_creator,
         local_contact,
     };
