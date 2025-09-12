@@ -1,6 +1,6 @@
 use crate::Error;
 use gday_contact_exchange_protocol::{Contact, FullContact};
-use log::{debug, trace};
+use log::{debug, info, trace};
 use sha2::Digest;
 use socket2::{SockRef, TcpKeepalive};
 use spake2::{Ed25519Group, Identity, Password, Spake2};
@@ -154,6 +154,8 @@ async fn verify_peer(
     weak_secret: &[u8],
     mut stream: tokio::net::TcpStream,
 ) -> Result<PeerConnection, Error> {
+    info!("Connected. Verifying peer's identity.");
+
     // send greeting to peer
     stream.write_all(b"gday_hole_punch").await?;
 
@@ -167,7 +169,7 @@ async fn verify_peer(
     //// Password authenticated key exchange ////
     let (spake, outbound_msg) = Spake2::<Ed25519Group>::start_symmetric(
         &Password::new(weak_secret),
-        &Identity::new(b"gday mates"),
+        &Identity::new(b"gday_hole_punch"),
     );
 
     stream.write_all(&outbound_msg).await?;
@@ -180,8 +182,6 @@ async fn verify_peer(
         .finish(&inbound_msg)?
         .try_into()
         .expect("Unreachable: Key is always 32 bytes long.");
-
-    debug!("Derived a strong key with the peer. Will now verify we both have the same key.");
 
     //// Mutually verify that we have the same `shared_key` ////
 
@@ -216,6 +216,8 @@ async fn verify_peer(
     if expected != peer_hash.into() {
         return Err(Error::PeerAuthenticationFailed);
     }
+
+    info!("Peer authentication suceeded.");
 
     Ok((stream, shared_key))
 }

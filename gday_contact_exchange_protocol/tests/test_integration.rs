@@ -39,7 +39,7 @@ fn error_on_invalid_json() {
     pipe.write_all(&[PROTOCOL_VERSION, 0, 5, 52, 45, 77, 123, 12])
         .unwrap();
     let result: Result<ServerMsg, Error> = read_from(&mut pipe);
-    assert!(matches!(result, Err(Error::JSON(_))));
+    assert!(matches!(result, Err(Error::Json(_))));
 }
 
 #[test]
@@ -93,7 +93,7 @@ async fn error_on_invalid_json_async() {
         .await
         .unwrap();
     let result: Result<ServerMsg, Error> = read_from_async(&mut reader).await;
-    assert!(matches!(result, Err(Error::JSON(_))));
+    assert!(matches!(result, Err(Error::Json(_))));
 }
 
 #[tokio::test]

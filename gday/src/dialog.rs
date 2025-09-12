@@ -2,37 +2,19 @@
 //! the command line.
 use crate::{BOLD, GREEN, RED};
 use gday_file_transfer::{
-    FileOfferMsg, FileRequestsMsg, already_exists, detect_interrupted_download,
+    FileOfferMsg, FileRequestsMsg, detect_interrupted_download, save_path::already_exists,
 };
 use indicatif::HumanBytes;
 use std::{io::Write, path::Path};
 
-/// Confirms that the user wants to send these files.
-///
-/// If not, returns false.
-pub fn confirm_send(offer: &FileOfferMsg) -> std::io::Result<bool> {
+/// Pretty-print the files in this FileOfferMsg.
+pub fn display_send(offer: &FileOfferMsg) {
     // print all the file names and sizes
     println!("{BOLD}Files to send:{BOLD:#}");
     for (path, meta) in &offer.offer {
         println!("{} ({})", path.display(), HumanBytes(meta.size));
     }
     println!();
-
-    // print their total size
-    let total_size: u64 = offer.get_total_offered_size();
-    print!(
-        "Would you like to send these {} files ({BOLD}{}{BOLD:#})? (y/n): ",
-        offer.offer.len(),
-        HumanBytes(total_size)
-    );
-    let input = get_lowercase_input()?;
-
-    // act on user choice
-    if "yes".starts_with(&input) {
-        Ok(true)
-    } else {
-        Ok(false)
-    }
 }
 
 /// Asks the user which of the files in `offer` to accept.

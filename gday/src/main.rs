@@ -159,23 +159,17 @@ async fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
             // get metadata about the files to transfer
             let local_file_offer = gday_file_transfer::create_file_offer(&paths)?;
 
-            // confirm the user wants to send these files
-            if !dialog::confirm_send(&local_file_offer.offer)? {
-                println!("Cancelled.");
-                return Ok(());
-            }
+            // pretty-print the files to be sent
+            dialog::display_send(&local_file_offer.offer);
 
             // create a room in the server
             let (my_contact, peer_contact_fut) =
                 share_contacts(&mut server_connection, peer_code.room_code(), true).await?;
 
-            info!("Your contact is:\n{my_contact}");
-
             println!("Tell your mate to run \"gday get {BOLD}{peer_code}{BOLD:#}\"",);
 
             // get peer's contact
             let peer_contact = peer_contact_fut.await?;
-            info!("Your mate's contact is:\n{peer_contact}");
 
             // connect to the peer
             let (stream, shared_key) = tokio::time::timeout(
@@ -236,11 +230,7 @@ async fn run(args: crate::Args) -> Result<(), Box<dyn std::error::Error>> {
             let (my_contact, peer_contact_fut) =
                 share_contacts(&mut server_connection, code.room_code(), false).await?;
 
-            info!("Your contact is:\n{my_contact}");
-
             let peer_contact = peer_contact_fut.await?;
-
-            info!("Your mate's contact is:\n{peer_contact}");
 
             let (stream, shared_key) = tokio::time::timeout(
                 HOLE_PUNCH_TIMEOUT,

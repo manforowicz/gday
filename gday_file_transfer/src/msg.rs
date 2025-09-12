@@ -1,5 +1,6 @@
 use crate::{
-    Error, PROTOCOL_VERSION, already_exists, detect_interrupted_download, get_download_path,
+    Error, PROTOCOL_VERSION, detect_interrupted_download,
+    save_path::{already_exists, get_download_path},
 };
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::{
@@ -19,10 +20,13 @@ pub struct FileMetadata {
     pub last_modified: SystemTime,
 }
 
-/// The sending peer sends this message to offer files,
-/// and the receiver replies with [`FileRequestsMsg`].
+/// Offer of files to send.
+///
+/// The receiving peer should reply with [`FileRequestsMsg`].
 ///
 /// Contains a map from offered filenames to metadata about them.
+///
+/// Can be created with [`crate::create_file_offer()`].
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct FileOfferMsg {
     pub offer: HashMap<PathBuf, FileMetadata>,
@@ -78,16 +82,15 @@ impl FileOfferMsg {
     }
 }
 
-/// The receiving peer replies with this message after getting a
-/// [`FileOfferMsg`].
+/// Reply to [`FileOfferMsg`].
 ///
-/// A [`Vec`] of [`SingleFileRequest`].
+/// A list of [`SingleFileRequest`] for offered files.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct FileRequestsMsg {
     pub request: Vec<SingleFileRequest>,
 }
 
-/// A part of [`FileRequestsMsg`]
+/// A part of [`FileRequestsMsg`].
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct SingleFileRequest {
     /// Path of the requested file.

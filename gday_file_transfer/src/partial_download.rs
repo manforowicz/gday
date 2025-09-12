@@ -20,11 +20,14 @@ pub struct TmpInfoFile {
     pub file_metadata: FileMetadata,
 }
 
-/// Checks if [`TMP_DOWNLOAD_FILE`] and [`TMP_INFO_FILE`] in `download_dir`
-/// indicate a file download was interrupted, and `offer` is re-offering that
-/// same file.
+/// Checks for interrupted download.
 ///
-/// If so, returns the offered path of the interrupted file,
+/// Interrupted downloads leave behind a
+/// "gday_tmp_download.dat" and "gday_tmp_download_metadata.json" file
+/// in `download_dir`.
+///
+/// If `offer` is re-offering an interrupted file,
+/// returns the offered path of the interrupted file,
 /// and the number of bytes already downloaded.
 ///
 /// Otherwise returns [`None`].
@@ -60,18 +63,21 @@ pub fn detect_interrupted_download(
     Some((tmp_info.file_short_path, tmp_download_metadata.len()))
 }
 
+/// Writes `info_file` in `download_dir/TMP_INFO_FILE`.
 pub fn write_tmp_info_file(download_dir: &Path, info_file: &TmpInfoFile) -> std::io::Result<()> {
     let file = std::fs::File::create(download_dir.join(TMP_INFO_FILE))?;
     serde_json::to_writer_pretty(file, info_file)?;
     Ok(())
 }
 
+/// Reads a `TmpInfoFile` from `download_dir/TMP_INFO_FILE`.
 pub fn read_tmp_info_file(download_dir: &Path) -> std::io::Result<TmpInfoFile> {
     let file = std::fs::File::open(download_dir.join(TMP_INFO_FILE))?;
     let info_file = serde_json::from_reader(file)?;
     Ok(info_file)
 }
 
+/// Deletes a `TmpInfoFile` in `download_dir/TMP_INFO_FILE`.
 pub fn delete_tmp_info_file(download_dir: &Path) -> std::io::Result<()> {
     std::fs::remove_file(download_dir.join(TMP_INFO_FILE))
 }

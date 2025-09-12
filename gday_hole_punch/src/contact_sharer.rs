@@ -2,6 +2,7 @@ use crate::{Error, server_connector::ServerConnection};
 use gday_contact_exchange_protocol::{
     ClientMsg, FullContact, ServerMsg, read_from_async, write_to_async,
 };
+use log::info;
 use std::future::Future;
 
 /// Shares contacts on `room_code` in the gday server
@@ -47,6 +48,8 @@ pub async fn share_contacts<'a>(
 
     // send personal socket addresses to the server
     let my_contact = share_contact(server_connection, room_code, is_creator).await?;
+
+    info!("Your contact is:\n{my_contact}");
 
     Ok((my_contact, get_peer_contact(server_connection)))
 }
@@ -108,6 +111,8 @@ async fn get_peer_contact(connection: &mut ServerConnection) -> Result<FullConta
     let ServerMsg::PeerContact(peer) = reply else {
         return Err(Error::UnexpectedServerReply(reply));
     };
+
+    info!("Your peer's contact is:\n{peer}");
 
     Ok(peer)
 }

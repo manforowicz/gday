@@ -1,3 +1,5 @@
+//! Extra helper functions for download file paths.
+
 use crate::{Error, FileMetadata};
 use os_str_bytes::OsStrBytesExt;
 use std::{

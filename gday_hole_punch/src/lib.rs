@@ -16,7 +16,6 @@
 //! #
 //! # let rt = tokio::runtime::Builder::new_current_thread().build().unwrap();
 //! # rt.block_on( async {
-//!
 //! //////// Peer 1 ////////
 //!
 //! // Connect to a random server in the default server list
@@ -102,7 +101,7 @@ pub enum Error {
 
     /// Error talking with contact exchange server
     #[error("Error talking with contact exchange server: {0}")]
-    ServerProtocolError(#[from] gday_contact_exchange_protocol::Error),
+    ServerProtocol(#[from] gday_contact_exchange_protocol::Error),
 
     /// Unexpected reply from server
     #[error("Unexpected reply from server: {0}")]

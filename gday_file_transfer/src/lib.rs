@@ -53,19 +53,22 @@
 mod msg;
 mod offer;
 mod partial_download;
-mod save_path;
+pub mod save_path;
 mod transfer;
+
+pub use crate::msg::{
+    FileMetadata, FileOfferMsg, FileRequestsMsg, SingleFileRequest, read_from, read_from_async,
+    write_to, write_to_async,
+};
+pub use crate::offer::{LocalFileOffer, create_file_offer};
+pub use crate::partial_download::detect_interrupted_download;
+pub use crate::transfer::{TransferReport, receive_files, send_files};
 
 use std::path::PathBuf;
 use thiserror::Error;
 
-pub use crate::msg::*;
-pub use crate::offer::*;
-pub use crate::partial_download::*;
-pub use crate::save_path::*;
-pub use crate::transfer::*;
-
-/// Version of the protocol.
+/// Protocol version.
+///
 /// Different numbers wound indicate
 /// incompatible protocol breaking changes.
 pub const PROTOCOL_VERSION: u8 = 2;
@@ -77,7 +80,7 @@ pub enum Error {
     /// Error serializing or deserializing
     /// [`FileOfferMsg`] or [`FileRequestsMsg`] to JSON.
     #[error("JSON Error: {0}")]
-    JSON(#[from] serde_json::Error),
+    Json(#[from] serde_json::Error),
 
     /// IO Error
     #[error("IO Error: {0}")]
@@ -85,7 +88,7 @@ pub enum Error {
 
     /// All 100 suitable locations to save [`FileMetadata`] are occupied.
     ///
-    /// Comes from [`get_unoccupied_version()`].
+    /// Comes from [`save_path::get_unoccupied_version()`].
     #[error("100 files with base name '{0}' already exist. Aborting save.")]
     FilenameOccupied(PathBuf),
 

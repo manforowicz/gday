@@ -103,8 +103,8 @@ impl<T> EncryptedStream<T> {
     /// - The `key` must be a cryptographically random secret.
     /// - The `nonce` shouldn't be reused, but doesn't need to be secret.
     ///
-    /// - See [`Self::encrypt_connection()`] if you'd like an auto-generatcan't
-    ///   createed nonce.
+    /// - See [`Self::encrypt_connection()`] if you'd like an auto-generated
+    ///   nonce.
     pub fn new(io_stream: T, key: &[u8; 32], nonce: &[u8; 7]) -> Self {
         let mut to_send = HelperBuf::with_capacity(u16::MAX as usize + 2);
         // add 2 bytes for length header to uphold invariant

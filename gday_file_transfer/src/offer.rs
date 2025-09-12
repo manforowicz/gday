@@ -6,10 +6,7 @@ use std::{
     time::SystemTime,
 };
 
-/// The sending peer uses this struct to
-/// store its [`FileOfferMsg`] and
-/// a mapping from the shortened offered paths
-/// to the local on-disk file paths.
+/// A [`FileOfferMsg`] along with local paths to the offered files.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LocalFileOffer {
     /// Offer that the sending peer will send.

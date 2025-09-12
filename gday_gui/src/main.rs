@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex};
+//! GUI to securely send files (without a relay or port forwarding).
 
 use bytesize::ByteSize;
 use eframe::egui;
@@ -8,6 +8,7 @@ use gday_file_transfer::{FileOfferMsg, LocalFileOffer, TransferReport};
 use gday_hole_punch::{FullContact, PeerCode};
 use helpers::MyHandle;
 use log::error;
+use std::sync::{Arc, Mutex};
 use tokio::net::TcpStream;
 
 use crate::{
@@ -208,6 +209,7 @@ impl AppState {
                         transfer_report,
                     };
                 }
+                ctx.request_repaint();
             }
             View::Send3 {
                 handle,
@@ -233,6 +235,7 @@ impl AppState {
                         }
                     }
                 }
+                ctx.request_repaint();
             }
 
             View::Receive1 { entered_code } => {
@@ -277,6 +280,7 @@ impl AppState {
                         }
                     }
                 }
+                ctx.request_repaint();
             }
 
             View::Receive3 {
@@ -299,7 +303,7 @@ impl AppState {
 
                     if ui.button("Proceed").clicked()
                         && let Some(save_loc) = rfd::FileDialog::new()
-                            .set_title("Choose files to send")
+                            .set_title("Choose download folder")
                             .pick_folder()
                     {
                         let View::Receive3 { peer_conn, offer } = std::mem::take(&mut self.view)
@@ -348,6 +352,7 @@ impl AppState {
                         }
                     }
                 }
+                ctx.request_repaint();
             }
 
             View::Done => {

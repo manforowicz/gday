@@ -1,10 +1,10 @@
 use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt};
 
-use crate::partial_download::TmpInfoFile;
-use crate::{
-    Error, FileOfferMsg, FileRequestsMsg, LocalFileOffer, TMP_DOWNLOAD_FILE, delete_tmp_info_file,
-    get_download_path, get_unoccupied_version, write_tmp_info_file,
+use crate::partial_download::{
+    TMP_DOWNLOAD_FILE, TmpInfoFile, delete_tmp_info_file, write_tmp_info_file,
 };
+use crate::save_path::{get_download_path, get_unoccupied_version};
+use crate::{Error, FileOfferMsg, FileRequestsMsg, LocalFileOffer};
 use std::io::{ErrorKind, Seek, SeekFrom};
 use std::path::Path;
 use std::pin::{Pin, pin};

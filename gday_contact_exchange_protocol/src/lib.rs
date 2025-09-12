@@ -95,10 +95,11 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 /// using TLS should listen on.
 pub const DEFAULT_PORT: u16 = 2311;
 
-/// Version of the protocol.
+/// Protocol version.
+///
 /// Different numbers wound indicate
 /// incompatible protocol breaking changes.
-pub const PROTOCOL_VERSION: u8 = 2;
+pub const PROTOCOL_VERSION: u8 = 3;
 
 /// A message from client to server.
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Clone)]
@@ -381,7 +382,7 @@ pub async fn read_from_async<T: DeserializeOwned>(
 pub enum Error {
     /// JSON error serializing or deserializing message.
     #[error("JSON error: {0}")]
-    JSON(#[from] serde_json::Error),
+    Json(#[from] serde_json::Error),
 
     /// IO Error.
     #[error("IO Error: {0}")]

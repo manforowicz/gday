@@ -11,11 +11,11 @@ repository.workspace = true
 version.workspace = true
 
 [dependencies]
-gday_encryption = { version = "0.4.0", path = "../gday_encryption" }
-gday_file_transfer = { version = "0.4.0", path = "../gday_file_transfer" }
-gday_hole_punch = { version = "0.4.0", path = "../gday_hole_punch" }
-eframe = "0.32.1"
-egui = "0.32.1"
+gday_encryption = { version = "0.5.0", path = "../gday_encryption" }
+gday_file_transfer = { version = "0.5.0", path = "../gday_file_transfer" }
+gday_hole_punch = { version = "0.5.0", path = "../gday_hole_punch" }
+eframe = "0.32.3"
+egui = "0.32.3"
 rfd = "0.15.4"
 tokio = { version = "1.47.1", features = ["rt-multi-thread"] }
 anyhow = "1.0.99"
