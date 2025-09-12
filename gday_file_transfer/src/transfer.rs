@@ -153,8 +153,8 @@ pub async fn receive_files(
 
 /// We're using this instead of [`tokio::io::copy()`].
 ///
-/// [`tokio::io::copy()`] spawns a task on a thread
-/// during every file read/write. This occurs 1000s of times,
+/// [`tokio::io::copy()`] calls spawn_blocking which causes a heap allocation
+/// during every file read/write syscall. This occurs 1000s of times,
 /// introducing unnecessary overhead.
 ///
 /// This function is similar, but uses standard blocking
@@ -184,8 +184,8 @@ async fn file_to_net(
 
 /// We're using this instead of [`tokio::io::copy_buf()`].
 ///
-/// [`tokio::io::copy_buf()`] spawns a task on a thread
-/// during every file read/write. This occurs 1000s of times,
+/// [`tokio::io::copy_buf()`] scalls spawn_blocking which causes a heap allocation
+/// during every file read/write syscall. This occurs 1000s of times,
 /// introducing unnecessary overhead.
 ///
 /// This function is similar, but uses standard blocking

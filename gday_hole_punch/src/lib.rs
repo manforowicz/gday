@@ -123,6 +123,10 @@ pub enum Error {
     )]
     ServerConnectionMismatch,
 
+    /// Connected to peer, but didn't receive expected protocol greeting.
+    #[error("Connected to peer, but didn't receive expected protocol greeting.")]
+    WrongGreeting,
+
     /// Connected to peer, but key exchange failed
     #[error(
         "Connected to peer, but key exchange failed: {0}. \

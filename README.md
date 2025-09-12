@@ -243,6 +243,7 @@ Open an [issue](https://github.com/manforowicz/gday/issues) to add more projects
 ## In this repository
 
 - [gday](/gday/) - Command line tool for sending files.
+- [gday_gui](/gday_gui/) - GUI for sending files.
 - [gday_server](/gday_server/) - Server that lets two peers share their socket addresses.
 - [gday_hole_punch](/gday_hole_punch/) - Library for establishing peer-to-peer TCP connection.
 - [gday_file_transfer](/gday_file_transfer/) - Library for transferring files over a connection.

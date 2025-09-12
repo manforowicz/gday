@@ -38,9 +38,9 @@ const RETRY_INTERVAL: Duration = Duration::from_millis(200);
 pub async fn try_connect_to_peer(
     local_contact: Contact,
     peer_contact: FullContact,
-    shared_secret: &str,
+    shared_secret: impl AsRef<[u8]>,
 ) -> Result<PeerConnection, Error> {
-    let p = shared_secret.to_string().into_bytes();
+    let p = shared_secret.as_ref();
 
     // A set of tasks that will run concurrently,
     // trying to establish a connection to the peer.
@@ -154,6 +154,16 @@ async fn verify_peer(
     weak_secret: &[u8],
     mut stream: tokio::net::TcpStream,
 ) -> Result<PeerConnection, Error> {
+    // send greeting to peer
+    stream.write_all(b"gday_hole_punch").await?;
+
+    // confirm peer sent greeting
+    let mut greeting = [0_u8; 15];
+    stream.read_exact(&mut greeting).await?;
+    if greeting != *b"gday_hole_punch" {
+        return Err(Error::WrongGreeting);
+    }
+
     //// Password authenticated key exchange ////
     let (spake, outbound_msg) = Spake2::<Ed25519Group>::start_symmetric(
         &Password::new(weak_secret),

@@ -242,9 +242,10 @@ Open an [issue](https://github.com/manforowicz/gday/issues) to add more projects
 
 ## Related
 
-- [gday_server](/gday_server/) - Server that lets two peers share their socket addresses.
-- [gday_hole_punch](/gday_hole_punch/) - Library for establishing peer-to-peer TCP connection.
-- [gday_file_transfer](/gday_file_transfer/) - Library for transferring files over a connection.
-- [gday_encryption](/gday_encryption/) - Library for encrypting an IO stream.
-- [gday_contact_exchange_protocol](/gday_contact_exchange_protocol/) - Library with protocol for two peers to share their socket
+- [gday_gui](https://crates.io/crates/gday_gui) - GUI for sending files.
+- [gday_server](https://crates.io/crates/gday_server) - Server that lets two peers share their socket addresses.
+- [gday_hole_punch](https://crates.io/crates/gday_hole_punch) - Library for establishing peer-to-peer TCP connection.
+- [gday_file_transfer](https://crates.io/crates/gday_file_transfer) - Library for transferring files over a connection.
+- [gday_encryption](https://crates.io/crates/gday_encryption) - Library for encrypting an IO stream.
+- [gday_contact_exchange_protocol](https://crates.io/crates/gday_contact_exchange_protocol) - Library with protocol for two peers to share their socket
 addresses via a server.

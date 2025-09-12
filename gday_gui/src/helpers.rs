@@ -11,7 +11,7 @@ use gday_file_transfer::{FileOfferMsg, FileRequestsMsg, LocalFileOffer, Transfer
 use gday_hole_punch::{FullContact, PeerCode, server_connector::DEFAULT_SERVERS};
 use tokio::net::TcpStream;
 
-use crate::AppView;
+use crate::View;
 
 pub struct MyHandle<T>(pub tokio::task::JoinHandle<T>);
 
@@ -37,7 +37,7 @@ impl<T> Future for MyHandle<T> {
     }
 }
 
-pub async fn send1(paths: &[PathBuf]) -> anyhow::Result<AppView> {
+pub async fn send1(paths: &[PathBuf]) -> anyhow::Result<View> {
     let (mut conn, server_id) =
         gday_hole_punch::server_connector::connect_to_random_server(DEFAULT_SERVERS).await?;
     let peer_code = PeerCode::random(server_id, 6);
@@ -51,7 +51,7 @@ pub async fn send1(paths: &[PathBuf]) -> anyhow::Result<AppView> {
     let peer_contact_handle = MyHandle(peer_contact_handle);
     let offer = gday_file_transfer::create_file_offer(paths)?;
 
-    Ok(AppView::Send2 {
+    Ok(View::Send2 {
         offer,
         peer_code,
         peer_contact_handle,
@@ -78,7 +78,7 @@ pub async fn send2(
     Ok(())
 }
 
-pub async fn receive1(peer_code: PeerCode) -> anyhow::Result<AppView> {
+pub async fn receive1(peer_code: PeerCode) -> anyhow::Result<View> {
     let mut conn = gday_hole_punch::server_connector::connect_to_server_id(
         DEFAULT_SERVERS,
         peer_code.server_id(),
@@ -98,7 +98,7 @@ pub async fn receive1(peer_code: PeerCode) -> anyhow::Result<AppView> {
     let mut peer_conn = gday_encryption::EncryptedStream::encrypt_connection(tcp, &key).await?;
     let offer = gday_file_transfer::read_from_async(&mut peer_conn).await?;
 
-    Ok(AppView::Receive3 { peer_conn, offer })
+    Ok(View::Receive3 { peer_conn, offer })
 }
 
 pub async fn receive2(

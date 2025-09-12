@@ -1,5 +1,6 @@
 use std::sync::{Arc, Mutex, MutexGuard};
 
+/// Logs to the log box in the UI.
 #[derive(Clone, Debug)]
 pub struct Logger {
     text: Arc<Mutex<String>>,

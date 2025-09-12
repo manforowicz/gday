@@ -28,43 +28,50 @@ fn main() -> eframe::Result {
 }
 
 struct AppState {
-    view: AppView,
+    view: View,
     rt: tokio::runtime::Runtime,
     logger: Logger,
 }
 
 #[derive(Default)]
-enum AppView {
+enum View {
     #[default]
     Home,
+    /// Creating room in server.
     Send1 {
-        handle: MyHandle<anyhow::Result<AppView>>,
+        handle: MyHandle<anyhow::Result<View>>,
     },
+    /// Displaying peer code, and waiting to get peer's contact.
     Send2 {
         offer: LocalFileOffer,
         peer_code: PeerCode,
         peer_contact_handle: MyHandle<Result<(FullContact, FullContact), gday_hole_punch::Error>>,
     },
+    /// Transferring.
     Send3 {
         handle: MyHandle<anyhow::Result<()>>,
         transfer_report: Arc<Mutex<TransferReport>>,
     },
-    Send4,
+    /// Text box for entering peer code
     Receive1 {
         entered_code: String,
     },
+    /// Connecting and reading offer from peer
     Receive2 {
-        handle: MyHandle<anyhow::Result<AppView>>,
+        handle: MyHandle<anyhow::Result<View>>,
     },
+    /// Asking user to confirm offered files, and select save location.
     Receive3 {
         peer_conn: EncryptedStream<TcpStream>,
         offer: FileOfferMsg,
     },
+    /// Transferring
     Receive4 {
         handle: MyHandle<anyhow::Result<()>>,
         transfer_report: Arc<Mutex<TransferReport>>,
     },
-    Receive5,
+    /// Transfer complete screen
+    Done,
     ErrorScreen {
         message: String,
     },
@@ -74,7 +81,7 @@ impl Default for AppState {
     fn default() -> Self {
         let logger = Logger::init();
         Self {
-            view: AppView::Home,
+            view: View::Home,
             rt: tokio::runtime::Runtime::new().unwrap(),
             logger,
         }
@@ -84,8 +91,8 @@ impl Default for AppState {
 impl eframe::App for AppState {
     fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            if !matches!(self.view, AppView::Home) && ui.button("⮪ Home").clicked() {
-                self.view = AppView::Home;
+            if !matches!(self.view, View::Home) && ui.button("⮪ Home").clicked() {
+                self.view = View::Home;
                 ui.separator();
             }
 
@@ -107,7 +114,7 @@ impl eframe::App for AppState {
 impl AppState {
     fn main_ui(&mut self, ctx: &Context, ui: &mut Ui) {
         match &mut self.view {
-            AppView::Home => {
+            View::Home => {
                 ui.heading("Gday GUI");
                 ui.hyperlink("https://github.com/manforowicz/gday");
 
@@ -118,11 +125,11 @@ impl AppState {
                             .pick_files()
                     {
                         let handle = MyHandle(self.rt.spawn(async move { send1(&paths).await }));
-                        self.view = AppView::Send1 { handle };
+                        self.view = View::Send1 { handle };
                     }
 
                     if ui.button("Receive files").clicked() {
-                        self.view = AppView::Receive1 {
+                        self.view = View::Receive1 {
                             entered_code: String::new(),
                         };
                     }
@@ -133,7 +140,7 @@ impl AppState {
                     features than the GUI (custom server, custom code, etc.)",
                 );
             }
-            AppView::Send1 { handle } => {
+            View::Send1 { handle } => {
                 ui.label("Connecting to server...");
                 if handle.is_finished() {
                     match self.rt.block_on(handle).expect("Tokio join failed") {
@@ -141,7 +148,7 @@ impl AppState {
                             self.view = view;
                         }
                         Err(err) => {
-                            self.view = AppView::ErrorScreen {
+                            self.view = View::ErrorScreen {
                                 message: err.to_string(),
                             };
                         }
@@ -149,7 +156,7 @@ impl AppState {
                 }
                 ctx.request_repaint();
             }
-            AppView::Send2 {
+            View::Send2 {
                 offer,
                 peer_code,
                 peer_contact_handle,
@@ -180,7 +187,7 @@ impl AppState {
                         match self.rt.block_on(peer_contact_handle).expect("Tokio error") {
                             Ok(good) => good,
                             Err(err) => {
-                                self.view = AppView::ErrorScreen {
+                                self.view = View::ErrorScreen {
                                     message: err.to_string(),
                                 };
                                 return;
@@ -196,13 +203,13 @@ impl AppState {
                         offer.clone(),
                         transfer_report.clone(),
                     )));
-                    self.view = AppView::Send3 {
+                    self.view = View::Send3 {
                         handle,
                         transfer_report,
                     };
                 }
             }
-            AppView::Send3 {
+            View::Send3 {
                 handle,
                 transfer_report,
             } => {
@@ -218,9 +225,9 @@ impl AppState {
 
                 if handle.is_finished() {
                     match self.rt.block_on(handle).expect("Tokio error") {
-                        Ok(()) => self.view = AppView::Send4,
+                        Ok(()) => self.view = View::Done,
                         Err(err) => {
-                            self.view = AppView::ErrorScreen {
+                            self.view = View::ErrorScreen {
                                 message: err.to_string(),
                             };
                         }
@@ -228,11 +235,7 @@ impl AppState {
                 }
             }
 
-            AppView::Send4 => {
-                ui.label("Transfer complete.");
-            }
-
-            AppView::Receive1 { entered_code } => {
+            View::Receive1 { entered_code } => {
                 ui.label(
                     "To receive files, ask your peer to give you a code (such as 1.qmecyr.26h9aw)",
                 );
@@ -252,7 +255,7 @@ impl AppState {
                     match peer_code {
                         Ok(code) => {
                             let handle = MyHandle(self.rt.spawn(receive1(code)));
-                            self.view = AppView::Receive2 { handle };
+                            self.view = View::Receive2 { handle };
                         }
                         Err(err) => {
                             error!("Couldn't parse code: {err}");
@@ -261,14 +264,14 @@ impl AppState {
                 }
             }
 
-            AppView::Receive2 { handle } => {
+            View::Receive2 { handle } => {
                 ui.label("Connecting...");
                 if handle.is_finished() {
                     match self.rt.block_on(handle).expect("Tokio error") {
                         Ok(view) => self.view = view,
 
                         Err(err) => {
-                            self.view = AppView::ErrorScreen {
+                            self.view = View::ErrorScreen {
                                 message: err.to_string(),
                             }
                         }
@@ -276,7 +279,7 @@ impl AppState {
                 }
             }
 
-            AppView::Receive3 {
+            View::Receive3 {
                 peer_conn: _,
                 offer,
             } => {
@@ -291,7 +294,7 @@ impl AppState {
 
                 ui.horizontal(|ui| {
                     if ui.button("Cancel").clicked() {
-                        self.view = AppView::Home;
+                        self.view = View::Home;
                     }
 
                     if ui.button("Proceed").clicked()
@@ -299,7 +302,7 @@ impl AppState {
                             .set_title("Choose files to send")
                             .pick_folder()
                     {
-                        let AppView::Receive3 { peer_conn, offer } = std::mem::take(&mut self.view)
+                        let View::Receive3 { peer_conn, offer } = std::mem::take(&mut self.view)
                         else {
                             unreachable!()
                         };
@@ -311,7 +314,7 @@ impl AppState {
                             save_loc,
                             transfer_report.clone(),
                         )));
-                        self.view = AppView::Receive4 {
+                        self.view = View::Receive4 {
                             handle,
                             transfer_report,
                         }
@@ -319,7 +322,7 @@ impl AppState {
                 });
             }
 
-            AppView::Receive4 {
+            View::Receive4 {
                 handle,
                 transfer_report,
             } => {
@@ -336,10 +339,10 @@ impl AppState {
                 if handle.is_finished() {
                     match self.rt.block_on(handle).expect("Tokio error") {
                         Ok(()) => {
-                            self.view = AppView::Receive5;
+                            self.view = View::Done;
                         }
                         Err(err) => {
-                            self.view = AppView::ErrorScreen {
+                            self.view = View::ErrorScreen {
                                 message: err.to_string(),
                             }
                         }
@@ -347,11 +350,11 @@ impl AppState {
                 }
             }
 
-            AppView::Receive5 => {
+            View::Done => {
                 ui.label("Transfer complete.");
             }
 
-            AppView::ErrorScreen { message } => {
+            View::ErrorScreen { message } => {
                 ui.label("Error:");
                 ui.label(message.as_str());
             }
