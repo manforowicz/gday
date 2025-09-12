@@ -1,7 +1,7 @@
 [package]
 name = "gday_gui"
 description = "GUI to securely send files (without a relay or port forwarding)."
-categories = ["GUI", "network-programming", "filesystem"]
+categories = ["network-programming", "filesystem"]
 
 # Inherit these keys from workspace toml
 authors.workspace = true
