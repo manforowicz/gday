@@ -1,12 +1,27 @@
 # gday_gui
 [![Crates.io Version](https://img.shields.io/crates/v/gday_gui)](https://crates.io/crates/gday_gui)
-[![docs.rs](https://img.shields.io/docsrs/gday_gui)](https://docs.rs/gday_gui/)
 
-GUI to securely send files (without a relay or port forwarding).
+GUI for trying to send files directly between computers, without a relay.
+Works through most [NATs](https://en.wikipedia.org/wiki/Network_address_translation), but not all.
 
-See [gday](https://crates.io/crates/gday) for more information.
+For a higher success rate, consider a tool that uses a relay server, such as [magic-wormhole](https://github.com/magic-wormhole/magic-wormhole).
 
-Note: the Gday command line tool has more features and options than this GUI.
+See the [gday](https://crates.io/crates/gday) command line tool for more features and information.
+
+## Installation
+
+1. Download an executable from [releases](https://github.com/manforowicz/gday/releases).
+2. Extract it (on Linux: `tar xf <file>`).
+3. Run it: `./gday_gui`
+
+Alternatively:
+```
+cargo install gday_gui
+```
+or
+```
+brew install manforowicz/tap/gday_gui
+```
 
 ## Related
 
@@ -17,3 +32,5 @@ Note: the Gday command line tool has more features and options than this GUI.
 - [gday_encryption](https://crates.io/crates/gday_encryption) - Library for encrypting an IO stream.
 - [gday_contact_exchange_protocol](https://crates.io/crates/gday_contact_exchange_protocol) - Library with protocol for two peers to share their socket
 addresses via a server.
+
+![gday dependency graph](https://github.com/manforowicz/gday/blob/main/other/dependency_graph.png?raw=true)

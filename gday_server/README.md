@@ -6,18 +6,15 @@ A server that runs the [gday_contact_exchange_protocol](https://docs.rs/gday_con
 
 ## Installation
 
-To run the executable directly:
-
 1. Download an executable from [releases](https://github.com/manforowicz/gday/releases).
 2. Extract it (on Linux: `tar xf <file>`).
 3. Run it: `./gday_server`
 
-To install with **cargo**:
+Alternatively:
 ```
 $ cargo install gday_server
 ```
-
-To install with **brew**:
+or
 ```
 $ brew install manforowicz/tap/gday_server
 ```
@@ -64,6 +61,9 @@ Here's how:
 
 ## Related
 - [gday](https://crates.io/crates/gday) - Command line tool for sending files.
+- [gday_gui](/gday_gui/) - GUI app for sending files.
 
 ## Depends on
 - [gday_contact_exchange_protocol](https://docs.rs/gday_contact_exchange_protocol/) - Library with protocol for two peers to share their socket addresses via a server.
+
+![gday dependency graph](https://github.com/manforowicz/gday/blob/main/other/dependency_graph.png?raw=true)

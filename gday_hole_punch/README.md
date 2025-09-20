@@ -11,6 +11,7 @@ See the [documentation](https://docs.rs/gday_hole_punch/).
 
 ## Used by
 - [gday](https://crates.io/crates/gday) - Command line tool for sending files.
+- [gday_gui](/gday_gui/) - GUI app for sending files.
 
 ## Depends on
 - [gday_contact_exchange_protocol](https://docs.rs/gday_contact_exchange_protocol/) - Library with protocol for two peers to share their socket addresses via a server.

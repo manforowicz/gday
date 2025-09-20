@@ -1,7 +1,10 @@
 # gday
 [![Crates.io Version](https://img.shields.io/crates/v/gday)](https://crates.io/crates/gday)
 
-Command line tool to securely send files (without a relay or port forwarding).
+Tool for trying to send files directly between computers, without a relay.
+Works through most [NATs](https://en.wikipedia.org/wiki/Network_address_translation), but not all.
+
+For a higher success rate, consider a tool that uses a relay server, such as [magic-wormhole](https://github.com/magic-wormhole/magic-wormhole).
 
 <pre>
 <b style="color:lime;">peer_1:</b> gday send file.mp4 folder
@@ -17,33 +20,28 @@ Tell your mate to run "gday get <b>1.n5xn8.wvqsf</b>".
 
 ## Installation
 
-To run the executable directly:
-
 1. Download an executable from [releases](https://github.com/manforowicz/gday/releases).
 2. Extract it (on Linux: `tar xf <file>`).
 3. Run it: `./gday`
 
-To install with **cargo**:
+Alternatively:
 ```
 cargo install gday
 ```
-
-To install with **brew**:
+or
 ```
 brew install manforowicz/tap/gday
 ```
 
 ## Features
 
-- No limit on the size of files and folders sent.
-
-- Files are sent directly, without relay servers.
+- Files are sent directly, without a relay.
     - A server is only used to exchange socket addresses at the beginning.
     Then, a peer-to-peer connection is established with [TCP Hole Punching](https://bford.info/pub/net/p2pnat/).
     This may not work through some restrictive [NATs](https://en.wikipedia.org/wiki/Network_address_translation). If that happens, enable IPv6, move to a different network, or use a tool with a relay server such as [magic-wormhole](https://github.com/magic-wormhole/magic-wormhole") or [croc](https://github.com/schollz/croc).
 
-- Automatically resumes interrupted transfers. Just `gday send` the same files, and partial downloads will be detected and resumed.
-    - This is implemented by having the receiver identify when an offered file metadata (name and last modified time) exactly matches metadata saved in a local temporary file.
+- Automatically resumes interrupted transfers. Just `gday send` the same files, and the download will pick up where it left off.
+    - This is implemented by having the receiver check whether the offered file name and last modified time exactly match a metadata file left by an interrupted transfer.
 
 - If a contact exchange server is down, just uses a different one from the default list. Or specify your own with `--server`.
 
@@ -53,7 +51,7 @@ TLS and file transfer is over TCP that's end-to-end encrypted with
     - (not TLS for file transfer, because the rustls library [doesn't support PSK](https://github.com/rustls/rustls/issues/174) which is needed for the certificate-less peer-to-peer connection).
 
 - Automatically tries both IPv4 and IPv6.
-    - When IPv6 is available, peer-to-peer connection almost always succeeds because NATs are uncommon on IPv6.
+    - When IPv6 is available, connection almost always succeeds because IPv6 NATs are uncommon.
 
 - Authenticates your peer using [SPAKE2](https://datatracker.ietf.org/doc/rfc9382/) to derive an
 encryption key from a shared secret.
@@ -130,7 +128,7 @@ Options:
     <tr>
         <td><a href="https://github.com/CramBL/quick-file-transfer">qft</a></td>
         <td>✅</td>
-        <td>❌</td>
+        <td>✅</td>
         <td>❌</td>
         <td>✅</td>
         <td>❌</td>
@@ -210,31 +208,29 @@ Options:
     </tr>
 </table>
 
-Open an [issue](https://github.com/manforowicz/gday/issues) to add more projects to this list.
-
 ## Technical Overview
 
-1. **Peer A** randomly generates a _"room code"_ and a _"shared secret"_.
+1. **Peer A** randomly generates a _"room code"_ and _"shared secret"_.
 
 2. **Peer A** randomly selects a **gday server** ID and connects to it over TLS.
 
-3. **Peer A** sends its _room code_, local IP addresses, and port numbers to the **gday server**.
+3. **Peer A** sends its _room code_, private IP addresses, and port numbers to the **gday server**.
 
-4. **Peer A** combines the server's ID, _room code_, and _shared secret_ into a code of form `"1.n5xn8.wvqsf"` and gives it to **Peer B**.
+4. **Peer A** combines the server's ID, _room code_, and _shared secret_ into a code of form `"1.n5xn8.wvqsf"` and tells it to **Peer B**, possibly via phone call or text message.
 
-5. **Peer A** tells this code to **Peer B**, possibly via phone call or text message.
+5. **Peer B** also sends this _room code_ and its private IP addresses and port numbers to the **gday server**.
 
-6. **Peer B** also sends this _room code_ and its local IP addresses and port numbers to the **gday server**.
+6. The **gday server** looks at the TCP connections with the clients to determine their public IP addresses and ports.
 
-7. The **gday server** sends both peers the public and local IP addresses and ports of the other peer.
+7. The **gday server** sends both peers the public and private IP addresses and ports of the other peer.
 
-8. From the same local port that they used to connect to the server, each peer tries a few times to connect over TCP to both the local and public socket addresses of the other peer. This may fail on networks with strict [NATs](https://en.wikipedia.org/wiki/Network_address_translation).
+8. From the same private port that they used to connect to the server, each peer tries a few times to connect over TCP to both the private and public socket addresses of the other peer. This may fail on networks with strict [NATs](https://en.wikipedia.org/wiki/Network_address_translation).
 
-9. Once any of the connection attempts succeeds, they use password-authenticated key exchange to derive a strong shared key from their _shared secret_, and use it to encrypt their TCP connection with chacha20poly1305.
+9. Once any of the connection attempts succeeds, they use password-authenticated key exchange to derive a strong key from their _shared secret_, and use it to encrypt their TCP connection with chacha20poly1305.
 
 10. **Peer A** sends **Peer B** a list of offered files and their sizes.
 
-11. **Peer B** detects interrupted downloads by checking if any offered file's metadata (name and last modified time) exactly matches metadata saved in a local temporary file leftover from the interrupted download.
+11. **Peer B** detects interrupted downloads by checking if any offered file's name and last modified time exactly matches metadata saved in a local temporary file leftover from the interrupted download.
 
 12. **Peer B** sends **Peer A** the file portions it would like to receive
 
@@ -249,3 +245,5 @@ Open an [issue](https://github.com/manforowicz/gday/issues) to add more projects
 - [gday_encryption](https://crates.io/crates/gday_encryption) - Library for encrypting an IO stream.
 - [gday_contact_exchange_protocol](https://crates.io/crates/gday_contact_exchange_protocol) - Library with protocol for two peers to share their socket
 addresses via a server.
+
+![gday dependency graph](https://github.com/manforowicz/gday/blob/main/other/dependency_graph.png?raw=true)

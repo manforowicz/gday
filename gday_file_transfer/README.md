@@ -9,3 +9,4 @@ See the [documentation](https://docs.rs/gday_file_transfer/).
 
 ## Used by
 - [gday](https://crates.io/crates/gday) - Command line tool for sending files.
+- [gday_gui](/gday_gui/) - GUI app for sending files.
