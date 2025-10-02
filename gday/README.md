@@ -18,6 +18,8 @@ Tell your mate to run "gday get <b>1.n5xn8.wvqsf</b>".
 
 [![asciicast](https://asciinema.org/a/Z8OJJr8xHRAJh6fuqocNcm9Zu.svg)](https://asciinema.org/a/Z8OJJr8xHRAJh6fuqocNcm9Zu)
 
+Also, see [gday_gui](https://crates.io/crates/gday_gui).
+
 ## Installation
 
 1. Download an executable from [releases](https://github.com/manforowicz/gday/releases).
@@ -144,6 +146,15 @@ Options:
         <td>❌</td>
     </tr>
     <tr>
+        <td><a href="https://github.com/localsend/localsend">LocalSend</a></td>
+        <td>✅</td>
+        <td>❌</td>
+        <td>❌</td>
+        <td>✅</td>
+        <td>✅</td>
+        <td>❌</td>
+    </tr>
+    <tr>
         <td><a href="https://github.com/nirvik/iWant">iwant</a></td>
         <td>✅</td>
         <td>❌</td>
@@ -163,6 +174,15 @@ Options:
     </tr>
     <tr>
         <td><a href="https://github.com/cowbell/sharedrop">sharedrop</a></td>
+        <td>❌</td>
+        <td>✅</td>
+        <td>✅</td>
+        <td>✅</td>
+        <td>✅</td>
+        <td>❌</td>
+    </tr>
+    <tr>
+        <td><a href="https://github.com/nihaocami/berb">Berb</a></td>
         <td>❌</td>
         <td>✅</td>
         <td>✅</td>
