@@ -128,6 +128,15 @@ Options:
         <td>✅</td>
     </tr>
     <tr>
+        <td><a href="https://github.com/syncthing/syncthing">Syncthing</td>
+        <td>❌</td>
+        <td>✅</td>
+        <td>✅</td>
+        <td>✅</td>
+        <td>✅</td>
+        <td>✅</td>
+    </tr>
+    <tr>
         <td><a href="https://github.com/psantosl/p2pcopy">p2pcopy</a></td>
         <td>✅</td>
         <td>✅</td>
