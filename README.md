@@ -164,6 +164,15 @@ Options:
         <td>❌</td>
     </tr>
     <tr>
+        <td><a href="https://github.com/kde/kdeconnect-kde">KDE Connect</a></td>
+        <td>✅</td>
+        <td>❌</td>
+        <td>❌</td>
+        <td>✅</td>
+        <td>✅</td>
+        <td>❌</td>
+    </tr>
+    <tr>
         <td><a href="https://github.com/nirvik/iWant">iwant</a></td>
         <td>✅</td>
         <td>❌</td>
