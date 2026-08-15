@@ -236,6 +236,15 @@ Options:
         <td>❌</td>
     </tr>
     <tr>
+        <td><a href="https://wormhole.app/">Wormhole.app</td>
+        <td>❌</td>
+        <td>✅</td>
+        <td>✅</td>
+        <td>✅</td>
+        <td>✅</td>
+        <td>❌</td>
+    </tr>
+    <tr>
         <td>Dropbox, Google Drive, etc.</td>
         <td>❌</td>
         <td>✅</td>
